@@ -176,9 +176,15 @@ function findRule(
 }
 
 const TYPE_HINTS: { keywords: string[]; type: TransactionType }[] = [
-  { keywords: ["salary", "bonus", "refund", "cashback", "received", "freelance", "income"], type: "INCOME" },
-  { keywords: ["invested", "sip", "ppf", "mutual", "nps", "elss", "fd"], type: "INVESTMENT" },
-  { keywords: ["transferred", "transfer", "repaid", "cardpayment"], type: "TRANSFER" },
+  {
+    keywords: [
+      "salary", "bonus", "refund", "refunded", "cashback", "received", "freelance", "income",
+      "commission", "interest", "dividend", "dividends", "reimbursement", "reimbursed",
+    ],
+    type: "INCOME",
+  },
+  { keywords: ["invested", "sip", "ppf", "mutual", "nps", "elss", "fd", "rd", "bond", "bonds", "sgb"], type: "INVESTMENT" },
+  { keywords: ["transferred", "transfer", "repaid", "repayment", "cardpayment"], type: "TRANSFER" },
 ];
 
 function detectType(tokens: Token[]): TransactionType {
