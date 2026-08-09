@@ -227,23 +227,34 @@ interface Candidate {
 
 export function parseHdfcStatement(pages: ExtractedPage[]): StatementRow[] {
   const candidates: Candidate[] = [];
-  // Diagnostic-only: the first page's raw rows, kept in case nothing parses
-  // so the failure is debuggable instead of a bare "didn't work."
-  const sampleRows = (pages[0]?.rows ?? [])
-    .slice(0, 20)
-    .map((row) => row.map((i) => i.text).join(" | "));
-  let anyHeaderFound = false;
+  // Diagnostic-only, captured once from whichever page actually looks like
+  // the transaction table (not just page 1 — Indian bank statements
+  // routinely lead with an account-details cover page that has no table at
+  // all), so a real failure shows the rows that actually mattered.
+  let diagnostics: string[] = [];
 
   for (const page of pages) {
     const headerRow = findHeaderRow(page);
     if (!headerRow) continue; // page has no transaction table (cover/footer page)
-    anyHeaderFound = true;
+
     const anchors = findAnchors(headerRow);
-    if (!anchors.narration || !anchors.withdrawal || !anchors.deposit) continue;
+    const missing = COLUMN_ORDER.filter((key) => !anchors[key]);
+    if (missing.length > 0) {
+      if (diagnostics.length === 0) {
+        diagnostics = [
+          `Header found on page ${page.pageNumber}, but couldn't anchor columns: ${missing.join(", ")}`,
+          `Header row raw: ${headerRow.map((i) => i.text).join(" | ")}`,
+        ];
+      }
+      continue;
+    }
     const zones = buildZones(anchors);
 
     let inTable = false;
     let reachedFooter = false;
+    const rowDiagnostics: string[] = diagnostics.length === 0 ? [
+      `Header found + all columns anchored on page ${page.pageNumber}. First rows after header:`,
+    ] : [];
 
     for (const row of page.rows) {
       if (row === headerRow) {
@@ -263,6 +274,16 @@ export function parseHdfcStatement(pages: ExtractedPage[]): StatementRow[] {
       const hasExactlyOneAmount =
         ((withdrawal ?? 0) > 0) !== ((deposit ?? 0) > 0);
 
+      if (diagnostics.length === 0 && rowDiagnostics.length < 18) {
+        rowDiagnostics.push(
+          `raw="${row.map((i) => i.text).join(" | ")}" ` +
+            `=> date="${cols.date ?? ""}"(parsed:${date ?? "FAIL"}) ` +
+            `withdrawal="${cols.withdrawal ?? ""}"(parsed:${withdrawal ?? "FAIL"}) ` +
+            `deposit="${cols.deposit ?? ""}"(parsed:${deposit ?? "FAIL"}) ` +
+            `narration="${cols.narration ?? ""}"`,
+        );
+      }
+
       if (date && hasExactlyOneAmount) {
         candidates.push({ date, narration: cols.narration ?? "", withdrawal, deposit });
         continue;
@@ -275,13 +296,17 @@ export function parseHdfcStatement(pages: ExtractedPage[]): StatementRow[] {
         last.narration = `${last.narration} ${cols.narration}`.trim();
       }
     }
+
+    if (diagnostics.length === 0 && rowDiagnostics.length > 1) {
+      diagnostics = rowDiagnostics;
+    }
   }
 
   if (candidates.length === 0) {
-    const detail = anyHeaderFound
-      ? "found the header row but no data rows validated"
-      : "never found a row containing narration/withdrawal/deposit headers";
-    throw new UnreadableStatementError(1, [`(${detail})`, ...sampleRows]);
+    if (diagnostics.length === 0) {
+      diagnostics = ["(never found a row containing narration/withdrawal/deposit headers on any page)"];
+    }
+    throw new UnreadableStatementError(1, diagnostics);
   }
 
   const valid = candidates.filter(
@@ -293,7 +318,7 @@ export function parseHdfcStatement(pages: ExtractedPage[]): StatementRow[] {
 
   const failureRate = 1 - valid.length / candidates.length;
   if (failureRate > VALIDATION_FAILURE_THRESHOLD) {
-    throw new UnreadableStatementError(failureRate, sampleRows);
+    throw new UnreadableStatementError(failureRate, diagnostics);
   }
 
   return valid.map((c) => ({
