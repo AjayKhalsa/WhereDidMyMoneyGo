@@ -16,7 +16,7 @@ import {
   type CategoryLookup,
 } from "@/lib/domain/categories";
 import { contextLabel } from "@/lib/domain/contexts";
-import { monthKey, type MonthKey } from "@/lib/domain/dates";
+import { addMonths, monthKey, type MonthKey } from "@/lib/domain/dates";
 import type { Database } from "@/lib/domain/types";
 import {
   calculateFinancialScore,
@@ -66,10 +66,18 @@ export interface FinanceContextValue {
   db: Database | null;
 
   month: MonthKey;
+  /** Pins the view to a specific cycle (used by goBack/goForward). */
   setMonth: (month: MonthKey) => void;
+  /** Stops tracking a pinned cycle and resumes following the live one. */
+  trackCurrentMonth: () => void;
   isCurrentMonth: boolean;
   /** Re-renders every minute so greetings and day counts stay accurate. */
   now: Date;
+  /**
+   * Day of month the budgeting cycle starts on — from the primary income
+   * source's payday, or 1 (plain calendar months) if none is set.
+   */
+  cycleStartDay: number;
 
   categories: CategoryLookup;
   totals: MonthTotals;
@@ -105,7 +113,12 @@ function useNow(): Date {
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const state = useStoreState();
   const now = useNow();
-  const [month, setMonth] = useState<MonthKey>(() => monthKey(new Date()));
+  // null = tracking the live cycle; a value = pinned to a specific cycle by
+  // goBack/goForward. `goToCurrent` clears the pin rather than computing and
+  // storing "today's" cycle, so it keeps tracking correctly even if
+  // cycleStartDay changes later (e.g. editing payday in Settings while
+  // sitting on "current") — a stored, once-computed value couldn't.
+  const [pinnedMonth, setPinnedMonth] = useState<MonthKey | null>(null);
   const pathname = usePathname();
 
   // A first run starts genuinely empty (spec §36). Landing someone in four
@@ -127,12 +140,27 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     [db?.categories],
   );
 
+  // The primary income source's payday defines the cycle. "Primary" = the
+  // active recurring source created first — array order isn't guaranteed by
+  // either backend (Supabase's query has no ORDER BY, IndexedDB's getAll()
+  // doesn't promise insertion order), so this sorts explicitly rather than
+  // trusting whatever order the rows came back in.
+  const cycleStartDay = useMemo(() => {
+    const primary = (db?.incomeSources ?? [])
+      .filter((s) => s.isActive && s.recurring)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+    return primary?.dayOfMonth ?? 1;
+  }, [db?.incomeSources]);
+
   const value = useMemo<FinanceContextValue>(() => {
     const empty: Database["transactions"] = [];
     const transactions = db?.transactions ?? empty;
 
-    const totals = monthTotals(transactions, month);
-    const monthRows = monthTransactions(transactions, month);
+    const liveMonth = monthKey(now, cycleStartDay);
+    const month = pinnedMonth ?? liveMonth;
+
+    const totals = monthTotals(transactions, month, cycleStartDay);
+    const monthRows = monthTransactions(transactions, month, cycleStartDay);
 
     const safeToSpend = calculateSafeToSpend({
       transactions,
@@ -143,6 +171,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       goals: db?.goals ?? [],
       month,
       now,
+      cycleStartDay,
     });
 
     const insights = generateInsights({
@@ -152,6 +181,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       investments: db?.investments ?? [],
       month,
       now,
+      cycleStartDay,
       groupLabel: (groupId) => categories.byId.get(groupId)?.name ?? "Other",
     });
 
@@ -161,7 +191,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       goals: db?.goals ?? [],
       month,
       now,
-      consistency: spendingConsistency(transactions, month, now),
+      cycleStartDay,
+      consistency: spendingConsistency(transactions, month, now, cycleStartDay),
     });
 
     const groupBreakdown = spendByGroup(
@@ -180,6 +211,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           transactions,
           month,
           now,
+          cycleStartDay,
         ),
       );
 
@@ -190,9 +222,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       error: state.error,
       db,
       month,
-      setMonth,
-      isCurrentMonth: month === monthKey(now),
+      setMonth: setPinnedMonth,
+      trackCurrentMonth: () => setPinnedMonth(null),
+      isCurrentMonth: month === liveMonth,
       now,
+      cycleStartDay,
       categories,
       totals,
       safeToSpend,
@@ -205,7 +239,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       monthRows,
       peopleBalances,
     };
-  }, [db, month, now, categories, state.status, state.error]);
+  }, [db, pinnedMonth, now, cycleStartDay, categories, state.status, state.error]);
 
   return (
     <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
@@ -227,18 +261,16 @@ export function useDatabase(): Database | null {
 
 /** Steps the selected month backward/forward, clamped to the present. */
 export function useMonthNavigation() {
-  const { month, setMonth, now } = useFinance();
-  const current = monthKey(now);
+  const { month, setMonth, trackCurrentMonth, cycleStartDay, now } = useFinance();
+  const current = monthKey(now, cycleStartDay);
 
   const shift = useCallback(
     (delta: number) => {
-      const [year, monthNumber] = month.split("-").map(Number);
-      const date = new Date(year ?? 1970, (monthNumber ?? 1) - 1 + delta, 1);
-      const next = monthKey(date);
+      const next = addMonths(month, delta, cycleStartDay);
       if (next > current) return;
       setMonth(next);
     },
-    [month, setMonth, current],
+    [month, setMonth, cycleStartDay, current],
   );
 
   return {
@@ -246,6 +278,6 @@ export function useMonthNavigation() {
     canGoForward: month < current,
     goBack: () => shift(-1),
     goForward: () => shift(1),
-    goToCurrent: () => setMonth(current),
+    goToCurrent: trackCurrentMonth,
   };
 }

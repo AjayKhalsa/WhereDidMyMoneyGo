@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { formatMonthShort, previousMonths } from "@/lib/domain/dates";
+import { formatMonthLabel, previousMonths } from "@/lib/domain/dates";
 import { formatMoney, parseAmountInput } from "@/lib/domain/money";
 import type { IncomeSource } from "@/lib/domain/types";
 import { monthTotals } from "@/lib/engine/analytics";
@@ -32,7 +32,7 @@ import { MoneyRow } from "./disclosure-panel";
  */
 
 export function IncomePanel() {
-  const { db, month } = useFinance();
+  const { db, month, cycleStartDay } = useFinance();
   const [editing, setEditing] = useState<IncomeSource | null>(null);
   const [creating, setCreating] = useState(false);
   const [oneOff, setOneOff] = useState(false);
@@ -41,9 +41,9 @@ export function IncomePanel() {
   const transactions = db?.transactions ?? [];
   const recurring = sources.filter((s) => s.recurring);
 
-  const history = [...previousMonths(month, 5), month].map((m) => ({
+  const history = [...previousMonths(month, 5, cycleStartDay), month].map((m) => ({
     key: m,
-    amount: monthTotals(transactions, m).income,
+    amount: monthTotals(transactions, m, cycleStartDay).income,
   }));
 
   return (
@@ -101,7 +101,7 @@ export function IncomePanel() {
                     className="flex items-baseline justify-between gap-3"
                   >
                     <span className="text-[13.5px] text-ink-secondary">
-                      {formatMonthShort(entry.key)}
+                      {formatMonthLabel(entry.key, cycleStartDay)}
                     </span>
                     <span className="text-[13.5px] font-medium text-ink tnum">
                       {formatMoney(entry.amount)}
@@ -226,6 +226,7 @@ function IncomeSourceSheet({
         />
         <TextField
           label="Paid on day"
+          hint="Also sets when your budgeting month starts and ends."
           type="number"
           min={1}
           max={28}

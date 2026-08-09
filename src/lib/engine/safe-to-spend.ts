@@ -1,6 +1,9 @@
 import {
-  daysInMonth,
+  clampToMonth,
+  daysBetween,
+  endOfMonth,
   monthKey,
+  monthKeyToDate,
   remainingDaysInMonth,
   type MonthKey,
 } from "@/lib/domain/dates";
@@ -89,6 +92,7 @@ export interface SafeToSpendInput {
   goals: Goal[];
   month: MonthKey;
   now: Date;
+  cycleStartDay: number;
 }
 
 /** Net expected pay: gross minus the deductions that never reach the bank. */
@@ -99,26 +103,39 @@ export function expectedMonthlyIncome(sources: IncomeSource[]): Paise {
 }
 
 /**
- * Recurring charges still to come this month.
+ * Recurring charges still to come this cycle.
  *
  * A bill is treated as already handled once a transaction from the same
- * recurring rule exists in this month, so the same ₹649 is never held back
+ * recurring rule exists in this cycle, so the same ₹649 is never held back
  * twice.
+ *
+ * The same `dayOfPeriod` can land in either the cycle's start month or its
+ * end month depending on how it compares to `cycleStartDay` (e.g. a Jul24 →
+ * Aug23 cycle: a bill due on day 5 occurs in August, one due on day 28
+ * occurs in July) — so each rule's due date is resolved by trying the day
+ * clamped into both months and keeping whichever candidate actually falls
+ * inside the cycle, rather than comparing raw day-of-month integers.
  */
 export function upcomingRecurring(
   recurring: RecurringTransaction[],
   transactions: Transaction[],
   month: MonthKey,
   now: Date,
+  cycleStartDay = 1,
 ): { rule: RecurringTransaction; dueDate: Date; amount: Paise }[] {
   const paidRuleIds = new Set(
-    monthTransactions(transactions, month)
+    monthTransactions(transactions, month, cycleStartDay)
       .map((t) => t.recurringId)
       .filter((id): id is string => Boolean(id)),
   );
-  const isCurrentMonth = monthKey(now) === month;
-  const today = isCurrentMonth ? now.getDate() : 0;
-  const lastDay = daysInMonth(month);
+
+  const cycleStart = monthKeyToDate(month);
+  const cycleEnd = endOfMonth(month, cycleStartDay);
+  const isCurrentCycle = monthKey(now, cycleStartDay) === month;
+  // Viewing the live cycle: anything before "now" already passed without
+  // being charged. Viewing a past/future cycle: nothing is filtered out —
+  // every rule "still due" inside that cycle window counts.
+  const cutoff = isCurrentCycle ? now : cycleStart;
 
   const out: { rule: RecurringTransaction; dueDate: Date; amount: Paise }[] = [];
   for (const rule of recurring) {
@@ -126,15 +143,17 @@ export function upcomingRecurring(
     if (paidRuleIds.has(rule.id)) continue;
     if (rule.frequency !== "MONTHLY") continue;
 
-    const day = Math.min(Math.max(1, rule.dayOfPeriod), lastDay);
-    if (day < today) continue; // already passed without being charged
+    const candidates = [
+      clampToMonth(cycleStart.getFullYear(), cycleStart.getMonth(), rule.dayOfPeriod),
+      clampToMonth(cycleEnd.getFullYear(), cycleEnd.getMonth(), rule.dayOfPeriod),
+    ];
+    const dueDate = candidates.find(
+      (d) => daysBetween(cycleStart, d) >= 0 && daysBetween(d, cycleEnd) >= 0,
+    );
+    if (!dueDate) continue; // shouldn't happen for a MONTHLY rule in a <=31-day cycle
+    if (daysBetween(cutoff, dueDate) < 0) continue; // already passed
 
-    const [year, monthNumber] = month.split("-").map(Number);
-    out.push({
-      rule,
-      dueDate: new Date(year ?? 1970, (monthNumber ?? 1) - 1, day),
-      amount: rule.amount,
-    });
+    out.push({ rule, dueDate, amount: rule.amount });
   }
   return out.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
 }
@@ -144,8 +163,9 @@ export function remainingPlannedInvestments(
   investments: Investment[],
   transactions: Transaction[],
   month: MonthKey,
+  cycleStartDay = 1,
 ): Paise {
-  const monthly = monthTransactions(transactions, month).filter(
+  const monthly = monthTransactions(transactions, month, cycleStartDay).filter(
     (t) => t.type === "INVESTMENT",
   );
   let remaining = 0;
@@ -170,9 +190,9 @@ export function goalAllocations(goals: Goal[]): Paise {
 export function calculateSafeToSpend(
   input: SafeToSpendInput,
 ): SafeToSpendResult {
-  const { transactions, accounts, month, now } = input;
+  const { transactions, accounts, month, now, cycleStartDay } = input;
 
-  const totals = monthTotals(transactions, month);
+  const totals = monthTotals(transactions, month, cycleStartDay);
 
   // --- Income basis -------------------------------------------------------
   // Plan against expected salary even before it lands, but if actual income
@@ -187,7 +207,7 @@ export function calculateSafeToSpend(
     0,
   );
   const cardSpendThisMonth = total(
-    monthTransactions(transactions, month).filter(
+    monthTransactions(transactions, month, cycleStartDay).filter(
       (t) => isExpense(t) && t.accountId && cards.some((c) => c.id === t.accountId),
     ),
   );
@@ -196,12 +216,13 @@ export function calculateSafeToSpend(
   const carriedCardDebt = Math.max(0, cardOutstanding - cardSpendThisMonth);
 
   // --- Other commitments --------------------------------------------------
-  const upcoming = upcomingRecurring(input.recurring, transactions, month, now);
+  const upcoming = upcomingRecurring(input.recurring, transactions, month, now, cycleStartDay);
   const upcomingTotal = upcoming.reduce((acc, u) => acc + u.amount, 0);
   const plannedInvestmentsLeft = remainingPlannedInvestments(
     input.investments,
     transactions,
     month,
+    cycleStartDay,
   );
   const goalMoney = goalAllocations(input.goals);
 
@@ -215,11 +236,11 @@ export function calculateSafeToSpend(
     carriedCardDebt -
     goalMoney;
 
-  const remainingDays = remainingDaysInMonth(now, month);
+  const remainingDays = remainingDaysInMonth(now, month, cycleStartDay);
   const dailyAllowance =
     safeAmount > 0 ? Math.floor(safeAmount / remainingDays) : 0;
 
-  const velocity = spendingVelocity(transactions, month, now);
+  const velocity = spendingVelocity(transactions, month, now, cycleStartDay);
   const projectedRemainingSpend = velocity.perDay * Math.max(0, remainingDays - 1);
   const projectedSurplus = safeAmount - projectedRemainingSpend;
 

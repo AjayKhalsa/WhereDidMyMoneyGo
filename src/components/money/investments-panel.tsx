@@ -46,7 +46,7 @@ const KINDS: { value: InvestmentKind; label: string }[] = [
 ];
 
 export function InvestmentsPanel() {
-  const { db, month, totals } = useFinance();
+  const { db, month, cycleStartDay, totals } = useFinance();
   const [editing, setEditing] = useState<Investment | null>(null);
   const [creating, setCreating] = useState(false);
   const [contributing, setContributing] = useState<Investment | null>(null);
@@ -55,6 +55,7 @@ export function InvestmentsPanel() {
     db?.investments ?? [],
     db?.transactions ?? [],
     month,
+    cycleStartDay,
   );
 
   const rate = investmentRate(totals);

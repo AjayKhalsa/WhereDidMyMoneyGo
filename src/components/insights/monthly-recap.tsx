@@ -1,7 +1,7 @@
 "use client";
 
 import { groupIdOf } from "@/lib/domain/categories";
-import { formatMonthLong, previousMonths } from "@/lib/domain/dates";
+import { formatMonthLabel, previousMonths } from "@/lib/domain/dates";
 import { formatMoney, percentOf } from "@/lib/domain/money";
 import {
   compareToAverage,
@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
  */
 
 export function MonthlyRecap() {
-  const { db, month, totals, groupBreakdown, safeToSpend } = useFinance();
+  const { db, month, cycleStartDay, totals, groupBreakdown, safeToSpend } = useFinance();
 
   const transactions = db?.transactions ?? [];
   const top = groupBreakdown.slice(0, 5);
@@ -41,6 +41,8 @@ export function MonthlyRecap() {
         transactions,
         month,
         (t) => Boolean(t.categoryId) && groupIdOf(t.categoryId!) === slice.id,
+        3,
+        cycleStartDay,
       ),
     }))
     .filter((m) => m.comparison.percentChange !== null)
@@ -51,8 +53,8 @@ export function MonthlyRecap() {
     );
   const biggestChange = movers[0];
 
-  const spark = [...previousMonths(month, 5), month].map((m) =>
-    total(monthTransactions(transactions, m).filter(isExpense)),
+  const spark = [...previousMonths(month, 5, cycleStartDay), month].map((m) =>
+    total(monthTransactions(transactions, m, cycleStartDay).filter(isExpense)),
   );
 
   const invRate = investmentRate(totals);
@@ -62,7 +64,7 @@ export function MonthlyRecap() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-[19px] font-semibold tracking-[-0.02em] text-ink">
-            {formatMonthLong(month)} money report
+            {formatMonthLabel(month, cycleStartDay)} money report
           </h2>
           <p className="mt-1 text-[13.5px] text-ink-secondary">
             {totals.expenseCount}{" "}

@@ -1,8 +1,10 @@
 import { groupIdOf } from "@/lib/domain/categories";
 import {
   monthKey,
+  monthKeyToDate,
   previousMonths,
   type MonthKey,
+  daysBetween,
   elapsedDaysInMonth,
   daysInMonth,
 } from "@/lib/domain/dates";
@@ -34,8 +36,8 @@ export function isExpense(t: Transaction): boolean {
   return t.type === "EXPENSE";
 }
 
-export function inMonth(t: Transaction, key: MonthKey): boolean {
-  return monthKey(t.date) === key;
+export function inMonth(t: Transaction, key: MonthKey, cycleStartDay = 1): boolean {
+  return monthKey(t.date, cycleStartDay) === key;
 }
 
 export function ofType(
@@ -48,8 +50,9 @@ export function ofType(
 export function monthTransactions(
   transactions: Transaction[],
   key: MonthKey,
+  cycleStartDay = 1,
 ): Transaction[] {
-  return transactions.filter((t) => inMonth(t, key));
+  return transactions.filter((t) => inMonth(t, key, cycleStartDay));
 }
 
 export function total(transactions: Transaction[]): Paise {
@@ -73,6 +76,7 @@ export interface MonthTotals {
 export function monthTotals(
   transactions: Transaction[],
   key: MonthKey,
+  cycleStartDay = 1,
 ): MonthTotals {
   let income = 0;
   let spent = 0;
@@ -81,7 +85,7 @@ export function monthTotals(
   let expenseCount = 0;
 
   for (const t of transactions) {
-    if (!inMonth(t, key)) continue;
+    if (!inMonth(t, key, cycleStartDay)) continue;
     switch (t.type) {
       case "INCOME":
         income += t.amount;
@@ -241,10 +245,11 @@ export function monthlySpendHistory(
   transactions: Transaction[],
   key: MonthKey,
   months: number,
+  cycleStartDay = 1,
 ): { key: MonthKey; amount: Paise }[] {
-  return previousMonths(key, months).map((m) => ({
+  return previousMonths(key, months, cycleStartDay).map((m) => ({
     key: m,
-    amount: total(monthTransactions(transactions, m).filter(isExpense)),
+    amount: total(monthTransactions(transactions, m, cycleStartDay).filter(isExpense)),
   }));
 }
 
@@ -259,8 +264,9 @@ export function averageMonthlySpend(
   transactions: Transaction[],
   key: MonthKey,
   months = 3,
+  cycleStartDay = 1,
 ): { average: Paise; monthsCounted: number } {
-  const history = monthlySpendHistory(transactions, key, months);
+  const history = monthlySpendHistory(transactions, key, months, cycleStartDay);
   const active = history.filter((h) => h.amount > 0);
   if (active.length === 0) return { average: 0, monthsCounted: 0 };
   return {
@@ -286,11 +292,12 @@ export function compareToAverage(
   key: MonthKey,
   predicate: (t: Transaction) => boolean,
   months = 3,
+  cycleStartDay = 1,
 ): ComparisonResult {
   const matching = transactions.filter((t) => isExpense(t) && predicate(t));
-  const current = total(monthTransactions(matching, key));
-  const history = previousMonths(key, months).map((m) =>
-    total(monthTransactions(matching, m)),
+  const current = total(monthTransactions(matching, key, cycleStartDay));
+  const history = previousMonths(key, months, cycleStartDay).map((m) =>
+    total(monthTransactions(matching, m, cycleStartDay)),
   );
   const active = history.filter((amount) => amount > 0);
   const average =
@@ -309,10 +316,11 @@ export function compareToAverage(
 export function monthOverMonthChange(
   transactions: Transaction[],
   key: MonthKey,
+  cycleStartDay = 1,
 ): ComparisonResult {
-  const previous = previousMonths(key, 1)[0]!;
-  const current = total(monthTransactions(transactions, key).filter(isExpense));
-  const base = total(monthTransactions(transactions, previous).filter(isExpense));
+  const previous = previousMonths(key, 1, cycleStartDay)[0]!;
+  const current = total(monthTransactions(transactions, key, cycleStartDay).filter(isExpense));
+  const base = total(monthTransactions(transactions, previous, cycleStartDay).filter(isExpense));
   return {
     current,
     average: base,
@@ -338,15 +346,16 @@ export function spendingVelocity(
   transactions: Transaction[],
   key: MonthKey,
   now: Date,
+  cycleStartDay = 1,
 ): VelocityResult {
-  const spentSoFar = total(monthTransactions(transactions, key).filter(isExpense));
-  const daysElapsed = Math.max(1, elapsedDaysInMonth(now, key));
+  const spentSoFar = total(monthTransactions(transactions, key, cycleStartDay).filter(isExpense));
+  const daysElapsed = Math.max(1, elapsedDaysInMonth(now, key, cycleStartDay));
   const perDay = Math.round(spentSoFar / daysElapsed);
   return {
     spentSoFar,
     daysElapsed,
     perDay,
-    projectedMonthEnd: perDay * daysInMonth(key),
+    projectedMonthEnd: perDay * daysInMonth(key, cycleStartDay),
   };
 }
 
@@ -526,13 +535,15 @@ export function spendingConsistency(
   transactions: Transaction[],
   key: MonthKey,
   now: Date,
+  cycleStartDay = 1,
 ): number {
-  const days = elapsedDaysInMonth(now, key);
+  const days = elapsedDaysInMonth(now, key, cycleStartDay);
   if (days < 5) return 50;
   const daily = new Array<number>(days).fill(0);
-  for (const t of monthTransactions(transactions, key)) {
+  const cycleStart = monthKeyToDate(key);
+  for (const t of monthTransactions(transactions, key, cycleStartDay)) {
     if (!isExpense(t)) continue;
-    const dayIndex = new Date(t.date).getDate() - 1;
+    const dayIndex = daysBetween(cycleStart, new Date(t.date));
     if (dayIndex >= 0 && dayIndex < days) {
       daily[dayIndex] = (daily[dayIndex] ?? 0) + t.amount;
     }
@@ -594,10 +605,11 @@ export function summariseCreditCard(
   transactions: Transaction[],
   key: MonthKey,
   now: Date,
+  cycleStartDay = 1,
 ): CreditCardSummary {
   const outstanding = creditCardOutstanding(transactions, account.id);
   const spentThisMonth = total(
-    monthTransactions(transactions, key).filter(
+    monthTransactions(transactions, key, cycleStartDay).filter(
       (t) => isExpense(t) && t.accountId === account.id,
     ),
   );
@@ -692,8 +704,9 @@ export function investmentContributions(
   investments: Investment[],
   transactions: Transaction[],
   key: MonthKey,
+  cycleStartDay = 1,
 ): InvestmentBreakdown[] {
-  const monthly = monthTransactions(transactions, key).filter(
+  const monthly = monthTransactions(transactions, key, cycleStartDay).filter(
     (t) => t.type === "INVESTMENT",
   );
   return investments
