@@ -1,0 +1,369 @@
+import { derivedContexts, normaliseContexts } from "@/lib/domain/contexts";
+import { toLocalISO } from "@/lib/domain/dates";
+import type {
+  Account,
+  ClassificationRule,
+  CreditCardDetail,
+  Goal,
+  IncomeSource,
+  Investment,
+  Paise,
+  RecurringTransaction,
+  Transaction,
+  TransactionContext,
+  TransactionType,
+  UserProfile,
+} from "@/lib/domain/types";
+import { learnFromEntry } from "@/lib/engine/learning";
+import { createId } from "@/lib/utils";
+import {
+  applyBatch,
+  getSnapshot,
+  putRow,
+  removeRow,
+  saveProfile,
+} from "./store";
+
+/**
+ * Every write the app can perform.
+ *
+ * Components call these; they never touch the store directly. Keeping
+ * mutations here is what guarantees the invariants hold no matter which
+ * screen triggered the change — most importantly that paying a credit card
+ * creates a TRANSFER and never an expense.
+ */
+
+export interface TransactionDraft {
+  type: TransactionType;
+  amount: Paise;
+  description: string;
+  date: Date;
+  categoryId?: string;
+  contexts: TransactionContext[];
+  accountId?: string;
+  toAccountId?: string;
+  merchant?: string;
+  investmentId?: string;
+  notes?: string;
+  source?: Transaction["source"];
+}
+
+/**
+ * Normalises a draft into a stored transaction.
+ *
+ * Weekend and late-night contexts are recomputed from the timestamp rather
+ * than trusted from the caller, so changing a transaction's date keeps them
+ * honest instead of leaving a Tuesday dinner tagged "weekend".
+ */
+function materialise(
+  draft: TransactionDraft,
+  existing?: Transaction,
+): Transaction {
+  const iso = toLocalISO(draft.date);
+  const now = new Date().toISOString();
+  const authored = draft.contexts.filter(
+    (c) => c.value !== "weekend" && c.value !== "late-night",
+  );
+  const contexts = normaliseContexts([...authored, ...derivedContexts(iso)]);
+
+  // Only expenses carry a category; a card payment has no "category".
+  const categoryId = draft.type === "TRANSFER" ? undefined : draft.categoryId;
+
+  return {
+    id: existing?.id ?? createId("txn"),
+    type: draft.type,
+    amount: Math.max(0, Math.round(draft.amount)),
+    description: draft.description.trim(),
+    date: iso,
+    merchant: draft.merchant?.trim() || undefined,
+    accountId: draft.accountId,
+    toAccountId: draft.type === "TRANSFER" ? draft.toAccountId : undefined,
+    categoryId,
+    contexts,
+    investmentId: draft.type === "INVESTMENT" ? draft.investmentId : undefined,
+    notes: draft.notes?.trim() || undefined,
+    recurringId: existing?.recurringId,
+    source: draft.source ?? existing?.source ?? "manual",
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
+}
+
+export interface SaveOptions {
+  /** The parser rule that produced this entry, if any. */
+  matchedRuleId?: string;
+  /** True when the user changed what the parser proposed. */
+  wasCorrected?: boolean;
+  /** Set false to skip writing a classification rule (e.g. bulk edits). */
+  learn?: boolean;
+}
+
+export async function addTransaction(
+  draft: TransactionDraft,
+  options: SaveOptions = {},
+): Promise<Transaction> {
+  const transaction = materialise(draft);
+  const rules: ClassificationRule[] = [];
+
+  // Only expenses teach the classifier anything useful.
+  if (options.learn !== false && transaction.type === "EXPENSE" && transaction.categoryId) {
+    const existing = getSnapshot().data?.rules ?? [];
+    rules.push(
+      ...learnFromEntry(
+        {
+          description: transaction.description,
+          categoryId: transaction.categoryId,
+          contexts: transaction.contexts,
+          merchant: transaction.merchant,
+          accountId: transaction.accountId,
+          matchedRuleId: options.matchedRuleId,
+          wasCorrected: options.wasCorrected ?? false,
+        },
+        existing,
+      ),
+    );
+  }
+
+  await applyBatch({
+    puts: { transactions: [transaction], ...(rules.length ? { rules } : {}) },
+  });
+  return transaction;
+}
+
+export async function updateTransaction(
+  id: string,
+  draft: TransactionDraft,
+  options: SaveOptions = {},
+): Promise<Transaction> {
+  const existing = getSnapshot().data?.transactions.find((t) => t.id === id);
+  if (!existing) throw new Error("That transaction no longer exists");
+
+  const transaction = materialise(draft, existing);
+  const rules: ClassificationRule[] = [];
+
+  // A category change on an existing row is the strongest correction signal
+  // we ever get — the user went back specifically to fix it.
+  const categoryChanged = existing.categoryId !== transaction.categoryId;
+  if (
+    options.learn !== false &&
+    transaction.type === "EXPENSE" &&
+    transaction.categoryId &&
+    categoryChanged
+  ) {
+    rules.push(
+      ...learnFromEntry(
+        {
+          description: transaction.description,
+          categoryId: transaction.categoryId,
+          contexts: transaction.contexts,
+          merchant: transaction.merchant,
+          accountId: transaction.accountId,
+          wasCorrected: true,
+        },
+        getSnapshot().data?.rules ?? [],
+      ),
+    );
+  }
+
+  await applyBatch({
+    puts: { transactions: [transaction], ...(rules.length ? { rules } : {}) },
+  });
+  return transaction;
+}
+
+export async function deleteTransaction(id: string): Promise<void> {
+  await removeRow("transactions", id);
+}
+
+/**
+ * Records a credit-card payment (spec §17).
+ *
+ * This is the single most important correctness rule in the product: the
+ * payment is a TRANSFER from a bank account to the card. The ₹24,680 leaving
+ * your bank is not new spending — it is settling dining, shopping and cab
+ * expenses that were each recorded when they happened. Creating an expense
+ * here would double-count every one of them.
+ */
+export async function payCreditCard(params: {
+  cardAccountId: string;
+  fromAccountId: string;
+  amount: Paise;
+  date?: Date;
+}): Promise<Transaction> {
+  return addTransaction(
+    {
+      type: "TRANSFER",
+      amount: params.amount,
+      description: "Credit card payment",
+      date: params.date ?? new Date(),
+      accountId: params.fromAccountId,
+      toAccountId: params.cardAccountId,
+      contexts: [],
+    },
+    { learn: false },
+  );
+}
+
+/** Records an investment contribution. Never counted as spending. */
+export async function addInvestmentContribution(params: {
+  investmentId: string;
+  amount: Paise;
+  fromAccountId?: string;
+  date?: Date;
+  description?: string;
+}): Promise<Transaction> {
+  const investment = getSnapshot().data?.investments.find(
+    (i) => i.id === params.investmentId,
+  );
+  return addTransaction(
+    {
+      type: "INVESTMENT",
+      amount: params.amount,
+      description: params.description ?? investment?.name ?? "Investment",
+      date: params.date ?? new Date(),
+      accountId: params.fromAccountId,
+      investmentId: params.investmentId,
+      contexts: [],
+    },
+    { learn: false },
+  );
+}
+
+export async function addIncome(params: {
+  amount: Paise;
+  description: string;
+  accountId?: string;
+  date?: Date;
+}): Promise<Transaction> {
+  return addTransaction(
+    {
+      type: "INCOME",
+      amount: params.amount,
+      description: params.description,
+      date: params.date ?? new Date(),
+      accountId: params.accountId,
+      contexts: [],
+    },
+    { learn: false },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reference data
+// ---------------------------------------------------------------------------
+
+export async function saveAccount(account: Account): Promise<void> {
+  await putRow("accounts", account);
+}
+
+export async function deleteAccount(id: string): Promise<void> {
+  const db = getSnapshot().data;
+  if (!db) return;
+  // Detach transactions rather than deleting them — losing spending history
+  // because a card was closed would be indefensible.
+  const orphaned = db.transactions
+    .filter((t) => t.accountId === id || t.toAccountId === id)
+    .map((t) => ({
+      ...t,
+      accountId: t.accountId === id ? undefined : t.accountId,
+      toAccountId: t.toAccountId === id ? undefined : t.toAccountId,
+      updatedAt: new Date().toISOString(),
+    }));
+  const cardIds = db.creditCards.filter((c) => c.accountId === id).map((c) => c.id);
+
+  await applyBatch({
+    puts: orphaned.length ? { transactions: orphaned } : {},
+    deletes: { accounts: [id], ...(cardIds.length ? { creditCards: cardIds } : {}) },
+  });
+}
+
+export async function saveCreditCardDetail(
+  detail: CreditCardDetail,
+): Promise<void> {
+  await putRow("creditCards", detail);
+}
+
+export async function saveGoal(goal: Goal): Promise<void> {
+  await putRow("goals", goal);
+}
+
+export async function deleteGoal(id: string): Promise<void> {
+  await removeRow("goals", id);
+}
+
+export async function saveInvestment(investment: Investment): Promise<void> {
+  await putRow("investments", investment);
+}
+
+export async function deleteInvestment(id: string): Promise<void> {
+  await removeRow("investments", id);
+}
+
+export async function saveIncomeSource(source: IncomeSource): Promise<void> {
+  await putRow("incomeSources", source);
+}
+
+export async function deleteIncomeSource(id: string): Promise<void> {
+  await removeRow("incomeSources", id);
+}
+
+export async function saveRecurring(rule: RecurringTransaction): Promise<void> {
+  await putRow("recurring", rule);
+}
+
+export async function deleteRecurring(id: string): Promise<void> {
+  await removeRow("recurring", id);
+}
+
+export async function saveRule(rule: ClassificationRule): Promise<void> {
+  await putRow("rules", rule);
+}
+
+export async function deleteRule(id: string): Promise<void> {
+  await removeRow("rules", id);
+}
+
+export async function updateProfile(
+  changes: Partial<UserProfile>,
+): Promise<void> {
+  const current = getSnapshot().data?.profile;
+  if (!current) return;
+  await saveProfile({ ...current, ...changes });
+}
+
+/** Materialises a recurring rule as an actual charge for the current period. */
+export async function markRecurringPaid(
+  rule: RecurringTransaction,
+  date = new Date(),
+): Promise<Transaction> {
+  const transaction: Transaction = {
+    id: createId("txn"),
+    type: rule.type,
+    amount: rule.amount,
+    description: rule.description,
+    date: toLocalISO(date),
+    merchant: rule.merchant,
+    accountId: rule.accountId,
+    categoryId: rule.type === "EXPENSE" ? rule.categoryId : undefined,
+    contexts: derivedContexts(toLocalISO(date)),
+    recurringId: rule.id,
+    source: "recurring",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await putRow("transactions", transaction);
+  return transaction;
+}
+
+/** Moves money into a goal's pot. Tracked on the goal, not as spending. */
+export async function contributeToGoal(
+  goalId: string,
+  amount: Paise,
+): Promise<void> {
+  const goal = getSnapshot().data?.goals.find((g) => g.id === goalId);
+  if (!goal) return;
+  await putRow("goals", {
+    ...goal,
+    currentAmount: Math.max(0, goal.currentAmount + amount),
+  });
+}

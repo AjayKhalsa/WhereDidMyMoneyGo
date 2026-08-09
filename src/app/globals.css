@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ */
+/*  Design tokens                                                      */
+/*  A warm neutral canvas, charcoal ink, one restrained accent.        */
+/*  Green is reserved for positive financial signal, amber/red for     */
+/*  warnings. Nothing else is allowed to be colourful.                 */
+/* ------------------------------------------------------------------ */
+
+@theme {
+  --color-canvas: #faf9f7;
+  --color-surface: #ffffff;
+  --color-surface-sunken: #f5f4f1;
+  --color-surface-hover: #f2f1ed;
+
+  --color-ink: #191917;
+  --color-ink-secondary: #6a6963;
+  --color-ink-tertiary: #9b9a92;
+  --color-ink-faint: #c4c3ba;
+
+  --color-line: #e9e7e1;
+  --color-line-strong: #dcd9d1;
+
+  --color-accent: #4b56c8;
+  --color-accent-hover: #3f49b4;
+  --color-accent-soft: #eeeffb;
+  --color-accent-ink: #363f9e;
+
+  --color-positive: #1c7f57;
+  --color-positive-soft: #e7f3ed;
+  --color-warning: #a8661a;
+  --color-warning-soft: #fbf1e3;
+  --color-danger: #b8402f;
+  --color-danger-soft: #fceceA;
+
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Inter", "Helvetica Neue", Arial, sans-serif;
+
+  --radius-card: 16px;
+
+  --shadow-subtle: 0 1px 2px rgb(25 25 23 / 0.04),
+    0 1px 3px rgb(25 25 23 / 0.03);
+  --shadow-raised: 0 2px 4px rgb(25 25 23 / 0.04),
+    0 8px 24px -6px rgb(25 25 23 / 0.08);
+  --shadow-overlay: 0 8px 16px -4px rgb(25 25 23 / 0.08),
+    0 24px 56px -12px rgb(25 25 23 / 0.18);
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Base                                                               */
+/* ------------------------------------------------------------------ */
+
+* {
+  border-color: var(--color-line);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv02", "cv03", "cv04";
+  overscroll-behavior-y: none;
+}
+
+/* Financial figures always align in columns. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Large display numbers get tighter tracking so they read as one shape. */
+.display-figure {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Only hide focus rings for pointer users who never asked for them. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Thin, unobtrusive scrollbars inside scroll regions. */
+.scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+.scroll-slim::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-slim::-webkit-scrollbar-thumb {
+  background-color: var(--color-line-strong);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.scroll-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Safe-area padding for the mobile bottom bar on notched devices. */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.mb-safe {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
