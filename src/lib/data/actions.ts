@@ -133,6 +133,64 @@ export async function addTransaction(
   return transaction;
 }
 
+export interface ImportRowInput {
+  draft: TransactionDraft;
+  /** True when the user edited what the parser guessed for this row. */
+  wasCorrected: boolean;
+  matchedRuleId?: string;
+}
+
+/**
+ * Bulk-commits reviewed statement-import rows in one write.
+ *
+ * Learning is deliberately narrower than `addTransaction`'s: a batch import
+ * can be dozens of rows the user never individually confirmed, so only rows
+ * they actually corrected in the review screen teach the classifier —
+ * otherwise a single statement would seed a pile of rules from raw bank
+ * narration noise the user never looked at twice.
+ */
+export async function importTransactions(
+  rows: ImportRowInput[],
+): Promise<Transaction[]> {
+  const baseRules = getSnapshot().data?.rules ?? [];
+  let learnedRules: ClassificationRule[] = [];
+  const transactions: Transaction[] = [];
+
+  for (const row of rows) {
+    const transaction = materialise({
+      ...row.draft,
+      source: row.draft.source ?? "imported",
+    });
+    transactions.push(transaction);
+
+    if (row.wasCorrected && transaction.type === "EXPENSE" && transaction.categoryId) {
+      learnedRules = [
+        ...learnedRules,
+        ...learnFromEntry(
+          {
+            description: transaction.description,
+            categoryId: transaction.categoryId,
+            contexts: transaction.contexts,
+            merchant: transaction.merchant,
+            accountId: transaction.accountId,
+            matchedRuleId: row.matchedRuleId,
+            wasCorrected: true,
+          },
+          [...baseRules, ...learnedRules],
+        ),
+      ];
+    }
+  }
+
+  await applyBatch({
+    puts: {
+      transactions,
+      ...(learnedRules.length ? { rules: learnedRules } : {}),
+    },
+  });
+  return transactions;
+}
+
 export async function updateTransaction(
   id: string,
   draft: TransactionDraft,

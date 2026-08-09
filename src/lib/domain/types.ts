@@ -110,7 +110,7 @@ export interface Transaction {
   /** Set when this row was materialised from a recurring rule. */
   recurringId?: string;
   /** How the transaction was created — used to grade parser accuracy. */
-  source: "manual" | "parsed" | "recurring" | "seed";
+  source: "manual" | "parsed" | "recurring" | "seed" | "imported";
   createdAt: string;
   updatedAt: string;
 }

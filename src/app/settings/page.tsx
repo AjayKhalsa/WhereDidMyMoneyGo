@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CloudUpload, Download, LogOut, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowRight, CloudUpload, Download, LogOut, RefreshCw, Trash2, Upload } from "lucide-react";
 import { formatFullDate } from "@/lib/domain/dates";
 import type { Database } from "@/lib/domain/types";
 import { updateProfile } from "@/lib/data/actions";
@@ -14,6 +14,7 @@ import { SupabaseRepository } from "@/lib/data/supabase-adapter";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/data/supabase-client";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { PageHeader } from "@/components/layout/month-switcher";
+import { ImportStatementSheet } from "@/components/settings/import-statement-sheet";
 import { RulesPanel } from "@/components/settings/rules-panel";
 import { TextField } from "@/components/ui/fields";
 import { Button, Card, Chip, Section, Skeleton } from "@/components/ui/primitives";
@@ -273,6 +274,7 @@ function DataPanel() {
   const toast = useToast();
   const [pending, setPending] = useState<PendingAction>(null);
   const [working, setWorking] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const counts = {
     transactions: db?.transactions.length ?? 0,
@@ -330,6 +332,16 @@ function DataPanel() {
   return (
     <>
       <Card className="divide-y divide-line">
+        <DataRow
+          icon={<Upload className="h-4 w-4" strokeWidth={1.75} />}
+          title="Import a statement"
+          description="HDFC savings account PDF, for now. Read entirely in your browser."
+          action={
+            <Button size="sm" onClick={() => setImporting(true)}>
+              Import
+            </Button>
+          }
+        />
         <DataRow
           icon={<Download className="h-4 w-4" strokeWidth={1.75} />}
           title="Export everything"
@@ -406,6 +418,8 @@ function DataPanel() {
           </p>
         </div>
       </Sheet>
+
+      <ImportStatementSheet open={importing} onClose={() => setImporting(false)} />
     </>
   );
 }
