@@ -175,22 +175,35 @@ function ProfileCard() {
 function CloudMigrationPanel() {
   const toast = useToast();
   const [localCount, setLocalCount] = useState<number | null>(null);
+  // Migrating calls replaceAll(), which overwrites the entire Supabase
+  // account with whatever's in local storage — only safe when the cloud
+  // account genuinely has nothing of its own yet. Once real usage has
+  // happened on Supabase, blindly offering this button risks wiping out
+  // real data with a stale local-only leftover from before Supabase became
+  // the primary store.
+  const [remoteHasData, setRemoteHasData] = useState<boolean | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [working, setWorking] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    void new LocalRepository().load().then((data) => {
-      if (!cancelled && data && data.transactions.length > 0) {
-        setLocalCount(data.transactions.length);
+    void Promise.all([
+      new LocalRepository().load(),
+      new SupabaseRepository().load(),
+    ]).then(([local, remote]) => {
+      if (cancelled) return;
+      if (local && local.transactions.length > 0) {
+        setLocalCount(local.transactions.length);
       }
+      setRemoteHasData(Boolean(remote && remote.transactions.length > 0));
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  if (localCount === null) return null;
+  if (localCount === null || remoteHasData === null) return null;
+  if (remoteHasData) return null;
 
   async function handleMigrate() {
     setWorking(true);

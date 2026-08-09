@@ -173,6 +173,22 @@ function remapCategorisedRow<T extends { categoryId?: string; contexts: Transact
 }
 
 /**
+ * Bank statements give a date, never a real time, so an imported
+ * transaction's stored timestamp always defaults to local midnight —
+ * `materialise()` in `actions.ts` now skips deriving weekend/late-night for
+ * new imports because of this, but transactions imported before that fix
+ * already have the spurious tags baked in. Strip them here too.
+ */
+function stripImportDerivedContexts(t: Transaction): { row: Transaction; changed: boolean } {
+  if (t.source !== "imported") return { row: t, changed: false };
+  const filtered = t.contexts.filter(
+    (c) => !(c.type === "OCCASION" && (c.value === "weekend" || c.value === "late-night")),
+  );
+  if (filtered.length === t.contexts.length) return { row: t, changed: false };
+  return { row: { ...t, contexts: filtered }, changed: true };
+}
+
+/**
  * Pure function: rewrites any legacy category ids found on transactions,
  * rules, or recurring rules, and refreshes `categories` to the current flat
  * seed whenever legacy ids are found anywhere. Returns the same `db`
@@ -185,7 +201,9 @@ export function remapLegacyCategories(db: Database): { db: Database; changed: bo
   const transactions: Transaction[] = db.transactions.map((t) => {
     const result = remapCategorisedRow(t);
     if (result.changed) changed = true;
-    return result.row;
+    const stripped = stripImportDerivedContexts(result.row);
+    if (stripped.changed) changed = true;
+    return stripped.row;
   });
   const rules: ClassificationRule[] = db.rules.map((r) => {
     const result = remapCategorisedRow(r);

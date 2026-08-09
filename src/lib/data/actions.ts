@@ -64,10 +64,17 @@ function materialise(
 ): Transaction {
   const iso = toLocalISO(draft.date);
   const now = new Date().toISOString();
+  const source = draft.source ?? existing?.source ?? "manual";
   const authored = draft.contexts.filter(
     (c) => c.value !== "weekend" && c.value !== "late-night",
   );
-  const contexts = normaliseContexts([...authored, ...derivedContexts(iso)]);
+  // Bank statements give a date, never a real time — an imported row's
+  // timestamp defaults to local midnight, which would otherwise derive a
+  // spurious "late night" on every single import. Weekend is at least
+  // derived from a real calendar date, but without a real time backing it
+  // up either, imports skip both rather than guess.
+  const derived = source === "imported" ? [] : derivedContexts(iso);
+  const contexts = normaliseContexts([...authored, ...derived]);
 
   // Only expenses carry a category; a card payment has no "category".
   const categoryId = draft.type === "TRANSFER" ? undefined : draft.categoryId;
@@ -86,7 +93,7 @@ function materialise(
     investmentId: draft.type === "INVESTMENT" ? draft.investmentId : undefined,
     notes: draft.notes?.trim() || undefined,
     recurringId: existing?.recurringId,
-    source: draft.source ?? existing?.source ?? "manual",
+    source,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
