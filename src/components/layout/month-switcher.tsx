@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { formatMonthWithYear } from "@/lib/domain/dates";
+import { formatMonthLabel } from "@/lib/domain/dates";
 import { useFinance, useMonthNavigation } from "@/lib/hooks/use-finance";
 import { IconButton } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
  */
 export function MonthSwitcher({ className }: { className?: string }) {
   const { month, canGoForward, goBack, goForward } = useMonthNavigation();
-  const { isCurrentMonth } = useFinance();
+  const { isCurrentMonth, cycleStartDay } = useFinance();
 
   return (
     <div className={cn("flex items-center gap-1", className)}>
@@ -22,7 +22,7 @@ export function MonthSwitcher({ className }: { className?: string }) {
         <ChevronLeft className="h-4 w-4" strokeWidth={1.9} />
       </IconButton>
       <span className="min-w-[7.5rem] text-center text-[14px] font-medium text-ink">
-        {isCurrentMonth ? "This month" : formatMonthWithYear(month)}
+        {isCurrentMonth ? "This month" : formatMonthLabel(month, cycleStartDay)}
       </span>
       <IconButton
         label="Next month"

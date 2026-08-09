@@ -5,6 +5,7 @@ import { Info } from "lucide-react";
 import {
   daysInMonth,
   elapsedDaysInMonth,
+  formatMonthLabel,
   formatMonthLong,
   greetingFor,
 } from "@/lib/domain/dates";
@@ -27,12 +28,12 @@ import { SafeToSpendExplainer } from "./safe-to-spend-explainer";
  */
 
 export function FinancialHero() {
-  const { safeToSpend, month, now, isCurrentMonth, db } = useFinance();
+  const { safeToSpend, month, now, isCurrentMonth, cycleStartDay, db } = useFinance();
   const [explaining, setExplaining] = useState(false);
 
   const name = db?.profile.name;
-  const elapsed = elapsedDaysInMonth(now, month);
-  const totalDays = daysInMonth(month);
+  const elapsed = elapsedDaysInMonth(now, month, cycleStartDay);
+  const totalDays = daysInMonth(month, cycleStartDay);
   const progress = (elapsed / totalDays) * 100;
 
   const overspent = safeToSpend.isOverspent;
@@ -92,7 +93,11 @@ export function FinancialHero() {
       <div className="mt-6 max-w-md">
         <div className="mb-1.5 flex items-baseline justify-between">
           <span className="text-[12.5px] font-medium text-ink-secondary">
-            {formatMonthLong(month)} {isCurrentMonth ? elapsed : totalDays}
+            {cycleStartDay === 1
+              ? `${formatMonthLong(month)} ${isCurrentMonth ? elapsed : totalDays}`
+              : isCurrentMonth
+                ? `${formatMonthLabel(month, cycleStartDay)} · day ${elapsed}`
+                : formatMonthLabel(month, cycleStartDay)}
           </span>
           <span className="text-[12.5px] text-ink-tertiary tnum">
             {isCurrentMonth

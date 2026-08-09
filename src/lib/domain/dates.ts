@@ -6,68 +6,125 @@
  * timezone conversion and work with local Date parts throughout.
  */
 
-/** "2026-08" — the key every monthly aggregate is bucketed under. */
+/**
+ * "2026-08-24" — the key every monthly aggregate is bucketed under. It's the
+ * cycle's *start date*, not necessarily the calendar month it's usually
+ * named after. `cycleStartDay=1` (the default everywhere) makes this always
+ * "YYYY-MM-01" — a plain calendar month, byte-for-byte what this key format
+ * meant before pay-cycle support existed.
+ */
 export type MonthKey = string;
 
-export function monthKey(date: Date | string): MonthKey {
+/** Calendar days in a given (year, 0-based monthIndex). */
+export function daysInCalendarMonth(year: number, monthIndex: number): number {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+/** Clamps `day` into a valid day for (year, monthIndex) and returns that Date. */
+export function clampToMonth(year: number, monthIndex: number, day: number): Date {
+  const lastDay = daysInCalendarMonth(year, monthIndex);
+  return new Date(year, monthIndex, Math.min(Math.max(1, day), lastDay));
+}
+
+function toKey(year: number, monthIndex: number, day: number): MonthKey {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${year}-${pad(monthIndex + 1)}-${pad(day)}`;
+}
+
+/**
+ * Which pay cycle `date` falls in, as the cycle's start date.
+ *
+ * A date on or after `cycleStartDay` (of its own month) belongs to the cycle
+ * that starts *this* calendar month; a date before it belongs to the cycle
+ * that started the *previous* calendar month. `cycleStartDay` is clamped to
+ * each candidate month's own length before comparing — a start day of 29-31
+ * landing in a shorter month (February) would otherwise misattribute dates
+ * and let a cycle silently swallow extra days from the next one.
+ */
+export function monthKey(date: Date | string, cycleStartDay = 1): MonthKey {
   const d = typeof date === "string" ? new Date(date) : date;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const year = d.getFullYear();
+  const monthIndex = d.getMonth();
+  const clampedThisMonth = Math.min(cycleStartDay, daysInCalendarMonth(year, monthIndex));
+
+  if (d.getDate() >= clampedThisMonth) {
+    return toKey(year, monthIndex, clampedThisMonth);
+  }
+  const prevMonthIndex = (monthIndex - 1 + 12) % 12;
+  const prevYear = monthIndex === 0 ? year - 1 : year;
+  const clampedPrevMonth = Math.min(cycleStartDay, daysInCalendarMonth(prevYear, prevMonthIndex));
+  return toKey(prevYear, prevMonthIndex, clampedPrevMonth);
 }
 
 export function monthKeyToDate(key: MonthKey): Date {
-  const [y, m] = key.split("-").map(Number);
-  return new Date(y ?? 1970, (m ?? 1) - 1, 1);
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1);
 }
 
-export function addMonths(key: MonthKey, delta: number): MonthKey {
+export function addMonths(key: MonthKey, delta: number, cycleStartDay = 1): MonthKey {
   const d = monthKeyToDate(key);
-  d.setMonth(d.getMonth() + delta);
-  return monthKey(d);
+  // Normalise year/month first (Date handles overflow correctly), then
+  // re-clamp to cycleStartDay for the target month — using the passed-in
+  // cycleStartDay rather than `d`'s own (possibly already-clamped) day, so a
+  // cycle that started on a clamped day (e.g. Feb 28 for a day-30 cycle)
+  // still lands on day 30 once it shifts into a month long enough for it.
+  const target = new Date(d.getFullYear(), d.getMonth() + delta, 1);
+  const shifted = clampToMonth(target.getFullYear(), target.getMonth(), cycleStartDay);
+  return toKey(shifted.getFullYear(), shifted.getMonth(), shifted.getDate());
 }
 
 /** The N month keys ending at (and excluding) `key`, oldest first. */
-export function previousMonths(key: MonthKey, count: number): MonthKey[] {
+export function previousMonths(key: MonthKey, count: number, cycleStartDay = 1): MonthKey[] {
   const out: MonthKey[] = [];
-  for (let i = count; i >= 1; i--) out.push(addMonths(key, -i));
+  for (let i = count; i >= 1; i--) out.push(addMonths(key, -i, cycleStartDay));
   return out;
 }
 
-export function daysInMonth(key: MonthKey): number {
-  const d = monthKeyToDate(key);
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+/** Length of the cycle starting at `key`, in days. */
+export function daysInMonth(key: MonthKey, cycleStartDay = 1): number {
+  return daysBetween(monthKeyToDate(key), monthKeyToDate(addMonths(key, 1, cycleStartDay)));
 }
 
-export function isSameMonth(date: Date | string, key: MonthKey): boolean {
-  return monthKey(date) === key;
+export function isSameMonth(date: Date | string, key: MonthKey, cycleStartDay = 1): boolean {
+  return monthKey(date, cycleStartDay) === key;
 }
 
 export function startOfMonth(key: MonthKey): Date {
   return monthKeyToDate(key);
 }
 
-export function endOfMonth(key: MonthKey): Date {
-  const d = monthKeyToDate(key);
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+export function endOfMonth(key: MonthKey, cycleStartDay = 1): Date {
+  const nextStart = monthKeyToDate(addMonths(key, 1, cycleStartDay));
+  return new Date(
+    nextStart.getFullYear(),
+    nextStart.getMonth(),
+    nextStart.getDate() - 1,
+    23,
+    59,
+    59,
+    999,
+  );
 }
 
 /**
- * Days left in the month *including today*, because today's allowance has
+ * Days left in the cycle *including today*, because today's allowance has
  * not been spent yet at the moment we compute it.
  */
-export function remainingDaysInMonth(now: Date, key: MonthKey): number {
-  const total = daysInMonth(key);
-  if (monthKey(now) !== key) {
-    // Looking at a past month: nothing remains. A future month: all of it.
-    return now > endOfMonth(key) ? 0 : total;
+export function remainingDaysInMonth(now: Date, key: MonthKey, cycleStartDay = 1): number {
+  const total = daysInMonth(key, cycleStartDay);
+  if (monthKey(now, cycleStartDay) !== key) {
+    // Looking at a past cycle: nothing remains. A future cycle: all of it.
+    return now > endOfMonth(key, cycleStartDay) ? 0 : total;
   }
-  return Math.max(1, total - now.getDate() + 1);
+  const elapsed = daysBetween(monthKeyToDate(key), now);
+  return Math.max(1, total - elapsed);
 }
 
-export function elapsedDaysInMonth(now: Date, key: MonthKey): number {
-  if (monthKey(now) !== key) {
-    return now > endOfMonth(key) ? daysInMonth(key) : 0;
+export function elapsedDaysInMonth(now: Date, key: MonthKey, cycleStartDay = 1): number {
+  if (monthKey(now, cycleStartDay) !== key) {
+    return now > endOfMonth(key, cycleStartDay) ? daysInMonth(key, cycleStartDay) : 0;
   }
-  return now.getDate();
+  return daysBetween(monthKeyToDate(key), now) + 1;
 }
 
 const MONTH_LONG = new Intl.DateTimeFormat("en-IN", { month: "long" });
@@ -107,6 +164,18 @@ export function formatMonthWithYear(key: MonthKey): string {
 
 export function formatDayMonth(date: Date | string): string {
   return DAY_MONTH.format(typeof date === "string" ? new Date(date) : date);
+}
+
+/**
+ * The label for a whole cycle: a plain month name when `cycleStartDay` is 1
+ * (unchanged from before pay cycles existed), otherwise a date range — a
+ * cycle that straddles two calendar months has no single unambiguous name.
+ */
+export function formatMonthLabel(key: MonthKey, cycleStartDay = 1): string {
+  if (cycleStartDay === 1) return formatMonthWithYear(key);
+  const start = monthKeyToDate(key);
+  const end = endOfMonth(key, cycleStartDay);
+  return `${formatDayMonth(start)} – ${formatDayMonth(end)}`;
 }
 
 export function formatFullDate(date: Date | string): string {

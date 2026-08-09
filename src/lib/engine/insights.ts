@@ -1,8 +1,9 @@
 import { groupIdOf } from "@/lib/domain/categories";
 import { contextLabel } from "@/lib/domain/contexts";
 import {
-  daysInMonth,
-  formatMonthShort,
+  endOfMonth,
+  formatDayMonth,
+  formatMonthLabel,
   previousMonths,
   type MonthKey,
 } from "@/lib/domain/dates";
@@ -96,6 +97,7 @@ export interface InsightInput {
   investments: Investment[];
   month: MonthKey;
   now: Date;
+  cycleStartDay: number;
   groupLabel: (groupId: string) => string;
 }
 
@@ -107,8 +109,8 @@ const MIN_MEANINGFUL_AMOUNT = 100_000; // ₹1,000 in paise — below this, who 
 
 /** Category groups spending well above their own 3-month norm. */
 function detectCategorySpikes(input: InsightInput): Insight[] {
-  const { transactions, month, groupLabel } = input;
-  const thisMonth = monthTransactions(transactions, month);
+  const { transactions, month, cycleStartDay, groupLabel } = input;
+  const thisMonth = monthTransactions(transactions, month, cycleStartDay);
   const slices = spendByGroup(thisMonth, groupLabel);
   const out: Insight[] = [];
 
@@ -118,6 +120,8 @@ function detectCategorySpikes(input: InsightInput): Insight[] {
       transactions,
       month,
       (t) => Boolean(t.categoryId) && groupIdOf(t.categoryId!) === slice.id,
+      3,
+      cycleStartDay,
     );
     if (comparison.monthsCounted === 0) continue;
     if (comparison.percentChange === null || comparison.percentChange < 30) continue;
@@ -148,21 +152,25 @@ function detectCategorySpikes(input: InsightInput): Insight[] {
 
 /** Cross-cutting lenses — dating, alcohol, eating out — against their norm. */
 function detectLensSpikes(input: InsightInput): Insight[] {
-  const { transactions, month } = input;
+  const { transactions, month, cycleStartDay } = input;
   const out: Insight[] = [];
   const watched: Lens[] = LENSES.filter((l) =>
     ["dating", "alcohol", "eating-out", "cabs", "friends"].includes(l.id),
   );
 
   for (const lens of watched) {
-    const comparison = compareToAverage(transactions, month, (t) =>
-      matchesLens(t, lens),
+    const comparison = compareToAverage(
+      transactions,
+      month,
+      (t) => matchesLens(t, lens),
+      3,
+      cycleStartDay,
     );
     if (comparison.current < MIN_MEANINGFUL_AMOUNT) continue;
     if (comparison.monthsCounted === 0) continue;
     if (comparison.percentChange === null || comparison.percentChange < 40) continue;
 
-    const rows = monthTransactions(transactions, month).filter((t) =>
+    const rows = monthTransactions(transactions, month, cycleStartDay).filter((t) =>
       matchesLens(t, lens),
     );
     const multiple = comparison.average > 0 ? comparison.current / comparison.average : 0;
@@ -190,8 +198,8 @@ function detectLensSpikes(input: InsightInput): Insight[] {
 
 /** The single biggest category, framed as a leak when it dominates. */
 function detectBiggestLeak(input: InsightInput): Insight[] {
-  const { transactions, month, groupLabel } = input;
-  const thisMonth = monthTransactions(transactions, month);
+  const { transactions, month, cycleStartDay, groupLabel } = input;
+  const thisMonth = monthTransactions(transactions, month, cycleStartDay);
   const slices = spendByGroup(thisMonth, groupLabel);
   const top = slices[0];
   if (!top || top.amount < MIN_MEANINGFUL_AMOUNT) return [];
@@ -218,8 +226,8 @@ function detectBiggestLeak(input: InsightInput): Insight[] {
 }
 
 function detectWeekendConcentration(input: InsightInput): Insight[] {
-  const { transactions, month } = input;
-  const thisMonth = monthTransactions(transactions, month).filter(isExpense);
+  const { transactions, month, cycleStartDay } = input;
+  const thisMonth = monthTransactions(transactions, month, cycleStartDay).filter(isExpense);
   if (thisMonth.length < 8) return [];
   const split = weekendSplit(thisMonth);
   if (split.weekendShare < 45 || split.weekend < MIN_MEANINGFUL_AMOUNT) return [];
@@ -246,8 +254,8 @@ function detectWeekendConcentration(input: InsightInput): Insight[] {
 }
 
 function detectLateNight(input: InsightInput): Insight[] {
-  const { transactions, month } = input;
-  const thisMonth = monthTransactions(transactions, month).filter(isExpense);
+  const { transactions, month, cycleStartDay } = input;
+  const thisMonth = monthTransactions(transactions, month, cycleStartDay).filter(isExpense);
   if (thisMonth.length < 10) return [];
   const share = shareAfterHour(thisMonth, 20);
   if (share < 35) return [];
@@ -273,8 +281,8 @@ function detectLateNight(input: InsightInput): Insight[] {
 }
 
 function detectFrequency(input: InsightInput): Insight[] {
-  const { transactions, month } = input;
-  const thisMonth = monthTransactions(transactions, month);
+  const { transactions, month, cycleStartDay } = input;
+  const thisMonth = monthTransactions(transactions, month, cycleStartDay);
   const patterns = highFrequencySmallSpends(thisMonth, 60_000, 6);
   const top = patterns[0];
   if (!top || top.amount < MIN_MEANINGFUL_AMOUNT) return [];
@@ -304,8 +312,8 @@ function detectFrequency(input: InsightInput): Insight[] {
 }
 
 function detectOutlier(input: InsightInput): Insight[] {
-  const { transactions, month } = input;
-  const thisMonth = monthTransactions(transactions, month);
+  const { transactions, month, cycleStartDay } = input;
+  const thisMonth = monthTransactions(transactions, month, cycleStartDay);
   const outliers = outlierTransactions(thisMonth, 3);
   const biggest = outliers[0];
   if (!biggest) return [];
@@ -330,11 +338,11 @@ function detectOutlier(input: InsightInput): Insight[] {
 }
 
 function detectInvestmentRate(input: InsightInput): Insight[] {
-  const { transactions, month } = input;
-  const totals = monthTotals(transactions, month);
+  const { transactions, month, cycleStartDay } = input;
+  const totals = monthTotals(transactions, month, cycleStartDay);
   if (totals.income <= 0 || totals.invested <= 0) return [];
   const rate = investmentRate(totals);
-  const rows = monthTransactions(transactions, month).filter(
+  const rows = monthTransactions(transactions, month, cycleStartDay).filter(
     (t) => t.type === "INVESTMENT",
   );
 
@@ -374,7 +382,7 @@ function detectInvestmentRate(input: InsightInput): Insight[] {
 }
 
 function detectCreditCommitment(input: InsightInput): Insight[] {
-  const { transactions, accounts, month } = input;
+  const { transactions, accounts, month, cycleStartDay } = input;
   const cards = accounts.filter((a) => a.type === "CREDIT_CARD" && a.isActive);
   if (cards.length === 0) return [];
 
@@ -384,12 +392,12 @@ function detectCreditCommitment(input: InsightInput): Insight[] {
   );
   if (outstanding < MIN_MEANINGFUL_AMOUNT) return [];
 
-  const totals = monthTotals(transactions, month);
+  const totals = monthTotals(transactions, month, cycleStartDay);
   const share = percentOf(outstanding, Math.max(1, totals.income));
   if (share < 12) return [];
 
   const cardIds = new Set(cards.map((c) => c.id));
-  const rows = monthTransactions(transactions, month).filter(
+  const rows = monthTransactions(transactions, month, cycleStartDay).filter(
     (t) => isExpense(t) && t.accountId && cardIds.has(t.accountId),
   );
 
@@ -410,18 +418,18 @@ function detectCreditCommitment(input: InsightInput): Insight[] {
 }
 
 function detectVelocity(input: InsightInput): Insight[] {
-  const { transactions, month, now } = input;
-  const velocity = spendingVelocity(transactions, month, now);
+  const { transactions, month, now, cycleStartDay } = input;
+  const velocity = spendingVelocity(transactions, month, now, cycleStartDay);
   if (velocity.daysElapsed < 5) return [];
 
-  const history = previousMonths(month, 3)
-    .map((m) => total(monthTransactions(transactions, m).filter(isExpense)))
+  const history = previousMonths(month, 3, cycleStartDay)
+    .map((m) => total(monthTransactions(transactions, m, cycleStartDay).filter(isExpense)))
     .filter((v) => v > 0);
   if (history.length === 0) return [];
   const average = history.reduce((a, b) => a + b, 0) / history.length;
   if (velocity.projectedMonthEnd <= average * 1.15) return [];
 
-  const rows = monthTransactions(transactions, month).filter(isExpense);
+  const rows = monthTransactions(transactions, month, cycleStartDay).filter(isExpense);
   const over = velocity.projectedMonthEnd - average;
 
   return [
@@ -464,11 +472,11 @@ function detectGoalProgress(input: InsightInput): Insight[] {
 }
 
 function detectMonthOverMonth(input: InsightInput): Insight[] {
-  const { transactions, month } = input;
-  const previous = previousMonths(month, 1)[0]!;
-  const currentRows = monthTransactions(transactions, month).filter(isExpense);
+  const { transactions, month, cycleStartDay } = input;
+  const previous = previousMonths(month, 1, cycleStartDay)[0]!;
+  const currentRows = monthTransactions(transactions, month, cycleStartDay).filter(isExpense);
   const current = total(currentRows);
-  const base = total(monthTransactions(transactions, previous).filter(isExpense));
+  const base = total(monthTransactions(transactions, previous, cycleStartDay).filter(isExpense));
   if (base < MIN_MEANINGFUL_AMOUNT || current < MIN_MEANINGFUL_AMOUNT) return [];
 
   const change = ((current - base) / base) * 100;
@@ -484,7 +492,7 @@ function detectMonthOverMonth(input: InsightInput): Insight[] {
       eyebrow: "Better than last month",
       title: `Spending is down ${Math.abs(Math.round(change))}%`,
       amount: current,
-      body: `${formatMoney(current)} so far against ${formatMoney(base)} in ${formatMonthShort(previous)}.`,
+      body: `${formatMoney(current)} so far against ${formatMoney(base)} in ${formatMonthLabel(previous, cycleStartDay)}.`,
       transactions: currentRows,
       priority: 58,
       action: "See this month",
@@ -588,6 +596,7 @@ export interface ScoreInput {
   goals: Goal[];
   month: MonthKey;
   now: Date;
+  cycleStartDay: number;
   consistency: number;
 }
 
@@ -596,8 +605,8 @@ export interface ScoreInput {
  * with its own rating so the number is never a black box.
  */
 export function calculateFinancialScore(input: ScoreInput): FinancialScore {
-  const { transactions, accounts, goals, month, now } = input;
-  const totals = monthTotals(transactions, month);
+  const { transactions, accounts, goals, month, now, cycleStartDay } = input;
+  const totals = monthTotals(transactions, month, cycleStartDay);
 
   const invRate = investmentRate(totals);
   const savRate = savingsRate(totals);
@@ -620,7 +629,7 @@ export function calculateFinancialScore(input: ScoreInput): FinancialScore {
   const commitmentScore = Math.max(0, Math.min(100, 100 - commitmentRatio * 250));
 
   // Pace: are we on course to overspend this month?
-  const velocity = spendingVelocity(transactions, month, now);
+  const velocity = spendingVelocity(transactions, month, now, cycleStartDay);
   const paceScore =
     totals.income > 0
       ? Math.max(
@@ -687,7 +696,7 @@ export function calculateFinancialScore(input: ScoreInput): FinancialScore {
       score: paceScore,
       rating: rate(paceScore),
       weight: 0.12,
-      detail: `On track for ${formatMoney(velocity.projectedMonthEnd)} by ${daysInMonth(month)} ${formatMonthShort(month)}`,
+      detail: `On track for ${formatMoney(velocity.projectedMonthEnd)} by ${formatDayMonth(endOfMonth(month, cycleStartDay))}`,
     },
     {
       id: "goals",

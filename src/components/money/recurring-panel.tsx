@@ -56,15 +56,15 @@ const WEEKDAYS = [
 ];
 
 export function RecurringPanel() {
-  const { db, month, now } = useFinance();
+  const { db, month, now, cycleStartDay } = useFinance();
   const [editing, setEditing] = useState<RecurringTransaction | null>(null);
   const [creating, setCreating] = useState(false);
 
   const rules = db?.recurring ?? [];
-  const statuses = recurringStatuses(rules, db?.transactions ?? [], month, now);
+  const statuses = recurringStatuses(rules, db?.transactions ?? [], month, now, cycleStartDay);
   const monthlyTotal = monthlyRecurringTotal(rules);
   const activeCount = rules.filter((r) => r.isActive).length;
-  const live = isLiveMonth(month, now);
+  const live = isLiveMonth(month, now, cycleStartDay);
 
   return (
     <>

@@ -1,4 +1,4 @@
-import { daysBetween, monthKey, type MonthKey } from "@/lib/domain/dates";
+import { clampToMonth, daysBetween, monthKey, type MonthKey } from "@/lib/domain/dates";
 import type { Paise, RecurringTransaction, Transaction } from "@/lib/domain/types";
 import { monthTransactions } from "./analytics";
 
@@ -6,7 +6,7 @@ import { monthTransactions } from "./analytics";
  * Recurring schedule maths (spec §18).
  *
  * `upcomingRecurring` in the safe-to-spend engine answers a narrower question —
- * "what is still due before this month ends?" — because that is all the
+ * "what is still due before this cycle ends?" — because that is all the
  * calculation needs. The Money screen has to show the whole standing
  * arrangement: when each charge lands next, whether this period is already
  * handled, and what the lot costs per month once weekly and yearly bills are
@@ -15,12 +15,6 @@ import { monthTransactions } from "./analytics";
  * Kept out of the component so a subscription's next date is computed the same
  * way wherever it is shown.
  */
-
-/** Clamps a day-of-month to a month that may be shorter (31st in February). */
-function clampToMonth(year: number, monthIndex: number, day: number): Date {
-  const lastDay = new Date(year, monthIndex + 1, 0).getDate();
-  return new Date(year, monthIndex, Math.min(Math.max(1, day), lastDay));
-}
 
 /**
  * The next date this rule is expected to charge, on or after `from`.
@@ -115,9 +109,10 @@ export function recurringStatuses(
   transactions: Transaction[],
   month: MonthKey,
   now: Date = new Date(),
+  cycleStartDay = 1,
 ): RecurringStatus[] {
   const paidRuleIds = new Set(
-    monthTransactions(transactions, month)
+    monthTransactions(transactions, month, cycleStartDay)
       .map((t) => t.recurringId)
       .filter((id): id is string => Boolean(id)),
   );
@@ -164,6 +159,6 @@ export function priceDrift(
 }
 
 /** True when the selected month is the one the user is actually living in. */
-export function isLiveMonth(month: MonthKey, now: Date): boolean {
-  return monthKey(now) === month;
+export function isLiveMonth(month: MonthKey, now: Date, cycleStartDay = 1): boolean {
+  return monthKey(now, cycleStartDay) === month;
 }

@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
  */
 
 export function LensAnswers() {
-  const { monthRows, db, month } = useFinance();
+  const { monthRows, db, month, cycleStartDay } = useFinance();
   const [active, setActive] = useState<LensResult | null>(null);
 
   const results = useMemo(
@@ -33,10 +33,14 @@ export function LensAnswers() {
 
   const comparison = useMemo(() => {
     if (!active) return null;
-    return compareToAverage(db?.transactions ?? [], month, (t) =>
-      matchesLens(t, active.lens),
+    return compareToAverage(
+      db?.transactions ?? [],
+      month,
+      (t) => matchesLens(t, active.lens),
+      3,
+      cycleStartDay,
     );
-  }, [active, db?.transactions, month]);
+  }, [active, db?.transactions, month, cycleStartDay]);
 
   if (results.length === 0) return null;
 
