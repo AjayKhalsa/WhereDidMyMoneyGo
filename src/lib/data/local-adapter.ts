@@ -7,6 +7,8 @@ import {
   type CollectionName,
   type Repository,
 } from "./repository";
+import { SupabaseRepository } from "./supabase-adapter";
+import { isSupabaseConfigured } from "./supabase-client";
 
 /**
  * IndexedDB-backed repository.
@@ -17,7 +19,10 @@ import {
  */
 
 const DB_NAME = "wdmmg";
-const DB_VERSION = 1;
+// Bumped to 2 to add the `people`/`splits` object stores — idb's `upgrade`
+// callback only runs on a version change, so this must move whenever a new
+// store is added or existing users silently never get it.
+const DB_VERSION = 2;
 const META_STORE = "meta";
 const PROFILE_KEY = "profile";
 
@@ -74,6 +79,8 @@ export class LocalRepository implements Repository {
         investments,
         incomeSources,
         rules,
+        people,
+        splits,
       ] = await Promise.all([
         tx.objectStore("accounts").getAll(),
         tx.objectStore("creditCards").getAll(),
@@ -84,6 +91,8 @@ export class LocalRepository implements Repository {
         tx.objectStore("investments").getAll(),
         tx.objectStore("incomeSources").getAll(),
         tx.objectStore("rules").getAll(),
+        tx.objectStore("people").getAll(),
+        tx.objectStore("splits").getAll(),
       ]);
       await tx.done;
 
@@ -98,6 +107,8 @@ export class LocalRepository implements Repository {
         investments,
         incomeSources,
         rules,
+        people,
+        splits,
       } as Database;
     });
   }
@@ -224,11 +235,22 @@ export class MemoryRepository implements Repository {
 
 let instance: Repository | null = null;
 
+/**
+ * Full switch-over, not a dual-write/offline cache — a sync-and-merge layer
+ * is a real project on its own and isn't justified for a single-device
+ * personal app. When Supabase is configured, `LocalRepository` is only ever
+ * used directly (bypassing this function) by the local-to-cloud migration
+ * panel, which needs both repositories at once.
+ */
 export function getRepository(): Repository {
   if (!instance) {
-    const canUseIDB =
-      typeof window !== "undefined" && typeof indexedDB !== "undefined";
-    instance = canUseIDB ? new LocalRepository() : new MemoryRepository();
+    if (isSupabaseConfigured && typeof window !== "undefined") {
+      instance = new SupabaseRepository();
+    } else {
+      const canUseIDB =
+        typeof window !== "undefined" && typeof indexedDB !== "undefined";
+      instance = canUseIDB ? new LocalRepository() : new MemoryRepository();
+    }
   }
   return instance;
 }

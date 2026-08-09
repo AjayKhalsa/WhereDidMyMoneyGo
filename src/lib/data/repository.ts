@@ -7,7 +7,9 @@ import type {
   Goal,
   IncomeSource,
   Investment,
+  Person,
   RecurringTransaction,
+  Split,
   Transaction,
   UserProfile,
 } from "@/lib/domain/types";
@@ -34,6 +36,8 @@ export interface CollectionMap {
   investments: Investment;
   incomeSources: IncomeSource;
   rules: ClassificationRule;
+  people: Person;
+  splits: Split;
 }
 
 export type CollectionName = keyof CollectionMap;
@@ -48,6 +52,8 @@ export const COLLECTION_NAMES: CollectionName[] = [
   "investments",
   "incomeSources",
   "rules",
+  "people",
+  "splits",
 ];
 
 export interface Repository {

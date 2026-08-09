@@ -1,13 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Download, RefreshCw, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, CloudUpload, Download, LogOut, RefreshCw, Trash2 } from "lucide-react";
 import { formatFullDate } from "@/lib/domain/dates";
 import type { Database } from "@/lib/domain/types";
 import { updateProfile } from "@/lib/data/actions";
+import { LocalRepository } from "@/lib/data/local-adapter";
 import { createEmptyDatabase, createSeedDatabase } from "@/lib/data/seed";
-import { replaceDatabase } from "@/lib/data/store";
+import { replaceDatabase, resetStoreBoot } from "@/lib/data/store";
+import { SupabaseRepository } from "@/lib/data/supabase-adapter";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/data/supabase-client";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { PageHeader } from "@/components/layout/month-switcher";
 import { RulesPanel } from "@/components/settings/rules-panel";
@@ -85,6 +89,8 @@ export default function SettingsPage() {
         <RulesPanel />
       </Section>
 
+      {isSupabaseConfigured && <CloudMigrationPanel />}
+
       <Section title="Your data">
         <DataPanel />
       </Section>
@@ -94,6 +100,7 @@ export default function SettingsPage() {
 
 function ProfileCard() {
   const { db } = useFinance();
+  const router = useRouter();
   const toast = useToast();
   const profile = db?.profile;
   const [name, setName] = useState(profile?.name ?? "");
@@ -104,6 +111,11 @@ function ProfileCard() {
     if (!dirty) return;
     await updateProfile({ name: name.trim() });
     toast.show({ tone: "success", title: "Saved" });
+  }
+
+  async function handleSignOut() {
+    await getSupabaseBrowserClient().auth.signOut();
+    router.replace("/login");
   }
 
   return (
@@ -137,8 +149,113 @@ function ProfileCard() {
           <span>Using this since {formatFullDate(profile.createdAt)}</span>
         )}
         {profile?.isDemo && <Chip tone="warning">Sample data</Chip>}
+        {isSupabaseConfigured && (
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="ml-auto flex items-center gap-1.5 font-medium text-ink-secondary hover:text-ink"
+          >
+            <LogOut className="h-3.5 w-3.5" strokeWidth={1.75} />
+            Sign out
+          </button>
+        )}
       </div>
     </Card>
+  );
+}
+
+/**
+ * One-time move from this browser's IndexedDB into the signed-in Supabase
+ * account. Only appears when there's local data actually worth moving —
+ * a brand-new signed-in session with nothing local has nothing to show here.
+ * IndexedDB is left untouched after migrating, as an offline backup.
+ */
+function CloudMigrationPanel() {
+  const toast = useToast();
+  const [localCount, setLocalCount] = useState<number | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [working, setWorking] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void new LocalRepository().load().then((data) => {
+      if (!cancelled && data && data.transactions.length > 0) {
+        setLocalCount(data.transactions.length);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (localCount === null) return null;
+
+  async function handleMigrate() {
+    setWorking(true);
+    try {
+      const local = await new LocalRepository().load();
+      if (!local) return;
+      await new SupabaseRepository().replaceAll(local);
+      resetStoreBoot();
+      toast.show({
+        tone: "success",
+        title: "Moved to the cloud",
+        detail: `${local.transactions.length} ${pluralise(local.transactions.length, "transaction")}`,
+      });
+      setConfirming(false);
+      window.location.reload();
+    } catch (error) {
+      toast.show({
+        tone: "error",
+        title: "Migration failed",
+        detail: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <Section title="Cloud sync">
+      <Card>
+        <DataRow
+          icon={<CloudUpload className="h-4 w-4" strokeWidth={1.75} />}
+          title="Move your local data to the cloud"
+          description={`Found ${localCount} ${pluralise(localCount, "transaction")} stored only in this browser. Copy them to your Supabase account so every device sees the same data.`}
+          action={
+            <Button size="sm" onClick={() => setConfirming(true)}>
+              Migrate
+            </Button>
+          }
+        />
+      </Card>
+
+      <Sheet
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title="Move local data to the cloud?"
+        size="sm"
+        footer={
+          <div className="flex gap-2">
+            <Button onClick={() => setConfirming(false)}>Cancel</Button>
+            <Button variant="primary" block onClick={handleMigrate} disabled={working}>
+              {working ? "Moving…" : "Move to the cloud"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3 py-1">
+          <p className="text-[14px] leading-relaxed text-ink-secondary">
+            Copies everything in this browser&rsquo;s local storage to your
+            Supabase account, overwriting anything already there under your
+            account. Your local copy is left in place as a backup.
+          </p>
+          <div className="rounded-xl bg-surface-sunken p-3.5 text-[13px] text-ink-secondary">
+            {localCount} {pluralise(localCount, "transaction")} will be copied.
+          </div>
+        </div>
+      </Sheet>
+    </Section>
   );
 }
 

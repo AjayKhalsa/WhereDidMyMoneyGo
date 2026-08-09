@@ -8,7 +8,9 @@ import type {
   IncomeSource,
   Investment,
   Paise,
+  Person,
   RecurringTransaction,
+  Split,
   Transaction,
   TransactionContext,
   TransactionType,
@@ -20,6 +22,7 @@ import {
   applyBatch,
   getSnapshot,
   putRow,
+  putRows,
   removeRow,
   saveProfile,
 } from "./store";
@@ -321,6 +324,67 @@ export async function saveRule(rule: ClassificationRule): Promise<void> {
 
 export async function deleteRule(id: string): Promise<void> {
   await removeRow("rules", id);
+}
+
+// ---------------------------------------------------------------------------
+// Split-expense (IOU) tracking
+// ---------------------------------------------------------------------------
+
+export async function savePerson(person: Person): Promise<void> {
+  await putRow("people", person);
+}
+
+export async function deletePerson(id: string): Promise<void> {
+  await removeRow("people", id);
+}
+
+export interface SplitInput {
+  personId: string;
+  direction: Split["direction"];
+  amount: Paise;
+}
+
+/**
+ * Records the side-ledger for a shared expense.
+ *
+ * Call this right after `addTransaction` resolves, once the transaction has
+ * already been saved with the user's real share as its `amount` — this never
+ * touches the transaction itself. One `Split` row per person, all
+ * `OUTSTANDING`, so settling later is a status flip rather than a new write
+ * path.
+ */
+export async function recordSplits(
+  transactionId: string,
+  splits: SplitInput[],
+): Promise<void> {
+  if (splits.length === 0) return;
+  const now = new Date().toISOString();
+  const rows: Split[] = splits.map((s) => ({
+    id: createId("split"),
+    transactionId,
+    personId: s.personId,
+    direction: s.direction,
+    amount: s.amount,
+    status: "OUTSTANDING",
+    createdAt: now,
+    updatedAt: now,
+  }));
+  await putRows("splits", rows);
+}
+
+/**
+ * Marks an IOU as squared away. Never creates a transaction — no money is
+ * "earned" or "spent" when a split settles, it just stops being owed.
+ */
+export async function settleSplit(id: string): Promise<void> {
+  const split = getSnapshot().data?.splits.find((s) => s.id === id);
+  if (!split) return;
+  await putRow("splits", {
+    ...split,
+    status: "SETTLED",
+    settledDate: new Date().toISOString().slice(0, 10),
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export async function updateProfile(

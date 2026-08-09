@@ -22,6 +22,13 @@ import type { ReactNode } from "react";
  */
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  // The login form is not "the app" yet — no nav to a screen you can't
+  // reach, no persistent Add button for data that isn't loaded.
+  if (pathname === "/login") {
+    return <div className="min-h-[100dvh] bg-canvas">{children}</div>;
+  }
+
   return (
     <div className="min-h-[100dvh] bg-canvas">
       <DesktopSidebar />
