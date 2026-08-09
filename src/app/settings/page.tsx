@@ -8,6 +8,7 @@ import { formatFullDate } from "@/lib/domain/dates";
 import type { Database } from "@/lib/domain/types";
 import { updateProfile } from "@/lib/data/actions";
 import { LocalRepository } from "@/lib/data/local-adapter";
+import { remapLegacyCategories } from "@/lib/data/category-migration";
 import { createEmptyDatabase, createSeedDatabase } from "@/lib/data/seed";
 import { replaceDatabase, resetStoreBoot } from "@/lib/data/store";
 import { SupabaseRepository } from "@/lib/data/supabase-adapter";
@@ -196,7 +197,10 @@ function CloudMigrationPanel() {
     try {
       const local = await new LocalRepository().load();
       if (!local) return;
-      await new SupabaseRepository().replaceAll(local);
+      // This path bypasses initStore()'s own migration hook — run it here
+      // too so cloud data never ends up carrying legacy category ids.
+      const { db: migrated } = remapLegacyCategories(local);
+      await new SupabaseRepository().replaceAll(migrated);
       resetStoreBoot();
       toast.show({
         tone: "success",

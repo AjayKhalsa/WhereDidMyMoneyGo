@@ -7,13 +7,7 @@ import type {
   TransactionContext,
   TransactionType,
 } from "@/lib/domain/types";
-import {
-  ACTIVITIES,
-  COMPANY_REFINEMENTS,
-  CONTEXT_KEYWORDS,
-  MERCHANTS,
-  STOP_WORDS,
-} from "./lexicon";
+import { ACTIVITIES, CONTEXT_KEYWORDS, MERCHANTS, STOP_WORDS } from "./lexicon";
 
 /**
  * Deterministic natural-language expense parser.
@@ -138,13 +132,6 @@ function findContexts(tokens: Token[]): { context: string; word: string }[] {
   return out;
 }
 
-/** The company context, if any, that can reshape the category. */
-function primaryCompany(contexts: string[]): string | undefined {
-  return ["dating", "friends", "family", "work"].find((c) =>
-    contexts.includes(c),
-  );
-}
-
 function buildDescription(tokens: Token[], amountIndex: number | null): string {
   const words = tokens
     .filter((_, i) => i !== amountIndex)
@@ -247,9 +234,7 @@ export function parseExpenseInput(
     // unambiguous about what it sells (Netflix is never "dinner").
     const top = activityHits[0]!;
     const merchantCategory = merchantHit.merchant.categoryId;
-    const agree =
-      merchantCategory === top.categoryId ||
-      merchantCategory.split(".")[0] === top.categoryId.split(".")[0];
+    const agree = merchantCategory === top.categoryId;
     categoryId = agree ? merchantCategory : top.categoryId;
     baseScore = agree ? 0.9 : 0.72;
     reasons.push(
@@ -266,7 +251,7 @@ export function parseExpenseInput(
     const top = activityHits[0]!;
     categoryId = top.categoryId;
     baseScore = activityHits.length === 1 ? 0.8 : 0.74;
-    reasons.push(`"${top.matchedWord}" suggests ${top.categoryId.split(".")[0]}`);
+    reasons.push(`"${top.matchedWord}" suggests ${top.categoryId}`);
     for (const other of activityHits.slice(1, 3)) {
       alternatives.push(other.categoryId);
     }
@@ -275,26 +260,14 @@ export function parseExpenseInput(
     reasons.push("Nothing in the description was recognisable");
   }
 
-  // ---- 4. Reshape by company (dinner → date dinner → Dating) -------------
-  const company = primaryCompany(contextValues);
-  if (company && !rule) {
-    const refined = COMPANY_REFINEMENTS[company]?.[categoryId];
-    if (refined) {
-      alternatives.push(categoryId);
-      categoryId = refined;
-      baseScore = Math.min(0.95, baseScore + 0.05);
-      reasons.push(`With ${company}, this belongs under ${refined.split(".")[0]}`);
-    }
-  }
-
-  // ---- 5. Derived contexts from the timestamp ----------------------------
+  // ---- 4. Derived contexts from the timestamp ----------------------------
   const when = options.date ?? new Date();
   const day = when.getDay();
   if (day === 0 || day === 6) contextValues.push("weekend");
   const hour = when.getHours();
   if (hour >= 22 || hour < 4) contextValues.push("late-night");
 
-  // ---- 6. Confidence -----------------------------------------------------
+  // ---- 5. Confidence -----------------------------------------------------
   let confidence = baseScore;
   if (amountMatch === null) confidence *= 0.5;
   if (categoryId === UNCATEGORISED_ID) confidence = Math.min(confidence, 0.3);

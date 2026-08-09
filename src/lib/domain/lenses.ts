@@ -34,21 +34,18 @@ export const LENSES: Lens[] = [
     id: "eating-out",
     label: "Eating out",
     question: "How much did I spend eating out?",
-    groupIds: ["dining"],
-    categoryIds: ["dating.dining", "social.dining"],
+    categoryIds: ["dining"],
   },
   {
     id: "alcohol",
     label: "Alcohol",
     question: "How much did I spend on alcohol?",
     contexts: ["alcohol"],
-    categoryIds: ["dining.drinks", "dating.drinks", "social.drinks"],
   },
   {
     id: "dating",
     label: "Dating",
     question: "How much did I spend on dating?",
-    groupIds: ["dating"],
     contexts: ["dating"],
   },
   {
@@ -61,13 +58,16 @@ export const LENSES: Lens[] = [
     id: "cabs",
     label: "Cabs",
     question: "How much did I spend on cabs?",
-    categoryIds: ["transport.cab"],
+    categoryIds: ["transport"],
   },
   {
     id: "diet",
     label: "Diet & protein",
     question: "How much did I spend on diet?",
-    categoryIds: ["essentials.diet"],
+    // Was its own leaf category before the flatten; no flat equivalent
+    // exists, so this is a merchant-based lens until Step 2 (the Type
+    // dimension) restores category-scoped precision via essentials/diet.
+    merchants: ["muscleblaze", "myprotein", "avvatar", "wholetruth", "epigamia"],
   },
   {
     id: "work",
@@ -85,7 +85,14 @@ export const LENSES: Lens[] = [
     id: "subscriptions",
     label: "Subscriptions",
     question: "How much goes to subscriptions?",
-    categoryIds: ["bills.subscriptions"],
+    // Same story as "diet" — bills.subscriptions had no flat equivalent,
+    // so this is merchant-based until Step 2 restores bills+type precision.
+    merchants: [
+      "netflix", "spotify", "hotstar", "prime", "youtube premium", "disney+",
+      "sonyliv", "zee5", "jiocinema", "apple tv", "apple music", "audible",
+      "notion", "dropbox", "google one", "icloud", "microsoft 365", "adobe",
+      "canva", "chatgpt", "claude", "gemini",
+    ],
   },
 ];
 

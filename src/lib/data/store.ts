@@ -1,6 +1,7 @@
 import type { Database, UserProfile } from "@/lib/domain/types";
 import { getRepository } from "./local-adapter";
 import type { CollectionMap, CollectionName } from "./repository";
+import { remapLegacyCategories } from "./category-migration";
 
 /**
  * A tiny observable store holding the whole dataset in memory.
@@ -71,6 +72,15 @@ export function initStore(onEmpty: () => Database): Promise<void> {
       if (!data) {
         data = onEmpty();
         await repo.replaceAll(data);
+      } else {
+        // Self-healing migration for data written under the old
+        // multi-level category tree — no-ops after the first successful
+        // run. Covers both backends since both funnel through here.
+        const migrated = remapLegacyCategories(data);
+        if (migrated.changed) {
+          data = migrated.db;
+          await repo.replaceAll(data);
+        }
       }
       emit({ status: "ready", data, error: null });
     } catch (cause) {

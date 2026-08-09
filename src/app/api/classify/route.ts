@@ -25,12 +25,8 @@ const MODEL = "gemini-2.0-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 /** Ids the model is permitted to return, built from the app's own taxonomy. */
-const LEAF_IDS = CATEGORY_TREE.flatMap((group) =>
-  group.children.map((child) => `${child.id} (${group.name} › ${child.name})`),
-);
-const VALID_LEAF_IDS = new Set(
-  CATEGORY_TREE.flatMap((group) => group.children.map((c) => c.id)),
-);
+const LEAF_IDS = CATEGORY_TREE.map((cat) => `${cat.id} — ${cat.name}`);
+const VALID_LEAF_IDS = new Set(CATEGORY_TREE.map((cat) => cat.id));
 
 const CONTEXT_VALUES = CONTEXT_DEFINITIONS.filter(
   // Weekend and late-night come from the timestamp, never from the text.
@@ -47,10 +43,12 @@ Then choose zero or more context tags from this list:
 ${CONTEXT_VALUES.map((c) => `${c.value} — ${c.description}`).join("\n")}
 
 Rules:
-- "with her", "date", a partner's name → prefer a dating.* category and the "dating" tag.
-- "with friends", "with the gang" → prefer social.* and the "friends" tag.
+- The category is *what* was bought (dining, transport, shopping, ...) — it
+  never changes based on who the money was spent with. "With her"/"date"/a
+  partner's name, or "with friends"/"with the gang", never changes the
+  category — they only add the "dating" or "friends" context tag.
 - Anything involving drinks or a bar gets the "alcohol" tag as well as its category.
-- If the description genuinely does not indicate what was bought, return "misc.other".
+- If the description genuinely does not indicate what was bought, return "other".
 - Never invent an id. Only use ids from the list above.
 
 Respond with JSON only: {"categoryId": string, "contexts": string[], "merchant": string | null, "reason": string}

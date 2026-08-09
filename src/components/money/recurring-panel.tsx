@@ -217,7 +217,7 @@ function RecurringSheet({
   );
   const [day, setDay] = useState(String(rule?.dayOfPeriod ?? 1));
   const [categoryId, setCategoryId] = useState(
-    rule?.categoryId ?? "bills.subscriptions",
+    rule?.categoryId ?? "bills",
   );
   const [accountId, setAccountId] = useState(rule?.accountId);
   const [isActive, setIsActive] = useState(rule?.isActive ?? true);
@@ -231,7 +231,7 @@ function RecurringSheet({
     setAmount(rule ? String(rule.amount / 100) : "");
     setFrequency(rule?.frequency ?? "MONTHLY");
     setDay(String(rule?.dayOfPeriod ?? 1));
-    setCategoryId(rule?.categoryId ?? "bills.subscriptions");
+    setCategoryId(rule?.categoryId ?? "bills");
     setAccountId(rule?.accountId);
     setIsActive(rule?.isActive ?? true);
     setPickingCategory(false);

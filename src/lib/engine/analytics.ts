@@ -1,4 +1,4 @@
-import { groupIdOf } from "@/lib/domain/categories";
+import { groupIdOf, UNCATEGORISED_ID } from "@/lib/domain/categories";
 import {
   monthKey,
   monthKeyToDate,
@@ -147,7 +147,7 @@ export function spendByGroup(
   const buckets = new Map<string, { amount: Paise; count: number }>();
   for (const t of transactions) {
     if (!isExpense(t)) continue;
-    const id = t.categoryId ? groupIdOf(t.categoryId) : "misc";
+    const id = t.categoryId ? groupIdOf(t.categoryId) : UNCATEGORISED_ID;
     const bucket = buckets.get(id) ?? { amount: 0, count: 0 };
     bucket.amount += t.amount;
     bucket.count += 1;

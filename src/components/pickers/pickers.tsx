@@ -32,21 +32,8 @@ export function CategoryPicker({
 
   const results = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const groups = categories.groups.map((group) => ({
-      group,
-      leaves: categories.leavesOf(group.id),
-    }));
-    if (!needle) return groups;
-    return groups
-      .map(({ group, leaves }) => ({
-        group,
-        leaves: leaves.filter(
-          (leaf) =>
-            leaf.name.toLowerCase().includes(needle) ||
-            group.name.toLowerCase().includes(needle),
-        ),
-      }))
-      .filter(({ leaves }) => leaves.length > 0);
+    if (!needle) return categories.groups;
+    return categories.groups.filter((c) => c.name.toLowerCase().includes(needle));
   }, [categories, query]);
 
   return (
@@ -59,34 +46,25 @@ export function CategoryPicker({
         aria-label="Search categories"
       />
 
-      <div className="space-y-5">
-        {results.map(({ group, leaves }) => (
-          <div key={group.id}>
-            <p className="mb-2 text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">
-              {group.name}
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {leaves.map((leaf) => (
-                <SelectableChip
-                  key={leaf.id}
-                  selected={leaf.id === value}
-                  onClick={() => onChange(leaf.id)}
-                >
-                  {leaf.id === value && (
-                    <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  )}
-                  {leaf.name}
-                </SelectableChip>
-              ))}
-            </div>
-          </div>
+      <div className="flex flex-wrap gap-1.5">
+        {results.map((category) => (
+          <SelectableChip
+            key={category.id}
+            selected={category.id === value}
+            onClick={() => onChange(category.id)}
+          >
+            {category.id === value && (
+              <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+            )}
+            {category.name}
+          </SelectableChip>
         ))}
-        {results.length === 0 && (
-          <p className="py-4 text-center text-sm text-ink-tertiary">
-            No category matches &ldquo;{query}&rdquo;
-          </p>
-        )}
       </div>
+      {results.length === 0 && (
+        <p className="py-4 text-center text-sm text-ink-tertiary">
+          No category matches &ldquo;{query}&rdquo;
+        </p>
+      )}
     </div>
   );
 }
