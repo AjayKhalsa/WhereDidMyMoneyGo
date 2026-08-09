@@ -10,6 +10,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
 import {
   createCategoryLookup,
   type CategoryLookup,
@@ -28,6 +29,7 @@ import {
   calculateSafeToSpend,
   type SafeToSpendResult,
 } from "@/lib/engine/safe-to-spend";
+import { personBalances, type PersonBalance } from "@/lib/engine/splits";
 import {
   monthTotals,
   monthTransactions,
@@ -80,6 +82,8 @@ export interface FinanceContextValue {
   creditCards: CreditCardSummary[];
   /** Expenses, income, transfers and investments for the selected month. */
   monthRows: Database["transactions"];
+  /** Net owed-to-me / I-owe balance per active person. */
+  peopleBalances: PersonBalance[];
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null);
@@ -102,13 +106,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const state = useStoreState();
   const now = useNow();
   const [month, setMonth] = useState<MonthKey>(() => monthKey(new Date()));
+  const pathname = usePathname();
 
   // A first run starts genuinely empty (spec §36). Landing someone in four
   // months of invented spending would mean the first numbers they ever see in
   // a money app are fiction. Sample data is a deliberate choice in Settings.
+  //
+  // Skipped on /login: there's no session yet, so a Supabase-backed repo has
+  // nothing to load and nothing to seed — that's the login form's problem to
+  // solve first, not this provider's.
   useEffect(() => {
+    if (pathname === "/login") return;
     void initStore(() => createEmptyDatabase());
-  }, []);
+  }, [pathname]);
 
   const db = state.data;
 
@@ -173,6 +183,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         ),
       );
 
+    const peopleBalances = personBalances(db?.people ?? [], db?.splits ?? []);
+
     return {
       status: state.status,
       error: state.error,
@@ -191,6 +203,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       contextBreakdown,
       creditCards,
       monthRows,
+      peopleBalances,
     };
   }, [db, month, now, categories, state.status, state.error]);
 

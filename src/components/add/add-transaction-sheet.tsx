@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { UNCATEGORISED_ID } from "@/lib/domain/categories";
 import { contextLabel } from "@/lib/domain/contexts";
 import { toDateInputValue } from "@/lib/domain/dates";
-import { formatMoney, parseAmountInput } from "@/lib/domain/money";
+import { formatMoney, formatMoneyPrecise, parseAmountInput } from "@/lib/domain/money";
 import type {
   Transaction,
   TransactionContext,
@@ -21,6 +21,7 @@ import type {
 import {
   addTransaction,
   deleteTransaction,
+  recordSplits,
   updateTransaction,
   type TransactionDraft,
 } from "@/lib/data/actions";
@@ -41,8 +42,25 @@ import {
   AccountPicker,
   CategoryPicker,
   ContextPicker,
+  PersonPicker,
 } from "@/components/pickers/pickers";
 import type { AddSheetOptions } from "./add-sheet-provider";
+
+/**
+ * Even split of a total across you + N other people, in paise.
+ *
+ * You (the payer) absorb the rounding remainder rather than splitting paisa
+ * fractionally — simplest deterministic rule, stated once here.
+ */
+function computeSplitShares(totalPaise: number, otherCount: number) {
+  const peopleCount = otherCount + 1;
+  if (peopleCount <= 1 || totalPaise <= 0) {
+    return { yourShare: totalPaise, otherShare: 0 };
+  }
+  const otherShare = Math.floor(totalPaise / peopleCount);
+  const yourShare = totalPaise - otherShare * otherCount;
+  return { yourShare, otherShare };
+}
 
 /**
  * The add-expense experience (spec §12, §13, §38).
@@ -106,6 +124,14 @@ export function AddTransactionSheet({
   const [panel, setPanel] = useState<"category" | "context" | null>(null);
   const [touched, setTouched] = useState<Set<keyof DraftState>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // ---- Split with… ---------------------------------------------------------
+  // New entries only (spec-consistent scoping: retro-splitting an already
+  // saved transaction is a different, riskier operation — not this sheet).
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [splitTotalText, setSplitTotalText] = useState("");
+  const [splitPersonIds, setSplitPersonIds] = useState<string[]>([]);
+  const people = db?.people ?? [];
 
   const [draft, setDraft] = useState<DraftState>(() =>
     editing
@@ -175,6 +201,34 @@ export function AddTransactionSheet({
     const timer = window.setTimeout(() => inputRef.current?.focus(), 120);
     return () => window.clearTimeout(timer);
   }, [open]);
+
+  // Recomputes your share whenever the total or the people list changes.
+  // The displayed/saved amount becomes your share, not the total you paid —
+  // that's the whole point (see `recordSplits` in `data/actions.ts`).
+  useEffect(() => {
+    if (!splitEnabled || splitPersonIds.length === 0) return;
+    const total = parseAmountInput(splitTotalText) ?? 0;
+    if (total <= 0) return;
+    const { yourShare } = computeSplitShares(total, splitPersonIds.length);
+    setDraft((current) => ({ ...current, amountText: String(yourShare / 100) }));
+    markTouched("amountText");
+  }, [splitEnabled, splitPersonIds, splitTotalText]);
+
+  function toggleSplit() {
+    if (splitEnabled) {
+      // Turning it off restores the full total as the amount — the split
+      // maths shouldn't leave a silently-shrunk figure behind.
+      if (splitTotalText) {
+        patch({ amountText: splitTotalText });
+        markTouched("amountText");
+      }
+      setSplitEnabled(false);
+      setSplitPersonIds([]);
+    } else {
+      setSplitTotalText(draft.amountText);
+      setSplitEnabled(true);
+    }
+  }
 
   // ---- Assistant fallback -------------------------------------------------
   /**
@@ -280,14 +334,30 @@ export function AddTransactionSheet({
           detail: summaryLine(draft, categories.pathOf),
         });
       } else {
-        await addTransaction(payload, {
+        const created = await addTransaction(payload, {
           matchedRuleId: parsed?.matchedRuleId,
           wasCorrected,
         });
+
+        let splitDetail = "";
+        if (splitEnabled && splitPersonIds.length > 0) {
+          const total = parseAmountInput(splitTotalText) ?? 0;
+          const { otherShare } = computeSplitShares(total, splitPersonIds.length);
+          await recordSplits(
+            created.id,
+            splitPersonIds.map((personId) => ({
+              personId,
+              direction: "OWED_TO_ME" as const,
+              amount: otherShare,
+            })),
+          );
+          splitDetail = ` · split with ${splitPersonIds.length === 1 ? "1 person" : `${splitPersonIds.length} people`}`;
+        }
+
         toast.show({
           tone: "success",
           title: `${formatMoney(amount)} saved`,
-          detail: summaryLine(draft, categories.pathOf),
+          detail: summaryLine(draft, categories.pathOf) + splitDetail,
         });
       }
       onClose();
@@ -574,6 +644,55 @@ export function AddTransactionSheet({
                   }}
                   placeholder="Optional"
                 />
+
+                {isExpense && !editing && (
+                  <div className="space-y-2 rounded-xl border border-line p-3.5">
+                    <button
+                      type="button"
+                      onClick={toggleSplit}
+                      className="flex w-full items-center justify-between text-[13px] font-medium text-ink-secondary"
+                    >
+                      <span>Split with…</span>
+                      <Chip tone={splitEnabled ? "accent" : "neutral"}>
+                        {splitEnabled ? "On" : "Off"}
+                      </Chip>
+                    </button>
+
+                    {splitEnabled && (
+                      <div className="space-y-3 pt-1">
+                        <TextField
+                          label="Total bill"
+                          value={splitTotalText}
+                          onChange={(e) => setSplitTotalText(e.target.value)}
+                          inputMode="decimal"
+                          prefix="₹"
+                          className="tnum"
+                        />
+                        <PersonPicker
+                          value={splitPersonIds}
+                          onChange={setSplitPersonIds}
+                          people={people}
+                        />
+                        {splitPersonIds.length > 0 &&
+                          (() => {
+                            const total = parseAmountInput(splitTotalText) ?? 0;
+                            const { yourShare, otherShare } = computeSplitShares(
+                              total,
+                              splitPersonIds.length,
+                            );
+                            return (
+                              <p className="text-[12.5px] text-ink-tertiary">
+                                You: {formatMoneyPrecise(yourShare)} · each
+                                other person: {formatMoneyPrecise(otherShare)}.
+                                Recorded as your spend; the rest is tracked as
+                                owed to you under Money → People.
+                              </p>
+                            );
+                          })()}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <p className="text-[13px] font-medium text-ink-secondary">

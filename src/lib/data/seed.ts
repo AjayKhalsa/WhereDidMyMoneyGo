@@ -16,7 +16,9 @@ import type {
   IncomeSource,
   Investment,
   Paise,
+  Person,
   RecurringTransaction,
+  Split,
   Transaction,
   TransactionContext,
   UserProfile,
@@ -663,6 +665,81 @@ export function createSeedDatabase(now = new Date()): Database {
     }
   });
 
+  // --- Split-expense demo data ---------------------------------------------
+  // Two worked examples of the invariant: the recorded EXPENSE is always the
+  // user's real share, never the amount fronted — see `recordSplits` in
+  // `data/actions.ts`. One outstanding (a recent brunch), one already
+  // settled (last month's movie), so both states are visible on first look.
+  const people: Person[] = [
+    { id: "person_rohan", name: "Rohan", isActive: true, createdAt: new Date().toISOString() },
+    { id: "person_priya", name: "Priya", isActive: true, createdAt: new Date().toISOString() },
+  ];
+
+  const brunchDay = Math.max(1, Math.min(now.getDate() - 2, daysInMonth(currentMonth)));
+  const brunchIso = toLocalISO(
+    new Date(now.getFullYear(), now.getMonth(), brunchDay, 12, 30),
+  );
+  const splitBrunch: Transaction = {
+    id: "seed_split_brunch",
+    type: "EXPENSE",
+    amount: rupeesToPaise(707),
+    description: "Brunch with Rohan",
+    date: brunchIso,
+    accountId: ACCOUNT_IDS.hdfc,
+    categoryId: "social.dining",
+    contexts: [makeContext("friends")],
+    source: "seed",
+    createdAt: brunchIso,
+    updatedAt: brunchIso,
+  };
+
+  const [prevYear, prevMonthNum] = previousMonths(currentMonth, 1)[0]!
+    .split("-")
+    .map(Number);
+  const movieIso = toLocalISO(
+    new Date(prevYear ?? 1970, (prevMonthNum ?? 1) - 1, 14, 19, 0),
+  );
+  const splitMovie: Transaction = {
+    id: "seed_split_movie",
+    type: "EXPENSE",
+    amount: rupeesToPaise(325),
+    description: "Movie with Priya",
+    date: movieIso,
+    merchant: "PVR",
+    accountId: ACCOUNT_IDS.card,
+    categoryId: "entertainment.movies",
+    contexts: [],
+    source: "seed",
+    createdAt: movieIso,
+    updatedAt: movieIso,
+  };
+
+  transactions.push(splitBrunch, splitMovie);
+
+  const splits: Split[] = [
+    {
+      id: "seed_split_1",
+      transactionId: splitBrunch.id,
+      personId: "person_rohan",
+      direction: "OWED_TO_ME",
+      amount: rupeesToPaise(706),
+      status: "OUTSTANDING",
+      createdAt: brunchIso,
+      updatedAt: brunchIso,
+    },
+    {
+      id: "seed_split_2",
+      transactionId: splitMovie.id,
+      personId: "person_priya",
+      direction: "OWED_TO_ME",
+      amount: rupeesToPaise(325),
+      status: "SETTLED",
+      settledDate: toLocalISO(new Date(prevYear ?? 1970, (prevMonthNum ?? 1) - 1, 20)),
+      createdAt: movieIso,
+      updatedAt: movieIso,
+    },
+  ];
+
   transactions.sort((a, b) => a.date.localeCompare(b.date));
 
   // Back-fill the main account's opening balance so the live balance lands
@@ -696,6 +773,8 @@ export function createSeedDatabase(now = new Date()): Database {
     investments,
     incomeSources,
     rules: [],
+    people,
+    splits,
   };
 }
 
@@ -738,5 +817,7 @@ export function createEmptyDatabase(name = "there"): Database {
     investments: [],
     incomeSources: [],
     rules: [],
+    people: [],
+    splits: [],
   };
 }

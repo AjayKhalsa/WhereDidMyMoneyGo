@@ -182,6 +182,39 @@ export interface IncomeSource {
   createdAt: string;
 }
 
+/** Someone you sometimes split an expense with. */
+export interface Person {
+  id: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type SplitStatus = "OUTSTANDING" | "SETTLED";
+
+/**
+ * The unsettled half of a shared expense.
+ *
+ * The transaction itself always records only *your* real share — see
+ * `recordSplits` in `data/actions.ts`. A Split is the side-ledger for the
+ * rest: money you fronted that isn't really spending, or money someone
+ * covered for you. Settling one is never a transaction of its own — no
+ * money is "earned" or "spent" when an IOU clears, it just stops being owed.
+ */
+export interface Split {
+  id: string;
+  /** The expense transaction this split was carved out of. */
+  transactionId: string;
+  personId: string;
+  /** OWED_TO_ME: they owe you. I_OWE: you owe them (e.g. they covered you). */
+  direction: "OWED_TO_ME" | "I_OWE";
+  amount: Paise;
+  status: SplitStatus;
+  settledDate?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /**
  * A rule learned from the user's own corrections.
  *
@@ -216,4 +249,6 @@ export interface Database {
   investments: Investment[];
   incomeSources: IncomeSource[];
   rules: ClassificationRule[];
+  people: Person[];
+  splits: Split[];
 }

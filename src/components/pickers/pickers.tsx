@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, Search } from "lucide-react";
 import { CONTEXT_DEFINITIONS, contextLabel } from "@/lib/domain/contexts";
-import type { Account, TransactionContext } from "@/lib/domain/types";
+import type { Account, Person, TransactionContext } from "@/lib/domain/types";
 import { makeContext } from "@/lib/domain/contexts";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { cn } from "@/lib/utils";
@@ -203,6 +203,52 @@ export function AccountPicker({
             )}
           </SelectableChip>
         ))}
+    </div>
+  );
+}
+
+/** Multi-select roster of people to split an expense with. */
+export function PersonPicker({
+  value,
+  onChange,
+  people,
+  className,
+}: {
+  value: string[];
+  onChange: (personIds: string[]) => void;
+  people: Person[];
+  className?: string;
+}) {
+  const selected = new Set(value);
+
+  const toggle = (personId: string) => {
+    const next = selected.has(personId)
+      ? value.filter((id) => id !== personId)
+      : [...value, personId];
+    onChange(next);
+  };
+
+  return (
+    <div className={cn("flex flex-wrap gap-1.5", className)}>
+      {people
+        .filter((p) => p.isActive)
+        .map((person) => (
+          <SelectableChip
+            key={person.id}
+            selected={selected.has(person.id)}
+            onClick={() => toggle(person.id)}
+          >
+            {selected.has(person.id) && (
+              <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+            )}
+            {person.name}
+          </SelectableChip>
+        ))}
+      {people.filter((p) => p.isActive).length === 0 && (
+        <p className="text-sm text-ink-tertiary">
+          No people yet — add one from Money.
+        </p>
+      )}
     </div>
   );
 }

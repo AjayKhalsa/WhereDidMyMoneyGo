@@ -14,6 +14,7 @@ import { DisclosurePanel } from "@/components/money/disclosure-panel";
 import { GoalsPanel } from "@/components/money/goals-panel";
 import { IncomePanel } from "@/components/money/income-panel";
 import { InvestmentsPanel } from "@/components/money/investments-panel";
+import { PeoplePanel } from "@/components/money/people-panel";
 import { RecurringPanel } from "@/components/money/recurring-panel";
 import { Amount } from "@/components/ui/amount";
 import { Section, Skeleton } from "@/components/ui/primitives";
@@ -33,7 +34,7 @@ import { pluralise } from "@/lib/utils";
  */
 
 export default function MoneyPage() {
-  const { status, db, safeToSpend, creditCards } = useFinance();
+  const { status, db, safeToSpend, creditCards, peopleBalances } = useFinance();
 
   if (status === "loading" || status === "idle") {
     return (
@@ -60,6 +61,7 @@ export default function MoneyPage() {
   const bills = monthlyRecurringTotal(db?.recurring ?? []);
   const earmarked = goalAllocations(db?.goals ?? []);
   const goalCount = (db?.goals ?? []).length;
+  const netOwed = peopleBalances.reduce((acc, b) => acc + b.netAmount, 0);
 
   return (
     <div className="space-y-9">
@@ -168,6 +170,21 @@ export default function MoneyPage() {
           }
         >
           <GoalsPanel />
+        </DisclosurePanel>
+
+        <DisclosurePanel
+          title="People"
+          summary={
+            netOwed !== 0 ? (
+              <SummaryFigure value={Math.abs(netOwed)} suffix={netOwed > 0 ? " owed to you" : " you owe"} />
+            ) : peopleBalances.length > 0 ? (
+              <SummaryHint>Settled up</SummaryHint>
+            ) : (
+              <SummaryHint>None yet</SummaryHint>
+            )
+          }
+        >
+          <PeoplePanel />
         </DisclosurePanel>
       </div>
 
