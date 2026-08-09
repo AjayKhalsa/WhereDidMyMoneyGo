@@ -21,61 +21,49 @@ export interface ContextDefinition {
 }
 
 export const CONTEXT_DEFINITIONS: ContextDefinition[] = [
+  // People — who you were with. The most important dimension.
   {
     value: "dating",
-    label: "Dating",
-    type: "COMPANY",
+    label: "Date",
+    type: "PEOPLE",
     suggested: true,
     description: "Spent on or with someone you're seeing",
   },
   {
     value: "friends",
     label: "Friends",
-    type: "COMPANY",
+    type: "PEOPLE",
     suggested: true,
     description: "Spent with friends",
   },
   {
     value: "family",
     label: "Family",
-    type: "COMPANY",
+    type: "PEOPLE",
     suggested: true,
     description: "Spent with or on family",
   },
   {
     value: "work",
     label: "Work",
-    type: "COMPANY",
+    type: "PEOPLE",
     suggested: true,
-    description: "Work-related spending",
+    description: "Colleagues, clients, or other work-related spending",
   },
   {
     value: "solo",
     label: "Solo",
-    type: "COMPANY",
+    type: "PEOPLE",
     suggested: false,
     description: "Spent alone",
   },
+  // Occasion — why, if it wasn't routine. Absence means nothing special.
   {
     value: "weekend",
     label: "Weekend",
     type: "OCCASION",
     suggested: false,
     description: "Happened on a Saturday or Sunday",
-  },
-  {
-    value: "travel",
-    label: "Travel",
-    type: "OCCASION",
-    suggested: true,
-    description: "Part of a trip",
-  },
-  {
-    value: "celebration",
-    label: "Celebration",
-    type: "OCCASION",
-    suggested: false,
-    description: "Birthday, anniversary, festival",
   },
   {
     value: "late-night",
@@ -85,32 +73,75 @@ export const CONTEXT_DEFINITIONS: ContextDefinition[] = [
     description: "After 10 PM",
   },
   {
+    value: "birthday",
+    label: "Birthday",
+    type: "OCCASION",
+    suggested: false,
+    description: "A birthday",
+  },
+  {
+    value: "wedding",
+    label: "Wedding",
+    type: "OCCASION",
+    suggested: false,
+    description: "A wedding",
+  },
+  {
+    value: "anniversary",
+    label: "Anniversary",
+    type: "OCCASION",
+    suggested: false,
+    description: "An anniversary",
+  },
+  {
+    value: "party",
+    label: "Party",
+    type: "OCCASION",
+    suggested: false,
+    description: "A party",
+  },
+  {
+    value: "vacation",
+    label: "Vacation",
+    type: "OCCASION",
+    suggested: true,
+    description: "Part of a trip",
+  },
+  {
+    value: "celebration",
+    label: "Celebration",
+    type: "OCCASION",
+    suggested: false,
+    description: "A festival or general celebration",
+  },
+  // Attributes — what was distinctive about the transaction itself.
+  {
     value: "alcohol",
     label: "Alcohol",
-    type: "NATURE",
+    type: "ATTRIBUTE",
     suggested: true,
     description: "Involved drinks",
   },
   {
     value: "gift",
     label: "Gift",
-    type: "NATURE",
+    type: "ATTRIBUTE",
     suggested: false,
     description: "Bought for someone else",
   },
   {
-    value: "treat",
-    label: "Treat",
-    type: "NATURE",
+    value: "shared",
+    label: "Shared",
+    type: "ATTRIBUTE",
     suggested: false,
-    description: "An indulgence rather than a need",
+    description: "Cost was split with someone else",
   },
   {
-    value: "impulse",
-    label: "Impulse",
-    type: "NATURE",
+    value: "reimbursable",
+    label: "Reimbursable",
+    type: "ATTRIBUTE",
     suggested: false,
-    description: "Unplanned purchase",
+    description: "You'll get this money back",
   },
 ];
 
@@ -129,7 +160,7 @@ export function contextDefinition(value: string): ContextDefinition | undefined 
 
 export function makeContext(value: string): TransactionContext {
   const def = BY_VALUE.get(value);
-  return { type: def?.type ?? "NATURE", value };
+  return { type: def?.type ?? "ATTRIBUTE", value };
 }
 
 export function hasContext(

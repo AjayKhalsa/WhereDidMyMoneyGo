@@ -74,9 +74,9 @@ export interface Category {
  * single transaction, without ever double-counting it.
  */
 export type ContextType =
-  | "COMPANY" // who you were with: dating, friends, family, work, solo
-  | "OCCASION" // what it was: weekend, travel, celebration
-  | "NATURE"; // what it involved: alcohol, gift, treat
+  | "PEOPLE" // who you were with: dating, friends, family, work, solo
+  | "OCCASION" // why: weekend, birthday, vacation, celebration
+  | "ATTRIBUTE"; // what was distinctive about it: alcohol, gift, shared
 
 export interface TransactionContext {
   type: ContextType;

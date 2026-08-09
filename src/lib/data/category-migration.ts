@@ -1,5 +1,11 @@
 import { buildCategorySeed } from "@/lib/domain/categories";
-import type { Database, TransactionContext } from "@/lib/domain/types";
+import type {
+  ClassificationRule,
+  Database,
+  RecurringTransaction,
+  Transaction,
+  TransactionContext,
+} from "@/lib/domain/types";
 
 /**
  * One-time cleanup for data written under the old 10-group/46-leaf category
@@ -85,15 +91,83 @@ function remapCategoryId(id: string, contexts: TransactionContext[]): string {
   return LEGACY_CATEGORY_MAP[id] ?? id;
 }
 
-interface CategorisedRow {
-  categoryId?: string;
-  contexts?: TransactionContext[];
-}
-
-function remapRow<T extends CategorisedRow>(row: T): { row: T; changed: boolean } {
+/** categoryId-only remap — used for RecurringTransaction, which has no `contexts` field. */
+function remapCategoryOnly<T extends { categoryId?: string }>(
+  row: T,
+): { row: T; changed: boolean } {
   if (!row.categoryId || !isLegacyId(row.categoryId)) return { row, changed: false };
   return {
-    row: { ...row, categoryId: remapCategoryId(row.categoryId, row.contexts ?? []) },
+    row: { ...row, categoryId: remapCategoryId(row.categoryId, []) },
+    changed: true,
+  };
+}
+
+/**
+ * Old ContextType values, before COMPANY/NATURE were renamed to
+ * PEOPLE/ATTRIBUTE (OCCASION unchanged). Stored `type` strings need
+ * rewriting even though `value` is untouched — the live Postgres schema's
+ * check constraint on `transaction_contexts.type`/`rule_contexts.type` was
+ * updated to only allow the new names (see
+ * `0004_context_redesign.sql`), so any row still carrying an old type
+ * string would fail to save the next time it's written, not just look
+ * stale.
+ */
+const LEGACY_CONTEXT_TYPE_MAP: Record<string, TransactionContext["type"]> = {
+  COMPANY: "PEOPLE",
+  NATURE: "ATTRIBUTE",
+};
+
+function remapContextType(context: TransactionContext): {
+  context: TransactionContext;
+  changed: boolean;
+} {
+  const remapped = LEGACY_CONTEXT_TYPE_MAP[context.type as string];
+  if (!remapped) return { context, changed: false };
+  return { context: { ...context, type: remapped }, changed: true };
+}
+
+/**
+ * "Travel" stopped being a selectable Occasion once Travel became a real
+ * category (an Occasion:Travel chip sitting next to a Travel category label
+ * is pure visible duplication) — but only strip it where that duplication
+ * is actually present. A `travel` tag on a row that ends up categorised as
+ * something else is left alone, same as any other now-orphaned context
+ * value (harmless, still meaningful, not worth a forced cleanup).
+ */
+function stripRedundantTravelContext(
+  categoryId: string | undefined,
+  contexts: TransactionContext[],
+): { contexts: TransactionContext[]; changed: boolean } {
+  if (categoryId !== "travel") return { contexts, changed: false };
+  const filtered = contexts.filter((c) => !(c.type === "OCCASION" && c.value === "travel"));
+  if (filtered.length === contexts.length) return { contexts, changed: false };
+  return { contexts: filtered, changed: true };
+}
+
+/** categoryId + contexts remap — used for Transaction and ClassificationRule, both of which always carry a `contexts` array. */
+function remapCategorisedRow<T extends { categoryId?: string; contexts: TransactionContext[] }>(
+  row: T,
+): { row: T; changed: boolean } {
+  let changed = false;
+  let categoryId = row.categoryId;
+  if (categoryId && isLegacyId(categoryId)) {
+    categoryId = remapCategoryId(categoryId, row.contexts);
+    changed = true;
+  }
+
+  let contexts = row.contexts;
+  const retyped = contexts.map(remapContextType);
+  if (retyped.some((r) => r.changed)) {
+    contexts = retyped.map((r) => r.context);
+    changed = true;
+  }
+
+  const stripped = stripRedundantTravelContext(categoryId, contexts);
+  if (stripped.changed) changed = true;
+
+  if (!changed) return { row, changed: false };
+  return {
+    row: { ...row, categoryId, contexts: stripped.contexts },
     changed: true,
   };
 }
@@ -108,18 +182,18 @@ function remapRow<T extends CategorisedRow>(row: T): { row: T; changed: boolean 
 export function remapLegacyCategories(db: Database): { db: Database; changed: boolean } {
   let changed = false;
 
-  const transactions = db.transactions.map((t) => {
-    const result = remapRow(t);
+  const transactions: Transaction[] = db.transactions.map((t) => {
+    const result = remapCategorisedRow(t);
     if (result.changed) changed = true;
     return result.row;
   });
-  const rules = db.rules.map((r) => {
-    const result = remapRow(r);
+  const rules: ClassificationRule[] = db.rules.map((r) => {
+    const result = remapCategorisedRow(r);
     if (result.changed) changed = true;
     return result.row;
   });
-  const recurring = db.recurring.map((r) => {
-    const result = remapRow(r);
+  const recurring: RecurringTransaction[] = db.recurring.map((r) => {
+    const result = remapCategoryOnly(r);
     if (result.changed) changed = true;
     return result.row;
   });

@@ -99,16 +99,16 @@ export function ContextPicker({
   };
 
   const byType = {
-    COMPANY: CONTEXT_DEFINITIONS.filter((c) => c.type === "COMPANY"),
+    PEOPLE: CONTEXT_DEFINITIONS.filter((c) => c.type === "PEOPLE"),
     OCCASION: CONTEXT_DEFINITIONS.filter(
       (c) => c.type === "OCCASION" && c.value !== "weekend" && c.value !== "late-night",
     ),
-    NATURE: CONTEXT_DEFINITIONS.filter((c) => c.type === "NATURE"),
+    ATTRIBUTE: CONTEXT_DEFINITIONS.filter((c) => c.type === "ATTRIBUTE"),
   };
 
   const sections: { label: string; items: typeof CONTEXT_DEFINITIONS }[] = [
-    { label: "Who with", items: byType.COMPANY },
-    { label: "What it involved", items: byType.NATURE },
+    { label: "Who with", items: byType.PEOPLE },
+    { label: "Attributes", items: byType.ATTRIBUTE },
     { label: "Occasion", items: byType.OCCASION },
   ];
 

@@ -168,17 +168,17 @@ export const MERCHANTS: MerchantEntry[] = [
   { name: "The Whole Truth", aliases: ["wholetruth"], categoryId: "essentials" },
   { name: "Epigamia", aliases: ["epigamia"], categoryId: "essentials" },
   // Travel
-  { name: "IndiGo", aliases: ["indigo"], categoryId: "travel", contexts: ["travel"] },
-  { name: "IRCTC", aliases: ["irctc"], categoryId: "travel", contexts: ["travel"] },
-  { name: "MakeMyTrip", aliases: ["makemytrip", "mmt"], categoryId: "travel", contexts: ["travel"] },
-  { name: "Goibibo", aliases: ["goibibo"], categoryId: "travel", contexts: ["travel"] },
-  { name: "Booking.com", aliases: ["bookingcom"], categoryId: "travel", contexts: ["travel"] },
-  { name: "Agoda", aliases: ["agoda"], categoryId: "travel", contexts: ["travel"] },
-  { name: "Airbnb", aliases: ["airbnb"], categoryId: "travel", contexts: ["travel"] },
-  { name: "Cleartrip", aliases: ["cleartrip"], categoryId: "travel", contexts: ["travel"] },
-  { name: "Yatra", aliases: ["yatra"], categoryId: "travel", contexts: ["travel"] },
-  { name: "Ixigo", aliases: ["ixigo"], categoryId: "travel", contexts: ["travel"] },
-  { name: "EaseMyTrip", aliases: ["easemytrip"], categoryId: "travel", contexts: ["travel"] },
+  { name: "IndiGo", aliases: ["indigo"], categoryId: "travel" },
+  { name: "IRCTC", aliases: ["irctc"], categoryId: "travel" },
+  { name: "MakeMyTrip", aliases: ["makemytrip", "mmt"], categoryId: "travel" },
+  { name: "Goibibo", aliases: ["goibibo"], categoryId: "travel" },
+  { name: "Booking.com", aliases: ["bookingcom"], categoryId: "travel" },
+  { name: "Agoda", aliases: ["agoda"], categoryId: "travel" },
+  { name: "Airbnb", aliases: ["airbnb"], categoryId: "travel" },
+  { name: "Cleartrip", aliases: ["cleartrip"], categoryId: "travel" },
+  { name: "Yatra", aliases: ["yatra"], categoryId: "travel" },
+  { name: "Ixigo", aliases: ["ixigo"], categoryId: "travel" },
+  { name: "EaseMyTrip", aliases: ["easemytrip"], categoryId: "travel" },
 ];
 
 export interface ActivityEntry {
@@ -334,7 +334,6 @@ export const ACTIVITIES: ActivityEntry[] = [
   {
     keywords: ["gift", "gifts", "present", "presents", "voucher"],
     categoryId: "gifts",
-    contexts: ["gift"],
     weight: 7,
   },
   // Bills
@@ -359,7 +358,6 @@ export const ACTIVITIES: ActivityEntry[] = [
   {
     keywords: ["flight", "hotel", "airbnb", "trip", "vacation", "holiday"],
     categoryId: "travel",
-    contexts: ["travel"],
     weight: 7,
   },
   // Education
@@ -379,6 +377,7 @@ export interface ContextEntry {
 }
 
 export const CONTEXT_KEYWORDS: ContextEntry[] = [
+  // People
   {
     keywords: ["friend", "friends", "gang", "buddies", "squad", "mates", "guys", "boys", "girls", "crew"],
     context: "friends",
@@ -396,9 +395,16 @@ export const CONTEXT_KEYWORDS: ContextEntry[] = [
     context: "family",
   },
   { keywords: ["alone", "myself", "solo"], context: "solo" },
-  { keywords: ["birthday", "anniversary", "celebration", "diwali", "holi"], context: "celebration" },
-  { keywords: ["trip", "travel", "vacation", "holiday"], context: "travel" },
-  { keywords: ["impulse", "unplanned"], context: "impulse" },
+  // Occasion
+  { keywords: ["birthday"], context: "birthday" },
+  { keywords: ["wedding", "marriage"], context: "wedding" },
+  { keywords: ["anniversary"], context: "anniversary" },
+  { keywords: ["party", "houseparty"], context: "party" },
+  { keywords: ["trip", "vacation", "holiday"], context: "vacation" },
+  { keywords: ["celebration", "festival", "diwali", "holi"], context: "celebration" },
+  // Attributes
+  { keywords: ["shared", "split"], context: "shared" },
+  { keywords: ["reimbursable", "reimburse", "reimbursed"], context: "reimbursable" },
 ];
 
 /** Words that never carry meaning for classification. */
