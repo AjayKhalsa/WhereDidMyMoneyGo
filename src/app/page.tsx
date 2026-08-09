@@ -35,7 +35,7 @@ import { WelcomeScreen } from "@/components/home/welcome-screen";
  */
 
 export default function HomePage() {
-  const { status, db, groupBreakdown, headline, monthRows, creditCards, totals } =
+  const { status, error, db, groupBreakdown, headline, monthRows, creditCards, totals } =
     useFinance();
   const { open } = useAddSheet();
   const [flowOpen, setFlowOpen] = useState(false);
@@ -47,7 +47,12 @@ export default function HomePage() {
     return (
       <EmptyState
         title="Couldn't open your data"
-        description="Your browser blocked local storage. Private browsing windows often do this — try a normal window."
+        description={error ?? "Something went wrong loading your data."}
+        action={
+          <Button size="sm" onClick={() => window.location.reload()}>
+            Try again
+          </Button>
+        }
       />
     );
   }
