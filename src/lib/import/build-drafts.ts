@@ -7,7 +7,7 @@ import type {
   TransactionContext,
   TransactionType,
 } from "@/lib/domain/types";
-import type { StatementRow } from "./hdfc-parser";
+import type { StatementRow } from "./statement-row";
 
 /**
  * Statement rows -> reviewable drafts.

@@ -1,6 +1,9 @@
 import { parseAmountInput } from "@/lib/domain/money";
 import type { Paise } from "@/lib/domain/types";
 import type { ExtractedPage, PositionedText, Row } from "./pdf-text";
+import { UnreadableStatementError, type StatementRow } from "./statement-row";
+
+export { UnreadableStatementError, type StatementRow } from "./statement-row";
 
 /**
  * HDFC savings-account statement layout -> structured rows.
@@ -15,27 +18,6 @@ import type { ExtractedPage, PositionedText, Row } from "./pdf-text";
  * pages of the same statement, so each page's header is authoritative for
  * that page.
  */
-
-export interface StatementRow {
-  /** "YYYY-MM-DD" */
-  date: string;
-  narration: string;
-  withdrawal: Paise;
-  deposit: Paise;
-}
-
-export class UnreadableStatementError extends Error {
-  constructor(
-    readonly failureRate: number,
-    /** First few raw row texts from page 1 — for diagnosing why detection failed. */
-    readonly sampleRows: string[] = [],
-  ) {
-    super(
-      "Couldn't read this statement confidently — the layout doesn't match what was expected.",
-    );
-    this.name = "UnreadableStatementError";
-  }
-}
 
 type ColumnKey =
   | "date"

@@ -9,12 +9,15 @@ import {
   buildImportDrafts,
   type ImportDraft,
 } from "@/lib/import/build-drafts";
-import { parseHdfcStatement, UnreadableStatementError } from "@/lib/import/hdfc-parser";
+import { parseHdfcStatement } from "@/lib/import/hdfc-parser";
+import { UnreadableStatementError } from "@/lib/import/statement-row";
 import {
   extractPdfRows,
   PdfCancelledError,
   ScannedPdfError,
 } from "@/lib/import/pdf-text";
+import { extractXlsRows } from "@/lib/import/xls-source";
+import { parseStatementXls } from "@/lib/import/parse-statement-xls";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { Button, Chip } from "@/components/ui/primitives";
 import { TextField } from "@/components/ui/fields";
@@ -25,12 +28,16 @@ import { AccountPicker, CategoryPicker } from "@/components/pickers/pickers";
 /**
  * Statement import — deliberately minimal (spec: bank-statement-import plan).
  *
- * HDFC savings-account PDFs only for now; the parsing pipeline
- * (`pdf-text.ts` -> `hdfc-parser.ts` -> `narration.ts` -> `build-drafts.ts`)
- * is bank-agnostic past the HDFC-specific layer, so a second bank is a new
- * parser file, not a rewrite of this screen. No fancy grid, no bulk
- * select-by-confidence — a plain reviewable list, because getting a working
- * version in your hands tonight mattered more than polish.
+ * Two input paths feeding the same bank-agnostic pipeline
+ * (`narration.ts` -> `build-drafts.ts`): HDFC PDFs (`pdf-text.ts` ->
+ * `hdfc-parser.ts`, x/y coordinate reconstruction) and bank "Excel" exports
+ * — HDFC/ICICI/Axis so far (`xls-source.ts` -> `parse-statement-xls.ts`,
+ * plain column lookup by header name, no coordinate guessing). XLS statement
+ * exports have proven far more reliable than PDF table-scraping in
+ * practice. A new bank is a new `*-xls-parser.ts`, not a rewrite of this
+ * screen. No fancy grid, no bulk select-by-confidence — a plain reviewable
+ * list, because getting a working version in your hands mattered more than
+ * polish.
  */
 
 type ReviewRow = ImportDraft & { included: boolean; wasCorrected: boolean };
@@ -97,9 +104,11 @@ export function ImportStatementSheet({
   async function handleFile(file: File) {
     setStep("parsing");
     setError(null);
+    const isXls = /\.xlsx?$/i.test(file.name);
     try {
-      const pages = await extractPdfRows(file, requestPassword);
-      const statementRows = parseHdfcStatement(pages);
+      const statementRows = isXls
+        ? parseStatementXls(await extractXlsRows(file))
+        : parseHdfcStatement(await extractPdfRows(file, requestPassword));
       const drafts = buildImportDrafts(
         statementRows,
         accountId!,
@@ -119,12 +128,12 @@ export function ImportStatementSheet({
         setError(err.message);
         // Not shown in the UI — logged so the raw extracted rows can be
         // copied out of DevTools to diagnose why detection failed, without
-        // needing the actual PDF.
-        console.error("[import] statement diagnostics:", err.sampleRows);
+        // needing the actual file.
+        console.error("[import] statement diagnostics:", err.diagnostics);
       } else if (err instanceof ScannedPdfError) {
         setError(err.message);
       } else {
-        setError(err instanceof Error ? err.message : "Couldn't read that PDF.");
+        setError(err instanceof Error ? err.message : "Couldn't read that file.");
       }
       setStep("upload");
     }
@@ -180,7 +189,7 @@ export function ImportStatementSheet({
           onClose();
         }}
         title="Import a statement"
-        description="HDFC savings account PDF, for now"
+        description="HDFC, ICICI, or Axis — Excel export or HDFC PDF"
         size="lg"
         variant="full"
         footer={
@@ -231,16 +240,17 @@ export function ImportStatementSheet({
               className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-line-strong bg-surface/50 px-6 py-12 text-center transition-colors hover:bg-surface-hover"
             >
               <Upload className="h-6 w-6 text-ink-tertiary" strokeWidth={1.5} />
-              <span className="text-[14px] font-medium text-ink">Choose a PDF statement</span>
+              <span className="text-[14px] font-medium text-ink">Choose a statement file</span>
               <span className="text-[12.5px] text-ink-tertiary">
-                Password-protected is fine — you&rsquo;ll be asked for it, and it never leaves
-                this browser.
+                Excel (.xls/.xlsx) export from HDFC, ICICI, or Axis, or an HDFC PDF —
+                password-protected PDFs are fine, you&rsquo;ll be asked and it never leaves this
+                browser.
               </span>
             </button>
             <input
               ref={fileInputRef}
               type="file"
-              accept="application/pdf"
+              accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];

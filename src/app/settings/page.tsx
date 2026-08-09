@@ -335,7 +335,7 @@ function DataPanel() {
         <DataRow
           icon={<Upload className="h-4 w-4" strokeWidth={1.75} />}
           title="Import a statement"
-          description="HDFC savings account PDF, for now. Read entirely in your browser."
+          description="HDFC, ICICI, or Axis — Excel export or HDFC PDF. Read entirely in your browser."
           action={
             <Button size="sm" onClick={() => setImporting(true)}>
               Import
