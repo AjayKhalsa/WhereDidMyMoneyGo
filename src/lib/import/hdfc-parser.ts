@@ -254,6 +254,9 @@ export function parseHdfcStatement(pages: ExtractedPage[]): StatementRow[] {
     let reachedFooter = false;
     const rowDiagnostics: string[] = diagnostics.length === 0 ? [
       `Header found + all columns anchored on page ${page.pageNumber}. First rows after header:`,
+      `Anchor positions: ${COLUMN_ORDER.map((k) => `${k}=[x:${anchors[k]!.x.toFixed(1)},xEnd:${anchors[k]!.xEnd.toFixed(1)}]`).join(" ")}`,
+      `Zone boundaries: ${zones.map((z) => `${z.key}=[${z.left === -Infinity ? "-inf" : z.left.toFixed(1)},${z.right === Infinity ? "+inf" : z.right.toFixed(1)})`).join(" ")}`,
+      `First data row raw items with x: ${page.rows.find((r) => r !== headerRow && page.rows.indexOf(r) > page.rows.indexOf(headerRow))?.map((i) => `"${i.text}"@x${i.x.toFixed(1)}`).join(" | ") ?? "(none)"}`,
     ] : [];
 
     for (const row of page.rows) {
