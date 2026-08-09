@@ -290,6 +290,7 @@ function DataPanel() {
   const { db } = useFinance();
   const toast = useToast();
   const [pending, setPending] = useState<PendingAction>(null);
+  const [confirmText, setConfirmText] = useState("");
   const [working, setWorking] = useState(false);
   const [importing, setImporting] = useState(false);
 
@@ -297,6 +298,13 @@ function DataPanel() {
     transactions: db?.transactions.length ?? 0,
     rules: db?.rules.length ?? 0,
   };
+  // Both actions below replace everything through the same repository that
+  // regular saves use — once Supabase is configured that's the cloud
+  // account, not "this browser". With real data at stake, a single click
+  // through a confirm sheet isn't enough friction for something this
+  // irreversible; typing DELETE is.
+  const needsTypedConfirm = counts.transactions > 0;
+  const confirmSatisfied = !needsTypedConfirm || confirmText.trim().toUpperCase() === "DELETE";
 
   function handleExport() {
     if (!db) return;
@@ -318,7 +326,7 @@ function DataPanel() {
   }
 
   async function handleConfirm() {
-    if (!pending) return;
+    if (!pending || !confirmSatisfied) return;
     setWorking(true);
     try {
       const next: Database =
@@ -335,6 +343,7 @@ function DataPanel() {
             : "Your accounts and history have been cleared",
       });
       setPending(null);
+      setConfirmText("");
     } catch (error) {
       toast.show({
         tone: "error",
@@ -372,7 +381,11 @@ function DataPanel() {
         <DataRow
           icon={<RefreshCw className="h-4 w-4" strokeWidth={1.75} />}
           title="Load sample data"
-          description="Four months of generated history, to see how the app behaves with a year's worth of habits in it. Replaces everything currently stored."
+          description={
+            isSupabaseConfigured
+              ? "Four months of generated history. Replaces everything currently stored — including your Supabase account, not just this browser."
+              : "Four months of generated history, to see how the app behaves with a year's worth of habits in it. Replaces everything currently stored."
+          }
           action={
             <Button size="sm" onClick={() => setPending("reset")}>
               Load
@@ -382,7 +395,11 @@ function DataPanel() {
         <DataRow
           icon={<Trash2 className="h-4 w-4" strokeWidth={1.75} />}
           title="Start fresh"
-          description="Deletes every transaction, account, bill, goal and learned rule. There is no server copy."
+          description={
+            isSupabaseConfigured
+              ? "Deletes every transaction, account, bill, goal and learned rule — in your Supabase account, permanently. This is not a local-only reset."
+              : "Deletes every transaction, account, bill, goal and learned rule. There is no server copy."
+          }
           action={
             <Button size="sm" variant="danger" onClick={() => setPending("fresh")}>
               Start fresh
@@ -392,23 +409,34 @@ function DataPanel() {
       </Card>
 
       <p className="text-[12.5px] leading-relaxed text-ink-tertiary">
-        Everything is stored in this browser only. Nothing is uploaded, and
-        clearing your browser data will remove it.
+        {isSupabaseConfigured
+          ? "Your data lives in Supabase — Load sample data and Start fresh both act on your cloud account, not just this browser."
+          : "Everything is stored in this browser only. Nothing is uploaded, and clearing your browser data will remove it."}
       </p>
 
       <Sheet
         open={pending !== null}
-        onClose={() => setPending(null)}
+        onClose={() => {
+          setPending(null);
+          setConfirmText("");
+        }}
         title={pending === "reset" ? "Load sample data?" : "Start fresh?"}
         size="sm"
         footer={
           <div className="flex gap-2">
-            <Button onClick={() => setPending(null)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                setPending(null);
+                setConfirmText("");
+              }}
+            >
+              Cancel
+            </Button>
             <Button
               variant="danger"
               block
               onClick={handleConfirm}
-              disabled={working}
+              disabled={working || !confirmSatisfied}
             >
               {working
                 ? "Working…"
@@ -428,11 +456,22 @@ function DataPanel() {
           <div className="rounded-xl bg-surface-sunken p-3.5 text-[13px] text-ink-secondary">
             You&rsquo;ll lose {counts.transactions}{" "}
             {pluralise(counts.transactions, "transaction")} and {counts.rules}{" "}
-            learned {pluralise(counts.rules, "rule")}. This cannot be undone.
+            learned {pluralise(counts.rules, "rule")}
+            {isSupabaseConfigured ? ", from your Supabase account" : ""}. This
+            cannot be undone.
           </div>
           <p className="text-[12.5px] text-ink-tertiary">
             Export your data first if you want to keep a copy.
           </p>
+          {needsTypedConfirm && (
+            <TextField
+              label={`Type DELETE to confirm`}
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="DELETE"
+              data-autofocus
+            />
+          )}
         </div>
       </Sheet>
 
