@@ -17,10 +17,22 @@
 -- silently fail to ever attach to some accounts, while looking like a
 -- successful write.
 --
--- This scopes the key properly: `(user_id, id)` becomes the primary key,
--- and the self-referencing `parent_id` FK is rebuilt to match — a
--- composite FK where `parent_id` is NULL (every top-level category) is
--- simply not enforced for that row, which is exactly what's wanted.
+-- This scopes the key properly: `(user_id, id)` becomes the primary key.
+-- Three other tables hold a foreign key against the old single-column
+-- `categories(id)` — transactions.category_id, recurring.category_id,
+-- rules.category_id — plus categories' own self-referencing parent_id.
+-- All four have to be dropped before the old primary key can go, and
+-- rebuilt as composite `(user_id, ...)` foreign keys afterward, each
+-- keeping its *original* on-delete behaviour exactly (transactions and
+-- recurring: on delete set null; rules: on delete cascade, matching
+-- 0001_init.sql) — getting this wrong would silently change what happens
+-- to a user's transactions/rules when a category is ever deleted.
+--
+-- Constraints are found via pg_constraint/pg_attribute catalog metadata
+-- (referenced table's OID, constrained column's actual name), not by
+-- string-matching pg_get_constraintdef()'s output — that text renders SQL
+-- keywords in uppercase ("FOREIGN KEY ... REFERENCES"), so a lowercase
+-- `like '%references%'` pattern would silently never match anything.
 --
 -- Run this once in the Supabase SQL editor.
 
@@ -28,11 +40,61 @@ do $$
 declare
   con_name text;
 begin
-  select conname into con_name
-  from pg_constraint
-  where conrelid = 'categories'::regclass
-    and contype = 'f'
-    and pg_get_constraintdef(oid) like '%parent_id%';
+  select c.conname into con_name
+  from pg_constraint c
+  join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+  where c.conrelid = 'transactions'::regclass
+    and c.contype = 'f'
+    and c.confrelid = 'categories'::regclass
+    and a.attname = 'category_id';
+  if con_name is not null then
+    execute format('alter table transactions drop constraint %I', con_name);
+  end if;
+end $$;
+
+do $$
+declare
+  con_name text;
+begin
+  select c.conname into con_name
+  from pg_constraint c
+  join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+  where c.conrelid = 'recurring'::regclass
+    and c.contype = 'f'
+    and c.confrelid = 'categories'::regclass
+    and a.attname = 'category_id';
+  if con_name is not null then
+    execute format('alter table recurring drop constraint %I', con_name);
+  end if;
+end $$;
+
+do $$
+declare
+  con_name text;
+begin
+  select c.conname into con_name
+  from pg_constraint c
+  join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+  where c.conrelid = 'rules'::regclass
+    and c.contype = 'f'
+    and c.confrelid = 'categories'::regclass
+    and a.attname = 'category_id';
+  if con_name is not null then
+    execute format('alter table rules drop constraint %I', con_name);
+  end if;
+end $$;
+
+do $$
+declare
+  con_name text;
+begin
+  select c.conname into con_name
+  from pg_constraint c
+  join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+  where c.conrelid = 'categories'::regclass
+    and c.contype = 'f'
+    and c.confrelid = 'categories'::regclass
+    and a.attname = 'parent_id';
   if con_name is not null then
     execute format('alter table categories drop constraint %I', con_name);
   end if;
@@ -55,3 +117,19 @@ alter table categories add constraint categories_pkey primary key (user_id, id);
 
 alter table categories add constraint categories_parent_id_fkey
   foreign key (user_id, parent_id) references categories (user_id, id);
+
+-- `on delete set null` on a composite FK nulls *every* referencing column
+-- by default — that would try to null out user_id too, which is not-null
+-- and would break every category deletion. The `(category_id)` column
+-- list (Postgres 15+) restricts it to just the column that should
+-- actually go null, matching the original single-column FK's behaviour.
+alter table transactions add constraint transactions_category_id_fkey
+  foreign key (user_id, category_id) references categories (user_id, id)
+  on delete set null (category_id);
+
+alter table recurring add constraint recurring_category_id_fkey
+  foreign key (user_id, category_id) references categories (user_id, id)
+  on delete set null (category_id);
+
+alter table rules add constraint rules_category_id_fkey
+  foreign key (user_id, category_id) references categories (user_id, id) on delete cascade;
