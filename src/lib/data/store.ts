@@ -75,20 +75,33 @@ export function initStore(onEmpty: () => Database): Promise<void> {
       } else {
         // Self-healing migration for data written under the old
         // multi-level category tree — no-ops after the first successful
-        // run. Covers both backends since both funnel through here. Rare:
-        // only genuinely legacy (pre-flatten) ids trigger this, and it's the
-        // one case where other rows change too, so a full reseed is right.
+        // run. Covers both backends since both funnel through here.
+        //
+        // Every write below is additive/targeted (put/putMany on just the
+        // rows that changed) — deliberately never `replaceAll` here. A
+        // silent background migration must never delete a live account's
+        // data before writing it back; if a targeted write fails partway,
+        // nothing already-good is lost, unlike a delete-then-reinsert that
+        // is interrupted midway.
         const migrated = remapLegacyCategories(data);
         if (migrated.changed) {
           data = migrated.db;
-          await repo.replaceAll(data);
+          if (migrated.changedTransactions.length > 0) {
+            await repo.putMany("transactions", migrated.changedTransactions);
+          }
+          if (migrated.changedRules.length > 0) {
+            await repo.putMany("rules", migrated.changedRules);
+          }
+          if (migrated.changedRecurring.length > 0) {
+            await repo.putMany("recurring", migrated.changedRecurring);
+          }
+          if (migrated.categoriesNeedRefresh) {
+            await repo.putMany("categories", data.categories);
+          }
         }
 
         // The common case: new built-in categories (e.g. the Type children)
-        // added to the tree after this database was first seeded. Written
-        // with a targeted putMany, never replaceAll — this must never risk
-        // a full delete-and-reinsert of someone's whole dataset just to add
-        // a few category rows that touch nothing else.
+        // added to the tree after this database was first seeded.
         const missing = missingBuiltInCategories(data.categories);
         if (missing.length > 0) {
           await repo.putMany("categories", missing);
