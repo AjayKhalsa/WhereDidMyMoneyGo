@@ -221,36 +221,72 @@ export function missingBuiltInCategories(existing: Category[]): Category[] {
   return buildCategorySeed().filter((c) => !existingIds.has(c.id));
 }
 
+export interface LegacyRemapResult {
+  db: Database;
+  changed: boolean;
+  /** Only the transactions/rules/recurring rows that were actually rewritten. */
+  changedTransactions: Transaction[];
+  changedRules: ClassificationRule[];
+  changedRecurring: RecurringTransaction[];
+  /**
+   * True when `db.categories` needs refreshing from the current tree.
+   * Callers must write this back with a plain upsert (e.g. `putMany`),
+   * never a delete-then-reinsert — a now-obsolete legacy category row left
+   * behind is harmless (nothing references it once every row above has
+   * been remapped away from it), exactly like any other orphaned-but-
+   * harmless value this app already tolerates elsewhere.
+   */
+  categoriesNeedRefresh: boolean;
+}
+
 /**
  * Pure function: rewrites any legacy category ids found on transactions,
  * rules, or recurring rules, and — only when genuinely legacy ids turn up —
- * fully reseeds `categories` from the current tree. This is the rarer,
- * more invasive path (categoryId values on other rows are changing too, not
- * just categories), which is why it's still a `replaceAll`; the common case
- * of just adding new built-in categories to an otherwise-current database
- * goes through `missingBuiltInCategories` + a targeted `putMany` instead —
- * see `initStore` in `store.ts`. Returns the same `db` reference (and
- * `changed: false`) when there's nothing to do, so callers can skip a write
- * for brand-new users and on every subsequent boot.
+ * flags that `categories` needs refreshing from the current tree.
+ *
+ * Deliberately returns only the rows that actually changed, not a
+ * ready-to-`replaceAll` `db` — every write this produces must go back as a
+ * targeted, additive write (`put`/`putMany`), never a full delete-and-
+ * reinsert. A silent background migration is exactly the wrong place for
+ * `replaceAll`: on a networked backend, a delete that isn't immediately and
+ * completely followed by a successful full reinsert leaves an account with
+ * less data than it started with, and there is no user in the loop to
+ * notice or confirm before that happens. `replaceAll` stays reserved for
+ * genuinely explicit, user-initiated actions (import, "start fresh", the
+ * one-time local→cloud migration) and seeding a literally brand-new,
+ * empty account, where there is nothing yet to lose.
  */
-export function remapLegacyCategories(db: Database): { db: Database; changed: boolean } {
+export function remapLegacyCategories(db: Database): LegacyRemapResult {
   let changed = false;
 
+  const changedTransactions: Transaction[] = [];
   const transactions: Transaction[] = db.transactions.map((t) => {
     const result = remapCategorisedRow(t);
-    if (result.changed) changed = true;
     const stripped = stripImportDerivedContexts(result.row);
-    if (stripped.changed) changed = true;
+    if (result.changed || stripped.changed) {
+      changed = true;
+      changedTransactions.push(stripped.row);
+    }
     return stripped.row;
   });
+
+  const changedRules: ClassificationRule[] = [];
   const rules: ClassificationRule[] = db.rules.map((r) => {
     const result = remapCategorisedRow(r);
-    if (result.changed) changed = true;
+    if (result.changed) {
+      changed = true;
+      changedRules.push(result.row);
+    }
     return result.row;
   });
+
+  const changedRecurring: RecurringTransaction[] = [];
   const recurring: RecurringTransaction[] = db.recurring.map((r) => {
     const result = remapCategoryOnly(r);
-    if (result.changed) changed = true;
+    if (result.changed) {
+      changed = true;
+      changedRecurring.push(result.row);
+    }
     return result.row;
   });
 
@@ -261,10 +297,12 @@ export function remapLegacyCategories(db: Database): { db: Database; changed: bo
     categories = buildCategorySeed();
   }
 
-  if (!changed) return { db, changed: false };
-
   return {
     db: { ...db, transactions, rules, recurring, categories },
-    changed: true,
+    changed,
+    changedTransactions,
+    changedRules,
+    changedRecurring,
+    categoriesNeedRefresh: needsFullReseed,
   };
 }
