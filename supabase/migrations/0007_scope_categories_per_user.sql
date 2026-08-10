@@ -35,6 +35,25 @@
 -- `like '%references%'` pattern would silently never match anything.
 --
 -- Run this once in the Supabase SQL editor.
+--
+-- Safe to accidentally run twice: if categories_pkey is already the
+-- composite (user_id, id) shape this migration produces, it stops with a
+-- clear message instead of failing confusingly on the "drop primary key"
+-- step (that step's dependency error is real but misleading on a re-run —
+-- the FK-lookup steps above it only know how to find the *old*
+-- single-column foreign keys, so they find nothing to drop, and the
+-- already-correct composite foreign keys are still attached when the
+-- final step tries to drop the primary key anyway).
+do $$
+begin
+  if (
+    select array_length(conkey, 1)
+    from pg_constraint
+    where conrelid = 'categories'::regclass and contype = 'p'
+  ) = 2 then
+    raise exception 'categories.id is already scoped per user — 0007 was already applied. Nothing to do; continue with 0008.';
+  end if;
+end $$;
 
 do $$
 declare
