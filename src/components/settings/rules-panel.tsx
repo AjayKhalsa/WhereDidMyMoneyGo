@@ -6,7 +6,7 @@ import type { ClassificationRule } from "@/lib/domain/types";
 import { sortRules } from "@/lib/engine/learning";
 import { deleteRule, saveRule } from "@/lib/data/actions";
 import { useFinance } from "@/lib/hooks/use-finance";
-import { CategoryPicker, ContextPicker } from "@/components/pickers/pickers";
+import { CategoryPicker, ContextPicker, TypePicker } from "@/components/pickers/pickers";
 import { Button, Chip, EmptyState } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
@@ -165,13 +165,33 @@ function RuleSheet({
           <p className="mb-2 text-[13px] font-medium text-ink-secondary">
             Category
           </p>
-          <CategoryPicker value={categoryId} onChange={setCategoryId} />
+          <CategoryPicker
+            value={categories.groupOf(categoryId)?.id ?? categoryId}
+            onChange={setCategoryId}
+          />
         </div>
+        {categories.leavesOf(categories.groupOf(categoryId)?.id ?? categoryId)
+          .length > 0 && (
+          <div>
+            <p className="mb-2 text-[13px] font-medium text-ink-secondary">
+              Type
+            </p>
+            <TypePicker
+              categoryId={categories.groupOf(categoryId)?.id ?? categoryId}
+              value={categoryId}
+              onChange={setCategoryId}
+            />
+          </div>
+        )}
         <div>
           <p className="mb-2 text-[13px] font-medium text-ink-secondary">
             Tags applied automatically
           </p>
-          <ContextPicker value={contexts} onChange={setContexts} />
+          <ContextPicker
+            value={contexts}
+            categoryId={categoryId}
+            onChange={setContexts}
+          />
         </div>
       </div>
     </Sheet>

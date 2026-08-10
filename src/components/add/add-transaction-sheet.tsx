@@ -43,6 +43,7 @@ import {
   CategoryPicker,
   ContextPicker,
   PersonPicker,
+  TypePicker,
 } from "@/components/pickers/pickers";
 import type { AddSheetOptions } from "./add-sheet-provider";
 
@@ -121,7 +122,7 @@ export function AddTransactionSheet({
   const [text, setText] = useState(options.initialText ?? "");
   const [saving, setSaving] = useState(false);
   const [showDetail, setShowDetail] = useState(Boolean(editing));
-  const [panel, setPanel] = useState<"category" | "context" | null>(null);
+  const [panel, setPanel] = useState<"category" | "type" | "context" | null>(null);
   const [touched, setTouched] = useState<Set<keyof DraftState>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -505,8 +506,19 @@ export function AddTransactionSheet({
             draft={draft}
             parsedConfidence={parsed?.confidence ?? null}
             reasons={parsed?.reasons ?? []}
-            categoryPath={categories.pathOf(draft.categoryId)}
+            categoryName={categories.groupNameOf(draft.categoryId)}
+            typeName={
+              draft.categoryId.includes(".")
+                ? categories.nameOf(draft.categoryId)
+                : undefined
+            }
+            hasTypes={
+              categories.leavesOf(
+                categories.groupOf(draft.categoryId)?.id ?? draft.categoryId,
+              ).length > 0
+            }
             onEditCategory={() => setPanel("category")}
+            onEditType={() => setPanel("type")}
             onEditContexts={() => setPanel("context")}
             showCategory={isExpense || draft.type === "INCOME"}
           />
@@ -562,7 +574,7 @@ export function AddTransactionSheet({
                   markTouched("categoryId");
                 }}
               >
-                {categories.nameOf(alt)}
+                {categories.pathOf(alt)}
               </SelectableChip>
             ))}
           </div>
@@ -754,7 +766,9 @@ export function AddTransactionSheet({
         </AnimatePresence>
       </div>
 
-      {/* Correction panels, stacked above the sheet. */}
+      {/* Correction panels, stacked above the sheet. Progressive: picking a
+          category that has Type children cascades straight into the Type
+          panel, matching the two-step flow the add flow is built around. */}
       <Sheet
         open={panel === "category"}
         onClose={() => setPanel(null)}
@@ -762,6 +776,24 @@ export function AddTransactionSheet({
         size="md"
       >
         <CategoryPicker
+          value={categories.groupOf(draft.categoryId)?.id ?? draft.categoryId}
+          onChange={(id) => {
+            patch({ categoryId: id });
+            markTouched("categoryId");
+            setPanel(categories.leavesOf(id).length > 0 ? "type" : null);
+          }}
+        />
+      </Sheet>
+
+      <Sheet
+        open={panel === "type"}
+        onClose={() => setPanel(null)}
+        title="Type"
+        description={`What kind of ${categories.groupNameOf(draft.categoryId).toLowerCase()}?`}
+        size="md"
+      >
+        <TypePicker
+          categoryId={categories.groupOf(draft.categoryId)?.id ?? draft.categoryId}
           value={draft.categoryId}
           onChange={(id) => {
             patch({ categoryId: id });
@@ -785,6 +817,7 @@ export function AddTransactionSheet({
       >
         <ContextPicker
           value={draft.contexts}
+          categoryId={draft.categoryId}
           onChange={(contexts) => {
             patch({ contexts });
             markTouched("contexts");
@@ -817,16 +850,24 @@ function Interpretation({
   draft,
   parsedConfidence,
   reasons,
-  categoryPath,
+  categoryName,
+  typeName,
+  hasTypes,
   onEditCategory,
+  onEditType,
   onEditContexts,
   showCategory,
 }: {
   draft: DraftState;
   parsedConfidence: number | null;
   reasons: string[];
-  categoryPath: string;
+  categoryName: string;
+  /** The chosen Type's own name, if the category has one and it's set. */
+  typeName?: string;
+  /** Whether the category has any Type children at all. */
+  hasTypes: boolean;
   onEditCategory: () => void;
+  onEditType: () => void;
   onEditContexts: () => void;
   showCategory: boolean;
 }) {
@@ -856,11 +897,22 @@ function Interpretation({
       <div className="flex flex-wrap items-center gap-1.5">
         {showCategory && (
           <SelectableChip selected onClick={onEditCategory}>
-            {categoryPath}
+            {categoryName}
           </SelectableChip>
         )}
+        {showCategory && typeName && (
+          <SelectableChip selected onClick={onEditType}>
+            {typeName}
+          </SelectableChip>
+        )}
+        {showCategory && !typeName && hasTypes && (
+          <SelectableChip onClick={onEditType}>Add type</SelectableChip>
+        )}
         {visibleContexts.map((context) => (
-          <SelectableChip key={context.value} onClick={onEditContexts}>
+          <SelectableChip
+            key={`${context.type}:${context.value}`}
+            onClick={onEditContexts}
+          >
             {contextLabel(context.value)}
           </SelectableChip>
         ))}

@@ -67,7 +67,7 @@ export async function suggestClassification(
 
     return {
       categoryId: data.categoryId,
-      contexts: (data.contexts ?? []).map(makeContext),
+      contexts: (data.contexts ?? []).map((value) => makeContext(value)),
       merchant: data.merchant,
       reason: data.reason ?? "Suggested by the assistant",
     };

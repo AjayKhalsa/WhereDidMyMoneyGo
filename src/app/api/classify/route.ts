@@ -24,9 +24,22 @@ import { CONTEXT_DEFINITIONS } from "@/lib/domain/contexts";
 const MODEL = "gemini-2.0-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
-/** Ids the model is permitted to return, built from the app's own taxonomy. */
-const LEAF_IDS = CATEGORY_TREE.map((cat) => `${cat.id} — ${cat.name}`);
-const VALID_LEAF_IDS = new Set(CATEGORY_TREE.map((cat) => cat.id));
+/**
+ * Ids the model is permitted to return, built from the app's own taxonomy —
+ * both the top-level categories and their Type children, so the model can
+ * name something specific ("transport.cab") when the text supports it, and
+ * fall back to the parent category when it doesn't.
+ */
+const LEAF_IDS = CATEGORY_TREE.flatMap((cat) => [
+  `${cat.id} — ${cat.name}`,
+  ...cat.children.map((child) => `${cat.id}.${child.id} — ${cat.name} › ${child.name}`),
+]);
+const VALID_LEAF_IDS = new Set(
+  CATEGORY_TREE.flatMap((cat) => [
+    cat.id,
+    ...cat.children.map((child) => `${cat.id}.${child.id}`),
+  ]),
+);
 
 const CONTEXT_VALUES = CONTEXT_DEFINITIONS.filter(
   // Weekend and late-night come from the timestamp, never from the text.
@@ -43,10 +56,15 @@ Then choose zero or more context tags from this list:
 ${CONTEXT_VALUES.map((c) => `${c.value} — ${c.description}`).join("\n")}
 
 Rules:
-- The category is *what* was bought (dining, transport, shopping, ...) — it
-  never changes based on who the money was spent with. "With her"/"date"/a
-  partner's name, or "with friends"/"with the gang", never changes the
-  category — they only add the "dating" or "friends" context tag.
+- The category (and, where one is listed, the more specific type after the
+  "." — e.g. "transport.cab") is *what* was bought — it never changes based
+  on who the money was spent with. "With her"/"date"/a partner's name, or
+  "with friends"/"with the gang", never changes the category or type — they
+  only add the "dating" or "friends" context tag.
+- Prefer the specific "category.type" id over the bare category id whenever
+  the text actually supports it (e.g. "cab to work" → "transport.cab", not
+  "transport"). Fall back to the bare category id when it's genuinely
+  ambiguous which type applies.
 - Anything involving drinks or a bar gets the "alcohol" tag as well as its category.
 - If the description genuinely does not indicate what was bought, return "other".
 - Never invent an id. Only use ids from the list above.

@@ -1,5 +1,6 @@
 import { buildCategorySeed } from "@/lib/domain/categories";
 import type {
+  Category,
   ClassificationRule,
   Database,
   RecurringTransaction,
@@ -73,7 +74,20 @@ export const LEGACY_CATEGORY_MAP: Record<string, string> = {
   social: "other",
 };
 
+/**
+ * Ids that are real leaves in the *current* tree — including the Type
+ * children reintroduced under `CATEGORY_TREE` (spec's Category → Type
+ * dimension). Several of those (e.g. "transport.cab", "entertainment.ott")
+ * happen to reuse the exact dotted shape — and even the exact wording — of
+ * the old pre-flatten leaves below, since they're the same real-world
+ * concept coming back as an intentional Type rather than a mistake to
+ * unwind. `isLegacyId` must never treat a currently-valid id as legacy just
+ * because it contains a dot.
+ */
+const CURRENT_CATEGORY_IDS = new Set(buildCategorySeed().map((c) => c.id));
+
 function isLegacyId(id: string): boolean {
+  if (CURRENT_CATEGORY_IDS.has(id)) return false;
   return id.includes(".") || id === "misc" || id === "dating" || id === "social";
 }
 
@@ -189,9 +203,28 @@ function stripImportDerivedContexts(t: Transaction): { row: Transaction; changed
 }
 
 /**
+ * Adds category rows introduced since a database was first seeded — e.g. the
+ * Type children reintroduced under each category — without touching
+ * anything already there. Existing rows are left exactly as they are (a
+ * user's own customisations, if any, are never a target here since only
+ * built-in ids are compared), so this is safe to run on every boot.
+ */
+function addMissingCategories(categories: Category[]): {
+  categories: Category[];
+  changed: boolean;
+} {
+  const existingIds = new Set(categories.map((c) => c.id));
+  const missing = buildCategorySeed().filter((c) => !existingIds.has(c.id));
+  if (missing.length === 0) return { categories, changed: false };
+  return { categories: [...categories, ...missing], changed: true };
+}
+
+/**
  * Pure function: rewrites any legacy category ids found on transactions,
- * rules, or recurring rules, and refreshes `categories` to the current flat
- * seed whenever legacy ids are found anywhere. Returns the same `db`
+ * rules, or recurring rules, and backfills any category rows (built-in
+ * groups or Type children) missing from `db.categories` — whether that's
+ * because legacy ids forced a full reseed, or because a category was added
+ * to the tree after this database was first created. Returns the same `db`
  * reference (and `changed: false`) when there's nothing to do, so callers
  * can skip a write for brand-new users and on every subsequent boot.
  */
@@ -216,12 +249,25 @@ export function remapLegacyCategories(db: Database): { db: Database; changed: bo
     return result.row;
   });
 
-  if (db.categories.some((c) => isLegacyId(c.id))) changed = true;
+  // A full reseed (legacy ids present) always wins over an incremental
+  // backfill — buildCategorySeed() already contains every current id.
+  const needsFullReseed = db.categories.some((c) => isLegacyId(c.id));
+  let categories = db.categories;
+  if (needsFullReseed) {
+    changed = true;
+    categories = buildCategorySeed();
+  } else {
+    const backfilled = addMissingCategories(db.categories);
+    if (backfilled.changed) {
+      changed = true;
+      categories = backfilled.categories;
+    }
+  }
 
   if (!changed) return { db, changed: false };
 
   return {
-    db: { ...db, transactions, rules, recurring, categories: buildCategorySeed() },
+    db: { ...db, transactions, rules, recurring, categories },
     changed: true,
   };
 }
