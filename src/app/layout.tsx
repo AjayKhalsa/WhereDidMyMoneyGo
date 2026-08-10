@@ -9,6 +9,11 @@ export const metadata: Metadata = {
   title: "Where did my money go?",
   description:
     "A personal money assistant that understands the context behind your spending.",
+  icons: {
+    icon: "/piggy.png",
+    shortcut: "/piggy.png",
+    apple: "/piggy.png",
+  },
 };
 
 export const viewport: Viewport = {
