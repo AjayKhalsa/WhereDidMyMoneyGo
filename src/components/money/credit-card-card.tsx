@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CreditCard as CreditCardIcon } from "lucide-react";
+import { endOfMonth, formatDayMonth, monthKey, monthKeyToDate } from "@/lib/domain/dates";
 import { formatMoney, parseAmountInput } from "@/lib/domain/money";
 import type { CreditCardSummary } from "@/lib/engine/analytics";
 import { payCreditCard } from "@/lib/data/actions";
@@ -123,7 +124,7 @@ function CreditCardDetailSheet({
   open: boolean;
   onClose: () => void;
 }) {
-  const { db, monthRows } = useFinance();
+  const { db, now } = useFinance();
   const toast = useToast();
   const [amountText, setAmountText] = useState("");
   const [fromAccountId, setFromAccountId] = useState<string | undefined>(
@@ -131,9 +132,21 @@ function CreditCardDetailSheet({
   );
   const [paying, setPaying] = useState(false);
 
-  const cardRows = monthRows.filter(
-    (t) => t.accountId === summary.account.id || t.toAccountId === summary.account.id,
-  );
+  // A card's activity belongs to its own statement cycle, not whichever
+  // calendar month happens to be selected elsewhere in the app — someone
+  // checking their card on the 2nd still wants to see the spending building
+  // up to the statement due later this week, not last month's cleared one.
+  const statementDay = summary.detail?.statementDay ?? 1;
+  const cycleKey = monthKey(now, statementDay);
+  const cycleStart = monthKeyToDate(cycleKey);
+  const cycleEnd = endOfMonth(cycleKey, statementDay);
+  const cardRows = (db?.transactions ?? []).filter((t) => {
+    if (t.accountId !== summary.account.id && t.toAccountId !== summary.account.id) {
+      return false;
+    }
+    const date = new Date(t.date);
+    return date >= cycleStart && date <= cycleEnd;
+  });
 
   const amount = parseAmountInput(amountText) ?? 0;
   const canPay = amount > 0 && Boolean(fromAccountId) && !paying;
@@ -235,8 +248,13 @@ function CreditCardDetailSheet({
         </section>
 
         <section>
-          <h3 className="mb-2 px-2.5 text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">
-            Activity this month
+          <h3 className="mb-2 flex items-baseline justify-between gap-3 px-2.5">
+            <span className="text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">
+              Activity this cycle
+            </span>
+            <span className="text-[12px] text-ink-tertiary tnum">
+              {formatDayMonth(cycleStart)} – {formatDayMonth(cycleEnd)}
+            </span>
           </h3>
           <TransactionList
             transactions={cardRows}

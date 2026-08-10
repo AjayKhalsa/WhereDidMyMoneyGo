@@ -15,6 +15,7 @@ import { AnimatedAmount, Amount } from "@/components/ui/amount";
 import { ProgressTrack } from "@/components/ui/charts";
 import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { LiquidCashStrip } from "./liquid-cash-strip";
 import { SafeToSpendExplainer } from "./safe-to-spend-explainer";
 
 /**
@@ -87,6 +88,8 @@ export function FinancialHero() {
             "Based on your income, investments, upcoming bills and committed card spending."
           )}
         </p>
+
+        <LiquidCashStrip />
       </div>
 
       {/* Month progress — quiet context, never the headline. */}
