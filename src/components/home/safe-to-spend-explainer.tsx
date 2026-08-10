@@ -16,9 +16,13 @@ import { cn } from "@/lib/utils";
  *
  * Two totals, in a deliberate order. Safe to spend comes first and reads as
  * a sentence: cash in bank, less what's owed on cards, equals what's yours.
- * Monthly surplus follows, clearly labelled as a budgeting view — it used to
- * be the headline, which is exactly how the app ended up telling someone
- * they could spend ₹56k while holding ₹2.4k.
+ * It used to be an income-minus-expenses figure, which is how the app ended
+ * up telling someone they could spend ₹56k while holding ₹2.4k.
+ *
+ * "This month" follows, and always shows its two endpoints. That figure is a
+ * *change* in position over the cycle, so it can exceed the cash on hand
+ * whenever card debt was paid down — printing it alone invites exactly the
+ * "how is my surplus bigger than my bank balance?" confusion it caused once.
  */
 
 export function SafeToSpendExplainer() {
@@ -28,6 +32,9 @@ export function SafeToSpendExplainer() {
     monthlySurplusBreakdown,
     safeAmount,
     monthlySurplus,
+    positionAtCycleStart,
+    positionNow,
+    cardDebtCleared,
     dailyAllowance,
     remainingDays,
     projectedMonthEndSpend,
@@ -62,17 +69,37 @@ export function SafeToSpendExplainer() {
           This month
         </h3>
         <p className="mb-1 text-[13px] leading-relaxed text-ink-secondary">
-          A different question: of what you earned this cycle, how much
-          isn&rsquo;t already allocated? Useful for budgeting — but it&rsquo;s
-          not cash in hand, because some of this month&rsquo;s money went to
-          last month&rsquo;s card bill.
+          A different question: how much did this cycle move you forward? This
+          is a change, not a balance — so it can be larger than your bank
+          balance.
         </p>
         <BreakdownList lines={monthlySurplusBreakdown} />
-        <div className="mt-3 flex items-baseline justify-between gap-4 rounded-xl bg-surface-sunken p-4">
-          <span className="text-[14.5px] font-medium text-ink">
-            Monthly surplus
-          </span>
-          <Amount value={monthlySurplus} size="lg" signed />
+        <div className="mt-3 rounded-xl bg-surface-sunken p-4">
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="text-[14.5px] font-medium text-ink">
+              {monthlySurplus >= 0 ? "Better off by" : "Worse off by"}
+            </span>
+            <Amount value={Math.abs(monthlySurplus)} size="lg" />
+          </div>
+          <div className="mt-3 space-y-2 border-t border-line pt-3">
+            <Line
+              label="Where you started"
+              value={formatMoney(positionAtCycleStart)}
+              hint="Cash minus card debt when this cycle began"
+            />
+            <Line
+              label="Where you are now"
+              value={formatMoney(positionNow)}
+              emphasis
+            />
+          </div>
+          {cardDebtCleared > 0 && (
+            <p className="mt-3 text-[12.5px] leading-relaxed text-ink-secondary">
+              {formatMoney(cardDebtCleared)} of this went to clearing card debt
+              rather than building up in your account — which is why it&rsquo;s
+              larger than your bank balance.
+            </p>
+          )}
         </div>
       </section>
 
