@@ -37,7 +37,7 @@ import { pluralise } from "@/lib/utils";
  */
 
 export default function TransactionsPage() {
-  const { status, db, now, categories } = useFinance();
+  const { status, db, now, categories, cycleStartDay } = useFinance();
 
   const [query, setQuery] = useState("");
   const [barFilter, setBarFilter] = useState<TransactionFilter>({});
@@ -51,17 +51,18 @@ export default function TransactionsPage() {
         categories: db?.categories ?? [],
         accounts: db?.accounts ?? [],
         now,
+        cycleStartDay,
       }),
-    [query, db?.categories, db?.accounts, now],
+    [query, db?.categories, db?.accounts, now, cycleStartDay],
   );
 
   const filter = useMemo(
     () =>
       mergeFilters(
-        { ...rangeToFilter(range, now), ...barFilter },
+        { ...rangeToFilter(range, now, cycleStartDay), ...barFilter },
         parsed.filter,
       ),
-    [range, now, barFilter, parsed.filter],
+    [range, now, cycleStartDay, barFilter, parsed.filter],
   );
 
   const results = useMemo(

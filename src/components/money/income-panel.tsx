@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { formatMonthLabel, previousMonths } from "@/lib/domain/dates";
+import { UNCATEGORISED_ID } from "@/lib/domain/categories";
+import { formatFullDate, formatMonthLabel, previousMonths } from "@/lib/domain/dates";
 import { formatMoney, parseAmountInput } from "@/lib/domain/money";
 import type { IncomeSource } from "@/lib/domain/types";
 import { monthTotals } from "@/lib/engine/analytics";
@@ -15,10 +16,10 @@ import { expectedMonthlyIncome } from "@/lib/engine/safe-to-spend";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { Amount } from "@/components/ui/amount";
 import { MoneyField, TextField } from "@/components/ui/fields";
-import { Button, Chip, Divider } from "@/components/ui/primitives";
+import { Button, Chip, Divider, SelectableChip } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
-import { AccountPicker } from "@/components/pickers/pickers";
+import { AccountPicker, CategoryPicker, TypePicker } from "@/components/pickers/pickers";
 import { createId } from "@/lib/utils";
 import { MoneyRow } from "./disclosure-panel";
 
@@ -267,25 +268,51 @@ function OneOffIncomeSheet({
   open: boolean;
   onClose: () => void;
 }) {
-  const { db } = useFinance();
+  const { db, categories } = useFinance();
   const toast = useToast();
   const [amount, setAmount] = useState("");
   const [label, setLabel] = useState("Bonus");
   const [accountId, setAccountId] = useState<string | undefined>(
     () => db?.accounts.find((a) => a.type === "BANK")?.id,
   );
+  const [categoryId, setCategoryId] = useState(UNCATEGORISED_ID);
+  const [reversesTransactionId, setReversesTransactionId] = useState<
+    string | undefined
+  >(undefined);
 
   const value = parseAmountInput(amount) ?? 0;
+  const isRefund = label === "Refund";
+
+  const recentExpenses = db?.transactions
+    ? (() => {
+        const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+        return db.transactions
+          .filter(
+            (t) => t.type === "EXPENSE" && new Date(t.date).getTime() >= cutoff,
+          )
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .slice(0, 30);
+      })()
+    : [];
 
   async function handleSave() {
     if (value <= 0) return;
-    await addIncome({ amount: value, description: label, accountId });
+    await addIncome({
+      amount: value,
+      description: label,
+      accountId,
+      categoryId: isRefund ? categoryId : undefined,
+      isRefund,
+      reversesTransactionId: isRefund ? reversesTransactionId : undefined,
+    });
     toast.show({
       tone: "success",
       title: `${formatMoney(value)} recorded`,
       detail: label,
     });
     setAmount("");
+    setCategoryId(UNCATEGORISED_ID);
+    setReversesTransactionId(undefined);
     onClose();
   }
 
@@ -332,6 +359,57 @@ function OneOffIncomeSheet({
             onChange={setAccountId}
           />
         </div>
+
+        {isRefund && (
+          <div className="space-y-3 rounded-xl border border-line p-3.5">
+            <div className="space-y-1.5">
+              <p className="text-[13px] font-medium text-ink-secondary">
+                Category
+              </p>
+              <CategoryPicker
+                value={categories.groupOf(categoryId)?.id ?? categoryId}
+                onChange={setCategoryId}
+              />
+              {categories.leavesOf(
+                categories.groupOf(categoryId)?.id ?? categoryId,
+              ).length > 0 && (
+                <TypePicker
+                  categoryId={categories.groupOf(categoryId)?.id ?? categoryId}
+                  value={categoryId}
+                  onChange={setCategoryId}
+                />
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <p className="text-[12.5px] text-ink-tertiary">
+                Link the expense it reverses, so it nets out of that category
+                instead of counting as new income. Optional.
+              </p>
+              <div className="flex gap-1.5 overflow-x-auto pb-1">
+                {recentExpenses.map((t) => (
+                  <SelectableChip
+                    key={t.id}
+                    selected={reversesTransactionId === t.id}
+                    onClick={() =>
+                      setReversesTransactionId(
+                        reversesTransactionId === t.id ? undefined : t.id,
+                      )
+                    }
+                  >
+                    {t.description || t.merchant || "Expense"} ·{" "}
+                    {formatMoney(t.amount)} · {formatFullDate(t.date)}
+                  </SelectableChip>
+                ))}
+                {recentExpenses.length === 0 && (
+                  <p className="text-[12.5px] text-ink-tertiary">
+                    No recent expenses to link.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Sheet>
   );

@@ -45,6 +45,8 @@ export interface Account {
   /** Pre-selected as "Paid with" for new expenses. At most one account at a time. */
   isDefault?: boolean;
   createdAt: string;
+  /** When the balance was last confirmed to match the real account (BANK/CASH only). */
+  lastReconciledAt?: string;
 }
 
 export interface CreditCardDetail {
@@ -120,6 +122,22 @@ export interface Transaction {
 
   /** For INVESTMENT: which investment vehicle this contributes to. */
   investmentId?: string;
+  /** For TRANSFER: which goal this contribution counts toward. */
+  goalId?: string;
+
+  /**
+   * True when this INCOME row is money credited back against earlier
+   * spending — a refund, return, or cashback — rather than new income.
+   * Analytics nets it against `categoryId`'s spend instead of counting it
+   * toward `totals.income`. Only meaningful on an INCOME row.
+   */
+  isRefund?: boolean;
+  /**
+   * The specific EXPENSE this refund reverses, when a likely match was
+   * found (or the user linked one) at entry time. Optional — a refund
+   * still nets against `categoryId` even when this is unset.
+   */
+  reversesTransactionId?: string;
 
   notes?: string;
   /** Set when this row was materialised from a recurring rule. */

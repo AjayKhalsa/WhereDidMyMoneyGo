@@ -2,10 +2,20 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
+import { formatFullDate } from "@/lib/domain/dates";
 import { formatMoney, parseAmountInput } from "@/lib/domain/money";
 import type { Account, AccountType } from "@/lib/domain/types";
-import { accountBalance, creditCardOutstanding } from "@/lib/engine/analytics";
-import { deleteAccount, saveAccount, saveCreditCardDetail } from "@/lib/data/actions";
+import {
+  accountBalance,
+  creditCardCreditBalance,
+  creditCardOutstanding,
+} from "@/lib/engine/analytics";
+import {
+  deleteAccount,
+  recordBalanceAdjustment,
+  saveAccount,
+  saveCreditCardDetail,
+} from "@/lib/data/actions";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { Amount } from "@/components/ui/amount";
 import { MoneyField, SelectField, TextField } from "@/components/ui/fields";
@@ -49,8 +59,13 @@ export function AccountsPanel() {
       <div className="-mx-3">
         {accounts.map((account) => {
           const isCard = account.type === "CREDIT_CARD";
+          const creditBalance = isCard
+            ? creditCardCreditBalance(transactions, account.id)
+            : 0;
           const value = isCard
-            ? creditCardOutstanding(transactions, account.id)
+            ? creditBalance > 0
+              ? creditBalance
+              : creditCardOutstanding(transactions, account.id)
             : accountBalance(account, transactions);
 
           return (
@@ -59,7 +74,9 @@ export function AccountsPanel() {
               label={account.name}
               sublabel={
                 isCard
-                  ? "Outstanding"
+                  ? creditBalance > 0
+                    ? "Credit"
+                    : "Outstanding"
                   : account.hint
                     ? `•••• ${account.hint}`
                     : undefined
@@ -73,7 +90,13 @@ export function AccountsPanel() {
                   value={value}
                   size="sm"
                   signed
-                  className={isCard && value > 0 ? "text-warning" : undefined}
+                  className={
+                    isCard && creditBalance > 0
+                      ? "text-positive"
+                      : isCard && value > 0
+                        ? "text-warning"
+                        : undefined
+                  }
                 />
               }
             />
@@ -132,6 +155,8 @@ function AccountSheet({
     String(detail?.statementDay ?? 20),
   );
   const [dueDay, setDueDay] = useState(String(detail?.dueDay ?? 15));
+  const [reconciling, setReconciling] = useState(false);
+  const [actualBalanceText, setActualBalanceText] = useState("");
 
   // Re-seed local state whenever a different account is opened.
   const [lastId, setLastId] = useState(account?.id);
@@ -145,6 +170,45 @@ function AccountSheet({
     setLimit(detail ? String(detail.creditLimit / 100) : "");
     setStatementDay(String(detail?.statementDay ?? 20));
     setDueDay(String(detail?.dueDay ?? 15));
+    setReconciling(false);
+    setActualBalanceText("");
+  }
+
+  // Looked up live (not just the `account` prop) so "Last reconciled" and
+  // the balance figure stay fresh immediately after recording an
+  // adjustment, without needing to close and reopen the sheet.
+  const liveAccount = db?.accounts.find((a) => a.id === account?.id) ?? account;
+  const expectedBalance = liveAccount
+    ? accountBalance(liveAccount, db?.transactions ?? [])
+    : 0;
+  const actualBalance = parseAmountInput(actualBalanceText);
+  const difference =
+    actualBalance !== null ? actualBalance - expectedBalance : null;
+
+  async function handleMarkReconciled() {
+    if (!liveAccount) return;
+    await saveAccount({
+      ...liveAccount,
+      lastReconciledAt: new Date().toISOString(),
+    });
+    toast.show({ tone: "success", title: "Account reconciled" });
+    setReconciling(false);
+    setActualBalanceText("");
+  }
+
+  async function handleRecordAdjustment() {
+    if (!liveAccount || difference === null || difference === 0) return;
+    await recordBalanceAdjustment({
+      accountId: liveAccount.id,
+      difference,
+    });
+    toast.show({
+      tone: "success",
+      title: `${difference > 0 ? "+" : "−"}${formatMoney(Math.abs(difference))} recorded`,
+      detail: "Balance adjustment",
+    });
+    setReconciling(false);
+    setActualBalanceText("");
   }
 
   async function handleSave() {
@@ -288,15 +352,76 @@ function AccountSheet({
           </>
         )}
 
-        {account && account.type !== "CREDIT_CARD" && (
-          <p className="text-[12.5px] text-ink-tertiary">
-            Current balance:{" "}
-            <span className="font-medium text-ink-secondary tnum">
-              {formatMoney(
-                accountBalance(account, db?.transactions ?? []),
-              )}
-            </span>
-          </p>
+        {liveAccount && (liveAccount.type === "BANK" || liveAccount.type === "CASH") && (
+          <div className="space-y-3 rounded-xl bg-surface-sunken p-3.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-[12.5px] text-ink-secondary">
+                Current balance
+              </p>
+              <span className="font-medium text-ink-secondary tnum text-[13px]">
+                {formatMoney(expectedBalance)}
+              </span>
+            </div>
+            <p className="text-[12px] text-ink-tertiary">
+              {liveAccount.lastReconciledAt
+                ? `Last reconciled ${formatFullDate(liveAccount.lastReconciledAt)}`
+                : "Never reconciled against the real account"}
+            </p>
+
+            {!reconciling ? (
+              <Button size="sm" onClick={() => setReconciling(true)}>
+                Reconcile
+              </Button>
+            ) : (
+              <div className="space-y-2.5 border-t border-line pt-3">
+                <MoneyField
+                  label="Actual balance"
+                  hint="What your bank or wallet actually shows right now."
+                  value={actualBalanceText}
+                  onChange={(e) => setActualBalanceText(e.target.value)}
+                  data-autofocus
+                />
+                {actualBalance !== null && (
+                  <p className="text-[12.5px] text-ink-secondary">
+                    {difference === 0
+                      ? "Matches — nothing to record."
+                      : `Difference: ${difference! > 0 ? "+" : "−"}${formatMoney(Math.abs(difference!))}`}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="quiet"
+                    onClick={() => {
+                      setReconciling(false);
+                      setActualBalanceText("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  {actualBalance !== null && difference === 0 && (
+                    <Button size="sm" variant="primary" onClick={handleMarkReconciled}>
+                      Mark reconciled
+                    </Button>
+                  )}
+                  {actualBalance !== null && difference !== 0 && (
+                    <Button size="sm" variant="primary" onClick={handleRecordAdjustment}>
+                      Record {difference! > 0 ? "+" : "−"}
+                      {formatMoney(Math.abs(difference!))}
+                    </Button>
+                  )}
+                </div>
+                {actualBalance !== null && difference !== 0 && (
+                  <p className="text-[12px] leading-relaxed text-ink-tertiary">
+                    If you know which transaction is missing, wrong, or
+                    duplicated, it&rsquo;s usually better to go fix that
+                    directly instead — Cancel here and edit it from
+                    Transactions.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </Sheet>

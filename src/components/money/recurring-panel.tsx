@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, Plus } from "lucide-react";
-import { formatDayMonth } from "@/lib/domain/dates";
+import { formatDayMonth, formatFullDate } from "@/lib/domain/dates";
 import { formatMoney, parseAmountInput } from "@/lib/domain/money";
 import type {
   RecurringFrequency,
@@ -15,6 +15,7 @@ import {
   recurringStatuses,
   type RecurringStatus,
 } from "@/lib/engine/recurring";
+import { detectRecurringCandidates, type RecurringCandidate } from "@/lib/engine/recurring-detection";
 import {
   deleteRecurring,
   markRecurringPaid,
@@ -59,6 +60,7 @@ export function RecurringPanel() {
   const { db, month, now, cycleStartDay } = useFinance();
   const [editing, setEditing] = useState<RecurringTransaction | null>(null);
   const [creating, setCreating] = useState(false);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   const rules = db?.recurring ?? [];
   const statuses = recurringStatuses(rules, db?.transactions ?? [], month, now, cycleStartDay);
@@ -66,8 +68,68 @@ export function RecurringPanel() {
   const activeCount = rules.filter((r) => r.isActive).length;
   const live = isLiveMonth(month, now, cycleStartDay);
 
+  const candidates = useMemo(
+    () =>
+      detectRecurringCandidates(db?.transactions ?? [], rules, now).filter(
+        (c) => !dismissed.has(c.key),
+      ),
+    [db?.transactions, rules, now, dismissed],
+  );
+
+  function openCandidate(candidate: RecurringCandidate) {
+    setEditing({
+      id: createId("rec"),
+      description: candidate.occurrences[0]!.description,
+      amount: candidate.suggestedAmount,
+      frequency: candidate.suggestedFrequency,
+      dayOfPeriod: candidate.suggestedDayOfPeriod,
+      categoryId: candidate.categoryId,
+      accountId: candidate.accountId,
+      type: "EXPENSE",
+      merchant: candidate.merchant,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
   return (
     <>
+      {candidates.length > 0 && (
+        <div className="-mx-3 space-y-2 px-3">
+          {candidates.map((candidate) => (
+            <div
+              key={candidate.key}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-accent/25 bg-accent-soft/50 p-3"
+            >
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-ink">
+                  {candidate.occurrences[0]!.description} looks recurring
+                </span>
+                <span className="mt-0.5 block text-[12px] text-ink-secondary">
+                  {candidate.occurrences.length} times, ~{formatMoney(candidate.suggestedAmount)}{" "}
+                  every {candidate.suggestedFrequency === "WEEKLY" ? "week" : "month"} — last on{" "}
+                  {formatFullDate(candidate.occurrences[0]!.date)}
+                </span>
+              </span>
+              <span className="flex shrink-0 gap-1.5">
+                <Button
+                  size="sm"
+                  variant="quiet"
+                  onClick={() =>
+                    setDismissed((prev) => new Set(prev).add(candidate.key))
+                  }
+                >
+                  No
+                </Button>
+                <Button size="sm" variant="primary" onClick={() => openCandidate(candidate)}>
+                  Add as recurring
+                </Button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="-mx-3">
         {statuses.map((status) => (
           <RecurringRow
@@ -238,6 +300,10 @@ function RecurringSheet({
   }
 
   const value = parseAmountInput(amount) ?? 0;
+  // A candidate opened from "Add as recurring" carries a full, non-null
+  // `rule` (so the sheet prefills), but it isn't in the store yet — only a
+  // rule that already exists in `db.recurring` is a real edit.
+  const isPersisted = Boolean(rule && db?.recurring.some((r) => r.id === rule.id));
 
   async function handleSave() {
     if (!description.trim() || value <= 0) return;
@@ -254,7 +320,7 @@ function RecurringSheet({
       isActive,
       createdAt: rule?.createdAt ?? new Date().toISOString(),
     });
-    toast.show({ tone: "success", title: rule ? "Bill updated" : "Bill added" });
+    toast.show({ tone: "success", title: isPersisted ? "Bill updated" : "Bill added" });
     onClose();
   }
 
@@ -297,7 +363,7 @@ function RecurringSheet({
       size="sm"
       footer={
         <div className="flex gap-2">
-          {rule && (
+          {isPersisted && (
             <Button variant="danger" onClick={handleDelete}>
               Delete
             </Button>

@@ -297,20 +297,38 @@ export class SupabaseRepository implements Repository {
       await this.clearForUser(userId);
 
       await this.saveProfile(db.profile);
-      // Parents before children, so FKs never point at a row that isn't there yet.
+      // Parents before children, so FKs never point at a row that isn't there
+      // yet. `goals` moved here (ahead of transactions) because transactions
+      // can now carry a goal_id FK (0009_add_goal_contribution_link.sql).
       for (const collection of [
         "accounts",
         "categories",
         "investments",
         "recurring",
+        "goals",
       ] as const) {
         for (const row of db[collection]) await this.putOne(collection, row as never, userId);
       }
-      for (const row of db.transactions) await this.putOne("transactions", row, userId);
+      // reverses_transaction_id (0008_add_refund_fields.sql) is a
+      // self-referencing FK on transactions — a refund row can point at an
+      // expense row that hasn't been upserted yet in id order. Two passes:
+      // first every transaction with that field omitted, then a second pass
+      // that fills it in once every row it could point to already exists.
+      for (const row of db.transactions) {
+        await this.putOne(
+          "transactions",
+          { ...row, reversesTransactionId: undefined },
+          userId,
+        );
+      }
+      for (const row of db.transactions) {
+        if (row.reversesTransactionId) {
+          await this.putOne("transactions", row, userId);
+        }
+      }
       for (const row of db.rules) await this.putOne("rules", row, userId);
       for (const collection of [
         "creditCards",
-        "goals",
         "incomeSources",
         "people",
       ] as const) {

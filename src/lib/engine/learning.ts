@@ -4,7 +4,16 @@ import type {
   ClassificationRule,
   TransactionContext,
 } from "@/lib/domain/types";
-import { MERCHANTS, STOP_WORDS } from "./lexicon";
+import { CONTEXT_KEYWORDS, MERCHANTS, STOP_WORDS } from "./lexicon";
+
+/**
+ * Context words ("birthday", "work", "solo", ...) describe *who/why*, not
+ * *what* — they're exactly the words most likely to recur across otherwise
+ * unrelated purchases, so letting one become a rule pattern risks two
+ * unrelated categories silently overwriting each other's rule the next time
+ * either gets corrected.
+ */
+const CONTEXT_WORDS = new Set(CONTEXT_KEYWORDS.flatMap((k) => k.keywords));
 
 /**
  * Personal learning (spec §14).
@@ -39,7 +48,9 @@ export function deriveRulePattern(description: string): string | null {
   for (const token of tokens) {
     if (MERCHANTS.some((m) => m.aliases.includes(token))) return token;
   }
-  return tokens.reduce((best, t) => (t.length > best.length ? t : best));
+  const candidates = tokens.filter((t) => !CONTEXT_WORDS.has(t));
+  if (candidates.length === 0) return null;
+  return candidates.reduce((best, t) => (t.length > best.length ? t : best));
 }
 
 /** Contexts worth storing on a rule — timestamp-derived ones are not. */

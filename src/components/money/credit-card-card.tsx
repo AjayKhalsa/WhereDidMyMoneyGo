@@ -37,7 +37,7 @@ export function CreditCardCard({
   compact?: boolean;
 }) {
   const [detailOpen, setDetailOpen] = useState(false);
-  const { daysUntilDue, outstanding, spentThisMonth, utilisation } = summary;
+  const { daysUntilDue, outstanding, creditBalance, spentThisMonth, utilisation } = summary;
 
   const urgent = daysUntilDue !== null && daysUntilDue <= 5 && outstanding > 0;
 
@@ -64,14 +64,27 @@ export function CreditCardCard({
         </div>
 
         <div className="mt-3">
-          <Amount value={outstanding} size="xl" />
-          <p className="mt-1 text-[13px] text-ink-secondary">Outstanding</p>
+          <Amount
+            value={creditBalance > 0 ? creditBalance : outstanding}
+            size="xl"
+            className={creditBalance > 0 ? "text-positive" : undefined}
+          />
+          <p className="mt-1 text-[13px] text-ink-secondary">
+            {creditBalance > 0 ? "Credit" : "Outstanding"}
+          </p>
         </div>
 
         {outstanding > 0 && (
           <p className="mt-2.5 text-[13px] leading-relaxed text-ink-secondary">
             You&rsquo;ve already spent this money — it just hasn&rsquo;t left
             your account yet.
+          </p>
+        )}
+
+        {creditBalance > 0 && (
+          <p className="mt-2.5 text-[13px] leading-relaxed text-ink-secondary">
+            You&rsquo;ve paid more than you owe — this comes off what you charge
+            next.
           </p>
         )}
 
@@ -192,49 +205,53 @@ function CreditCardDetailSheet({
     >
       <div className="space-y-6 py-1">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Figure label="Outstanding" value={summary.outstanding} emphasis />
+          {summary.creditBalance > 0 ? (
+            <Figure label="Credit" value={summary.creditBalance} emphasis tone="positive" />
+          ) : (
+            <Figure label="Outstanding" value={summary.outstanding} emphasis />
+          )}
           <Figure label="Spent this month" value={summary.spentThisMonth} />
           {summary.detail && (
             <Figure label="Credit limit" value={summary.detail.creditLimit} />
           )}
         </div>
 
-        <section className="rounded-xl border border-line bg-surface p-4">
-          <h3 className="text-[14px] font-medium text-ink">Pay this card</h3>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">
-            Recorded as a transfer between your accounts. Your spending total
-            will not change — those purchases were counted when you made them.
-          </p>
+        {summary.outstanding > 0 && (
+          <section className="rounded-xl border border-line bg-surface p-4">
+            <h3 className="text-[14px] font-medium text-ink">Pay this card</h3>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">
+              Recorded as a transfer between your accounts. Your spending total
+              will not change — those purchases were counted when you made them.
+            </p>
 
-          <div className="mt-3.5 space-y-3">
-            <MoneyField
-              label="Amount"
-              value={amountText}
-              onChange={(e) => setAmountText(e.target.value)}
-              placeholder={String(Math.round(summary.outstanding / 100))}
-            />
-            <div className="space-y-1.5">
-              <p className="text-[13px] font-medium text-ink-secondary">
-                Paying from
-              </p>
-              <AccountPicker
-                accounts={(db?.accounts ?? []).filter(
-                  (a) => a.type === "BANK" || a.type === "CASH",
-                )}
-                value={fromAccountId}
-                onChange={setFromAccountId}
+            <div className="mt-3.5 space-y-3">
+              <MoneyField
+                label="Amount"
+                value={amountText}
+                onChange={(e) => setAmountText(e.target.value)}
+                placeholder={String(Math.round(summary.outstanding / 100))}
               />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="primary"
-                onClick={handlePay}
-                disabled={!canPay}
-                className="flex-1"
-              >
-                {paying ? "Recording…" : `Pay ${amount > 0 ? formatMoney(amount) : ""}`}
-              </Button>
-              {summary.outstanding > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[13px] font-medium text-ink-secondary">
+                  Paying from
+                </p>
+                <AccountPicker
+                  accounts={(db?.accounts ?? []).filter(
+                    (a) => a.type === "BANK" || a.type === "CASH",
+                  )}
+                  value={fromAccountId}
+                  onChange={setFromAccountId}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="primary"
+                  onClick={handlePay}
+                  disabled={!canPay}
+                  className="flex-1"
+                >
+                  {paying ? "Recording…" : `Pay ${amount > 0 ? formatMoney(amount) : ""}`}
+                </Button>
                 <Button
                   onClick={() =>
                     setAmountText(String(Math.round(summary.outstanding / 100)))
@@ -242,10 +259,10 @@ function CreditCardDetailSheet({
                 >
                   Pay full
                 </Button>
-              )}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         <section>
           <h3 className="mb-2 flex items-baseline justify-between gap-3 px-2.5">
@@ -271,10 +288,12 @@ function Figure({
   label,
   value,
   emphasis,
+  tone,
 }: {
   label: string;
   value: number;
   emphasis?: boolean;
+  tone?: "positive";
 }) {
   return (
     <div className="min-w-0">
@@ -283,7 +302,9 @@ function Figure({
         <Amount
           value={value}
           size={emphasis ? "lg" : "md"}
-          className={cn(!emphasis && "text-ink-secondary")}
+          className={cn(
+            tone === "positive" ? "text-positive" : !emphasis && "text-ink-secondary",
+          )}
         />
       </div>
     </div>

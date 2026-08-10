@@ -11,6 +11,7 @@ import { Amount } from "@/components/ui/amount";
 import { ProgressTrack } from "@/components/ui/charts";
 import { MoneyField, TextField } from "@/components/ui/fields";
 import { Button, Card } from "@/components/ui/primitives";
+import { AccountPicker } from "@/components/pickers/pickers";
 import { Sheet } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
 
@@ -105,6 +106,7 @@ export function GoalEditSheet({
   onClose: () => void;
 }) {
   const toast = useToast();
+  const { db } = useFinance();
   const [name, setName] = useState(goal.name);
   const [target, setTarget] = useState(String(goal.targetAmount / 100));
   const [current, setCurrent] = useState(String(goal.currentAmount / 100));
@@ -113,6 +115,10 @@ export function GoalEditSheet({
   );
   const [targetDate, setTargetDate] = useState(goal.targetDate ?? "");
   const [topUp, setTopUp] = useState("");
+  const [fromAccountId, setFromAccountId] = useState<string | undefined>(
+    () => db?.accounts.find((a) => a.isDefault)?.id,
+  );
+  const [contributing, setContributing] = useState(false);
 
   async function handleSave() {
     await saveGoal({
@@ -127,16 +133,34 @@ export function GoalEditSheet({
     onClose();
   }
 
+  const topUpAmount = parseAmountInput(topUp) ?? 0;
+  const canContribute = topUpAmount > 0 && Boolean(fromAccountId) && !contributing;
+
   async function handleTopUp() {
-    const amount = parseAmountInput(topUp);
-    if (!amount || amount <= 0) return;
-    await contributeToGoal(goal.id, amount);
-    toast.show({
-      tone: "success",
-      title: `${formatMoney(amount)} added to ${goal.name}`,
-    });
-    setTopUp("");
-    onClose();
+    if (!canContribute || !fromAccountId) return;
+    setContributing(true);
+    try {
+      await contributeToGoal({
+        goalId: goal.id,
+        amount: topUpAmount,
+        fromAccountId,
+      });
+      toast.show({
+        tone: "success",
+        title: `${formatMoney(topUpAmount)} added to ${goal.name}`,
+        detail: "Recorded as a transfer — not new spending",
+      });
+      setTopUp("");
+      onClose();
+    } catch (error) {
+      toast.show({
+        tone: "error",
+        title: "Couldn't record that contribution",
+        detail: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setContributing(false);
+    }
   }
 
   async function handleDelete() {
@@ -171,21 +195,30 @@ export function GoalEditSheet({
               of {formatMoney(goal.targetAmount)}
             </span>
           </div>
-          <div className="mt-3 flex gap-2">
-            <MoneyField
-              value={topUp}
-              onChange={(e) => setTopUp(e.target.value)}
-              placeholder="Add money"
-              aria-label={`Add money to ${goal.name}`}
-              wrapperClassName="flex-1"
+          <div className="mt-3 space-y-2">
+            <div className="flex gap-2">
+              <MoneyField
+                value={topUp}
+                onChange={(e) => setTopUp(e.target.value)}
+                placeholder="Add money"
+                aria-label={`Add money to ${goal.name}`}
+                wrapperClassName="flex-1"
+              />
+              <Button
+                onClick={handleTopUp}
+                disabled={!canContribute}
+                className="h-11 shrink-0"
+              >
+                {contributing ? "Adding…" : "Add"}
+              </Button>
+            </div>
+            <AccountPicker
+              accounts={(db?.accounts ?? []).filter(
+                (a) => a.type === "BANK" || a.type === "CASH",
+              )}
+              value={fromAccountId}
+              onChange={setFromAccountId}
             />
-            <Button
-              onClick={handleTopUp}
-              disabled={!parseAmountInput(topUp)}
-              className="h-11 shrink-0"
-            >
-              Add
-            </Button>
           </div>
         </div>
 

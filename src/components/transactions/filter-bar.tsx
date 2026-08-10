@@ -2,7 +2,7 @@
 
 import { Search, X } from "lucide-react";
 import { CONTEXT_DEFINITIONS } from "@/lib/domain/contexts";
-import { monthKey, monthKeyToDate, toDateInputValue } from "@/lib/domain/dates";
+import { endOfMonth, monthKey, monthKeyToDate, toDateInputValue } from "@/lib/domain/dates";
 import type { TransactionType } from "@/lib/domain/types";
 import type { ParsedTerm, TransactionFilter } from "@/lib/engine/search";
 import { useFinance } from "@/lib/hooks/use-finance";
@@ -31,6 +31,7 @@ const RANGE_OPTIONS: { value: RangePreset; label: string }[] = [
 export function rangeToFilter(
   preset: RangePreset,
   now: Date,
+  cycleStartDay = 1,
 ): Pick<TransactionFilter, "from" | "to"> {
   if (preset === "all") return {};
   if (preset === "year") {
@@ -40,12 +41,17 @@ export function rangeToFilter(
     };
   }
   const monthsBack = preset === "quarter" ? 2 : 0;
-  const start = monthKeyToDate(
-    monthKey(new Date(now.getFullYear(), now.getMonth() - monthsBack, 1)),
-  );
+  const thisCycle = monthKey(now, cycleStartDay);
+  const startKey =
+    monthsBack === 0
+      ? thisCycle
+      : monthKey(
+          new Date(now.getFullYear(), now.getMonth() - monthsBack, 1),
+          cycleStartDay,
+        );
   return {
-    from: toDateInputValue(start),
-    to: toDateInputValue(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+    from: toDateInputValue(monthKeyToDate(startKey)),
+    to: toDateInputValue(endOfMonth(thisCycle, cycleStartDay)),
   };
 }
 
@@ -198,29 +204,41 @@ export function FilterBar({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div
-          role="radiogroup"
-          aria-label="Date range"
-          className="flex flex-wrap gap-1.5"
-        >
-          {RANGE_OPTIONS.map((option) => {
-            const selected = option.value === range;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                disabled={overridden.has("date")}
-                onClick={() => onRangeChange(option.value)}
-                className="focus:outline-none disabled:opacity-40"
-              >
-                <Chip tone={selected ? "accent" : "neutral"}>
-                  {option.label}
-                </Chip>
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div
+            role="radiogroup"
+            aria-label="Date range"
+            className="flex flex-wrap gap-1.5"
+          >
+            {RANGE_OPTIONS.map((option) => {
+              const selected = option.value === range;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  disabled={overridden.has("date")}
+                  onClick={() => onRangeChange(option.value)}
+                  className="focus:outline-none disabled:opacity-40"
+                >
+                  <Chip tone={selected ? "accent" : "neutral"}>
+                    {option.label}
+                  </Chip>
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => set({ needsReview: !filter.needsReview || undefined })}
+            className="focus:outline-none"
+          >
+            <Chip tone={filter.needsReview ? "accent" : "neutral"}>
+              Needs review
+            </Chip>
+          </button>
         </div>
 
         {hasFilters && (

@@ -179,11 +179,25 @@ export function remainingPlannedInvestments(
   return remaining;
 }
 
-/** Goal money earmarked out of this month's income and not yet set aside. */
-export function goalAllocations(goals: Goal[]): Paise {
+/**
+ * Goal money earmarked out of this month's income and not yet set aside —
+ * the monthly commitment minus whatever's already been contributed this
+ * cycle, same "held back until it's actually moved" treatment as
+ * `remainingPlannedInvestments`.
+ */
+export function goalAllocations(
+  goals: Goal[],
+  transactions: Transaction[],
+  month: MonthKey,
+  cycleStartDay = 1,
+): Paise {
+  const monthly = monthTransactions(transactions, month, cycleStartDay).filter(
+    (t) => t.type === "TRANSFER" && t.goalId,
+  );
   return goals.reduce((acc, g) => {
     if (g.currentAmount >= g.targetAmount) return acc; // already funded
-    return acc + Math.max(0, g.monthlyContribution);
+    const contributed = total(monthly.filter((t) => t.goalId === g.id));
+    return acc + Math.max(0, g.monthlyContribution - contributed);
   }, 0);
 }
 
@@ -224,7 +238,7 @@ export function calculateSafeToSpend(
     month,
     cycleStartDay,
   );
-  const goalMoney = goalAllocations(input.goals);
+  const goalMoney = goalAllocations(input.goals, transactions, month, cycleStartDay);
 
   // --- The calculation ----------------------------------------------------
   const safeAmount =

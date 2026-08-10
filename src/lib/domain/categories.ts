@@ -99,6 +99,8 @@ export const CATEGORY_TREE: CategorySeed[] = [
       { id: "internet", name: "Internet" },
       { id: "utilities", name: "Utilities" },
       { id: "subscription", name: "Subscription" },
+      { id: "insurance", name: "Insurance" },
+      { id: "fees", name: "Fees & Interest" },
       OTHER_CHILD,
     ],
   },
@@ -118,6 +120,11 @@ export const CATEGORY_TREE: CategorySeed[] = [
   { id: "education", name: "Education", children: [] },
   { id: "gifts", name: "Gifts", children: [] },
   { id: "other", name: "Other", children: [] },
+  // Kept flat and separate from "other" deliberately: "other" IS
+  // UNCATEGORISED_ID, so nesting a child under it would make picking "Other"
+  // cascade into a Type step everywhere in the app, breaking the existing
+  // one-tap "confirm Uncategorised" flow just for this one niche case.
+  { id: "adjustment", name: "Balance Adjustment", children: [] },
 ];
 
 export function buildCategorySeed(): Category[] {

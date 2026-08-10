@@ -34,7 +34,8 @@ import { pluralise } from "@/lib/utils";
  */
 
 export default function MoneyPage() {
-  const { status, db, safeToSpend, creditCards, peopleBalances } = useFinance();
+  const { status, db, safeToSpend, creditCards, peopleBalances, month, cycleStartDay } =
+    useFinance();
 
   if (status === "loading" || status === "idle") {
     return (
@@ -59,7 +60,7 @@ export default function MoneyPage() {
     .filter((i) => i.isActive)
     .reduce((acc, i) => acc + i.monthlyContribution, 0);
   const bills = monthlyRecurringTotal(db?.recurring ?? []);
-  const earmarked = goalAllocations(db?.goals ?? []);
+  const earmarked = goalAllocations(db?.goals ?? [], db?.transactions ?? [], month, cycleStartDay);
   const goalCount = (db?.goals ?? []).length;
   const netOwed = peopleBalances.reduce((acc, b) => acc + b.netAmount, 0);
 
