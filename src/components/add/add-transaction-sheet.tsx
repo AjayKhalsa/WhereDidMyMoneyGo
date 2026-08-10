@@ -154,7 +154,7 @@ export function AddTransactionSheet({
           description: "",
           categoryId: UNCATEGORISED_ID,
           contexts: [],
-          accountId: undefined,
+          accountId: db?.accounts.find((a) => a.isDefault)?.id,
           notes: "",
           date: toDateInputValue(new Date()),
         },

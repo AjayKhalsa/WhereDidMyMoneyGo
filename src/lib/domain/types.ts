@@ -42,6 +42,8 @@ export interface Account {
   isActive: boolean;
   /** Last 4 digits or similar, purely cosmetic. */
   hint?: string;
+  /** Pre-selected as "Paid with" for new expenses. At most one account at a time. */
+  isDefault?: boolean;
   createdAt: string;
 }
 

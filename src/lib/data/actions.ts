@@ -321,6 +321,20 @@ export async function addIncome(params: {
 // ---------------------------------------------------------------------------
 
 export async function saveAccount(account: Account): Promise<void> {
+  if (account.isDefault) {
+    const db = getSnapshot().data;
+    const others = (db?.accounts ?? []).filter(
+      (a) => a.id !== account.id && a.isDefault,
+    );
+    if (others.length > 0) {
+      await applyBatch({
+        puts: {
+          accounts: [account, ...others.map((a) => ({ ...a, isDefault: false }))],
+        },
+      });
+      return;
+    }
+  }
   await putRow("accounts", account);
 }
 

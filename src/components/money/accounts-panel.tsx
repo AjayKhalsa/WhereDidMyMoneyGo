@@ -9,7 +9,7 @@ import { deleteAccount, saveAccount, saveCreditCardDetail } from "@/lib/data/act
 import { useFinance } from "@/lib/hooks/use-finance";
 import { Amount } from "@/components/ui/amount";
 import { MoneyField, SelectField, TextField } from "@/components/ui/fields";
-import { Button, Chip } from "@/components/ui/primitives";
+import { Button, Chip, SelectableChip } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
 import { createId } from "@/lib/utils";
@@ -34,6 +34,12 @@ export function AccountsPanel() {
   const { db } = useFinance();
   const [editing, setEditing] = useState<Account | null>(null);
   const [creating, setCreating] = useState(false);
+  // Bumped on every "Add account" click so AccountSheet remounts with fresh
+  // state — its own lastId tracking only catches switching between two
+  // *existing* accounts, not two consecutive new-account sessions (both
+  // have account?.id === undefined), which let fields like isDefault leak
+  // from one new account into the next.
+  const [creationNonce, setCreationNonce] = useState(0);
 
   const accounts = db?.accounts ?? [];
   const transactions = db?.transactions ?? [];
@@ -75,12 +81,19 @@ export function AccountsPanel() {
         })}
       </div>
 
-      <Button size="sm" onClick={() => setCreating(true)}>
+      <Button
+        size="sm"
+        onClick={() => {
+          setCreationNonce((n) => n + 1);
+          setCreating(true);
+        }}
+      >
         <Plus className="h-3.5 w-3.5" strokeWidth={2} />
         Add account
       </Button>
 
       <AccountSheet
+        key={editing ? editing.id : `new-${creationNonce}`}
         account={editing}
         open={Boolean(editing) || creating}
         onClose={() => {
@@ -111,6 +124,7 @@ function AccountSheet({
     account ? String(account.openingBalance / 100) : "",
   );
   const [hint, setHint] = useState(account?.hint ?? "");
+  const [isDefault, setIsDefault] = useState(account?.isDefault ?? false);
   const [limit, setLimit] = useState(
     detail ? String(detail.creditLimit / 100) : "",
   );
@@ -127,6 +141,7 @@ function AccountSheet({
     setType(account?.type ?? "BANK");
     setBalance(account ? String(account.openingBalance / 100) : "");
     setHint(account?.hint ?? "");
+    setIsDefault(account?.isDefault ?? false);
     setLimit(detail ? String(detail.creditLimit / 100) : "");
     setStatementDay(String(detail?.statementDay ?? 20));
     setDueDay(String(detail?.dueDay ?? 15));
@@ -142,6 +157,7 @@ function AccountSheet({
       openingBalance: parseAmountInput(balance) ?? 0,
       isActive: account?.isActive ?? true,
       hint: hint.trim() || undefined,
+      isDefault,
       createdAt: account?.createdAt ?? new Date().toISOString(),
     });
 
@@ -225,6 +241,19 @@ function AccountSheet({
           onChange={(e) => setHint(e.target.value)}
           maxLength={4}
         />
+
+        <div className="space-y-1.5">
+          <p className="text-[13px] font-medium text-ink-secondary">
+            Default for new expenses
+          </p>
+          <SelectableChip selected={isDefault} onClick={() => setIsDefault((v) => !v)}>
+            {isDefault ? "Pre-selected as “Paid with”" : "Not the default"}
+          </SelectableChip>
+          <p className="text-[12.5px] text-ink-tertiary">
+            Only one account can be the default — setting this one clears it
+            from any other account.
+          </p>
+        </div>
 
         {type === "CREDIT_CARD" && (
           <>
