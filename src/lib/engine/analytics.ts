@@ -808,6 +808,29 @@ export function totalCommitted(
     .reduce((acc, a) => acc + creditCardOutstanding(transactions, a.id), 0);
 }
 
+/**
+ * What you're actually worth right now: cash + money already invested +
+ * what people net owe you, minus card debt. Deliberately excludes anything
+ * forward-looking — expected income, planned investments, goal targets —
+ * because those aren't yours yet. Investments are counted at contributed
+ * cost, not market value, since this app doesn't track returns.
+ *
+ * This is a distinct question from `liquidBalance` ("what can I spend right
+ * now") and `SafeToSpendResult.safeAmount` ("what's left over this cycle
+ * after commitments") — never blend the three into one figure.
+ */
+export function netWorth(
+  accounts: Account[],
+  transactions: Transaction[],
+  peopleBalances: { netAmount: Paise }[],
+): Paise {
+  const cash = liquidBalance(accounts, transactions);
+  const invested = total(ofType(transactions, "INVESTMENT"));
+  const cardDebt = totalCommitted(accounts, transactions);
+  const netOwed = peopleBalances.reduce((acc, b) => acc + b.netAmount, 0);
+  return cash + invested + netOwed - cardDebt;
+}
+
 // ---------------------------------------------------------------------------
 // Balances
 // ---------------------------------------------------------------------------
