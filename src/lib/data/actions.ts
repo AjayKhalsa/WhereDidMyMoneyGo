@@ -388,6 +388,51 @@ export async function deleteAccount(id: string): Promise<void> {
   });
 }
 
+/**
+ * Records a manual reconciliation. `difference` is actual-minus-expected
+ * balance (signed), computed by the caller from `accountBalance` — positive
+ * means the account has more than tracked (recorded as INCOME), negative
+ * means less (EXPENSE). Modelled as a real dated Transaction rather than a
+ * silent `openingBalance` edit, matching how every other correction in this
+ * app works (see `contributeToGoal`) — a raw field edit would leave no
+ * record of when or why the number moved. Categorised under "adjustment", a
+ * dedicated leaf distinct from UNCATEGORISED_ID, so it never reads as "the
+ * parser had no idea" and never surfaces in the Needs-review filter.
+ * Always stamps `lastReconciledAt`, since after this write the two numbers
+ * agree.
+ */
+export async function recordBalanceAdjustment(params: {
+  accountId: string;
+  difference: Paise;
+  date?: Date;
+}): Promise<Transaction> {
+  const account = getSnapshot().data?.accounts.find(
+    (a) => a.id === params.accountId,
+  );
+  const transaction = materialise({
+    type: params.difference > 0 ? "INCOME" : "EXPENSE",
+    amount: Math.abs(params.difference),
+    description: "Balance adjustment",
+    date: params.date ?? new Date(),
+    accountId: params.accountId,
+    categoryId: "adjustment",
+    contexts: [],
+  });
+  await applyBatch({
+    puts: {
+      transactions: [transaction],
+      ...(account
+        ? {
+            accounts: [
+              { ...account, lastReconciledAt: new Date().toISOString() },
+            ],
+          }
+        : {}),
+    },
+  });
+  return transaction;
+}
+
 export async function saveCreditCardDetail(
   detail: CreditCardDetail,
 ): Promise<void> {

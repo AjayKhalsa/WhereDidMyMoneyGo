@@ -45,6 +45,8 @@ export interface Account {
   /** Pre-selected as "Paid with" for new expenses. At most one account at a time. */
   isDefault?: boolean;
   createdAt: string;
+  /** When the balance was last confirmed to match the real account (BANK/CASH only). */
+  lastReconciledAt?: string;
 }
 
 export interface CreditCardDetail {

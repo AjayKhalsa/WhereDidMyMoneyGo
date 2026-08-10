@@ -579,10 +579,13 @@ export function spendingConsistency(
  * underlying purchases are already counted, and the payment only reduces
  * this balance (spec §17).
  */
-export function creditCardOutstanding(
-  transactions: Transaction[],
-  cardAccountId: string,
-): Paise {
+/**
+ * Signed charged-minus-paid. Positive means money is owed on the card;
+ * negative means payments overshot charges and the card is sitting on a
+ * credit. `creditCardOutstanding`/`creditCardCreditBalance` are the two
+ * one-sided, always-non-negative views callers actually want.
+ */
+function netCardBalance(transactions: Transaction[], cardAccountId: string): Paise {
   let charged = 0;
   let paid = 0;
   for (const t of transactions) {
@@ -600,13 +603,34 @@ export function creditCardOutstanding(
       charged -= t.amount;
     }
   }
-  return Math.max(0, charged - paid);
+  return charged - paid;
+}
+
+export function creditCardOutstanding(
+  transactions: Transaction[],
+  cardAccountId: string,
+): Paise {
+  return Math.max(0, netCardBalance(transactions, cardAccountId));
+}
+
+/**
+ * What's sitting as a credit on the card — payments that overshot charges.
+ * Zero whenever anything is actually owed (the two are mutually exclusive
+ * by construction: `outstanding - creditBalance === netCardBalance`).
+ */
+export function creditCardCreditBalance(
+  transactions: Transaction[],
+  cardAccountId: string,
+): Paise {
+  return Math.max(0, -netCardBalance(transactions, cardAccountId));
 }
 
 export interface CreditCardSummary {
   account: Account;
   detail?: CreditCardDetail;
   outstanding: Paise;
+  /** Payments that overshot charges — a credit sitting on the card. */
+  creditBalance: Paise;
   spentThisMonth: Paise;
   dueDate: Date | null;
   daysUntilDue: number | null;
@@ -622,6 +646,7 @@ export function summariseCreditCard(
   cycleStartDay = 1,
 ): CreditCardSummary {
   const outstanding = creditCardOutstanding(transactions, account.id);
+  const creditBalance = creditCardCreditBalance(transactions, account.id);
   const spentThisMonth = total(
     monthTransactions(transactions, key, cycleStartDay).filter(
       (t) => isExpense(t) && t.accountId === account.id,
@@ -648,6 +673,7 @@ export function summariseCreditCard(
     account,
     detail,
     outstanding,
+    creditBalance,
     spentThisMonth,
     dueDate,
     daysUntilDue,
