@@ -433,6 +433,51 @@ export async function recordBalanceAdjustment(params: {
   return transaction;
 }
 
+/**
+ * Records debt on a card that predates its transaction history — the card
+ * equivalent of `recordBalanceAdjustment`. A card has no `openingBalance`
+ * field (its outstanding is entirely derived from charge/payment
+ * transactions), so there is no other way to represent "I already owe ₹X on
+ * this card" without either importing every underlying charge or faking one.
+ * Modelled the same way as the bank case: a real dated Transaction, not a
+ * silent field. Positive `difference` means more is owed than the ledger
+ * currently shows (an EXPENSE, same as any other charge); negative means the
+ * ledger overcounts (an `isRefund` INCOME, the only way `cardActivity`
+ * reduces a card's charged total).
+ */
+export async function recordCardStartingBalance(params: {
+  cardAccountId: string;
+  difference: Paise;
+  date?: Date;
+}): Promise<Transaction> {
+  const account = getSnapshot().data?.accounts.find(
+    (a) => a.id === params.cardAccountId,
+  );
+  const transaction = materialise({
+    type: params.difference > 0 ? "EXPENSE" : "INCOME",
+    amount: Math.abs(params.difference),
+    description: "Starting balance",
+    date: params.date ?? new Date(),
+    accountId: params.cardAccountId,
+    categoryId: "adjustment",
+    contexts: [],
+    isRefund: params.difference < 0 ? true : undefined,
+  });
+  await applyBatch({
+    puts: {
+      transactions: [transaction],
+      ...(account
+        ? {
+            accounts: [
+              { ...account, lastReconciledAt: new Date().toISOString() },
+            ],
+          }
+        : {}),
+    },
+  });
+  return transaction;
+}
+
 export async function saveCreditCardDetail(
   detail: CreditCardDetail,
 ): Promise<void> {

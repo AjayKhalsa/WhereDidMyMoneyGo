@@ -13,6 +13,7 @@ import {
 import {
   deleteAccount,
   recordBalanceAdjustment,
+  recordCardStartingBalance,
   saveAccount,
   saveCreditCardDetail,
 } from "@/lib/data/actions";
@@ -178,8 +179,15 @@ function AccountSheet({
   // the balance figure stay fresh immediately after recording an
   // adjustment, without needing to close and reopen the sheet.
   const liveAccount = db?.accounts.find((a) => a.id === account?.id) ?? account;
+  const isCardAccount = liveAccount?.type === "CREDIT_CARD";
+  // A card has no openingBalance — its outstanding is entirely derived from
+  // charge/payment transactions — so "what the app currently thinks" means
+  // creditCardOutstanding here, not accountBalance (which doesn't net card
+  // payments correctly; see its own doc comment).
   const expectedBalance = liveAccount
-    ? accountBalance(liveAccount, db?.transactions ?? [])
+    ? isCardAccount
+      ? creditCardOutstanding(db?.transactions ?? [], liveAccount.id)
+      : accountBalance(liveAccount, db?.transactions ?? [])
     : 0;
   const actualBalance = parseAmountInput(actualBalanceText);
   const difference =
@@ -198,14 +206,21 @@ function AccountSheet({
 
   async function handleRecordAdjustment() {
     if (!liveAccount || difference === null || difference === 0) return;
-    await recordBalanceAdjustment({
-      accountId: liveAccount.id,
-      difference,
-    });
+    if (isCardAccount) {
+      await recordCardStartingBalance({
+        cardAccountId: liveAccount.id,
+        difference,
+      });
+    } else {
+      await recordBalanceAdjustment({
+        accountId: liveAccount.id,
+        difference,
+      });
+    }
     toast.show({
       tone: "success",
       title: `${difference > 0 ? "+" : "−"}${formatMoney(Math.abs(difference))} recorded`,
-      detail: "Balance adjustment",
+      detail: isCardAccount ? "Starting balance" : "Balance adjustment",
     });
     setReconciling(false);
     setActualBalanceText("");
@@ -352,11 +367,14 @@ function AccountSheet({
           </>
         )}
 
-        {liveAccount && (liveAccount.type === "BANK" || liveAccount.type === "CASH") && (
+        {liveAccount &&
+          (liveAccount.type === "BANK" ||
+            liveAccount.type === "CASH" ||
+            liveAccount.type === "CREDIT_CARD") && (
           <div className="space-y-3 rounded-xl bg-surface-sunken p-3.5">
             <div className="flex items-baseline justify-between gap-3">
               <p className="text-[12.5px] text-ink-secondary">
-                Current balance
+                {isCardAccount ? "Current outstanding" : "Current balance"}
               </p>
               <span className="font-medium text-ink-secondary tnum text-[13px]">
                 {formatMoney(expectedBalance)}
@@ -365,7 +383,9 @@ function AccountSheet({
             <p className="text-[12px] text-ink-tertiary">
               {liveAccount.lastReconciledAt
                 ? `Last reconciled ${formatFullDate(liveAccount.lastReconciledAt)}`
-                : "Never reconciled against the real account"}
+                : isCardAccount
+                  ? "Never reconciled against the real card"
+                  : "Never reconciled against the real account"}
             </p>
 
             {!reconciling ? (
@@ -375,8 +395,12 @@ function AccountSheet({
             ) : (
               <div className="space-y-2.5 border-t border-line pt-3">
                 <MoneyField
-                  label="Actual balance"
-                  hint="What your bank or wallet actually shows right now."
+                  label={isCardAccount ? "Actual outstanding" : "Actual balance"}
+                  hint={
+                    isCardAccount
+                      ? "What your card's app or last statement says you currently owe — including any debt from before you started tracking it here."
+                      : "What your bank or wallet actually shows right now."
+                  }
                   value={actualBalanceText}
                   onChange={(e) => setActualBalanceText(e.target.value)}
                   data-autofocus
