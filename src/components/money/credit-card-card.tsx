@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CreditCard as CreditCardIcon } from "lucide-react";
-import { endOfMonth, formatDayMonth, monthKey, monthKeyToDate } from "@/lib/domain/dates";
+import { formatDayMonth } from "@/lib/domain/dates";
 import { formatMoney, parseAmountInput } from "@/lib/domain/money";
 import type { CreditCardSummary } from "@/lib/engine/analytics";
 import { payCreditCard } from "@/lib/data/actions";
@@ -37,9 +37,15 @@ export function CreditCardCard({
   compact?: boolean;
 }) {
   const [detailOpen, setDetailOpen] = useState(false);
-  const { daysUntilDue, outstanding, creditBalance, spentThisMonth, utilisation } = summary;
+  const { daysUntilDue, outstanding, creditBalance, currentCycle, lastStatement, utilisation } =
+    summary;
 
-  const urgent = daysUntilDue !== null && daysUntilDue <= 5 && outstanding > 0;
+  // Tracks the *last statement* specifically, not the lifetime outstanding
+  // figure — a card can carry old debt from a past statement while this
+  // one's already settled, and vice versa.
+  const owesOnLastStatement = daysUntilDue !== null && !lastStatement?.paidInFull;
+  const overdue = owesOnLastStatement && daysUntilDue! < 0;
+  const urgent = owesOnLastStatement && daysUntilDue! >= 0 && daysUntilDue! <= 5;
 
   return (
     <>
@@ -54,11 +60,13 @@ export function CreditCardCard({
               {summary.account.name}
             </span>
           </div>
-          {daysUntilDue !== null && outstanding > 0 && (
-            <Chip tone={urgent ? "warning" : "neutral"}>
-              {daysUntilDue === 0
-                ? "Due today"
-                : `Due in ${daysUntilDue} ${daysUntilDue === 1 ? "day" : "days"}`}
+          {owesOnLastStatement && (
+            <Chip tone={overdue ? "danger" : urgent ? "warning" : "neutral"}>
+              {overdue
+                ? "Overdue"
+                : daysUntilDue === 0
+                  ? "Due today"
+                  : `Due in ${daysUntilDue} ${daysUntilDue === 1 ? "day" : "days"}`}
             </Chip>
           )}
         </div>
@@ -108,9 +116,9 @@ export function CreditCardCard({
 
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3.5">
           <div>
-            <p className="text-[12px] text-ink-tertiary">This month</p>
+            <p className="text-[12px] text-ink-tertiary">This cycle</p>
             <p className="text-[14px] font-medium text-ink tnum">
-              {formatMoney(spentThisMonth)}
+              {formatMoney(currentCycle.spent)}
             </p>
           </div>
           <Button size="sm" onClick={() => setDetailOpen(true)}>
@@ -137,7 +145,7 @@ function CreditCardDetailSheet({
   open: boolean;
   onClose: () => void;
 }) {
-  const { db, now } = useFinance();
+  const { db } = useFinance();
   const toast = useToast();
   const [amountText, setAmountText] = useState("");
   const [fromAccountId, setFromAccountId] = useState<string | undefined>(
@@ -149,10 +157,7 @@ function CreditCardDetailSheet({
   // calendar month happens to be selected elsewhere in the app — someone
   // checking their card on the 2nd still wants to see the spending building
   // up to the statement due later this week, not last month's cleared one.
-  const statementDay = summary.detail?.statementDay ?? 1;
-  const cycleKey = monthKey(now, statementDay);
-  const cycleStart = monthKeyToDate(cycleKey);
-  const cycleEnd = endOfMonth(cycleKey, statementDay);
+  const { start: cycleStart, end: cycleEnd } = summary.currentCycle;
   const cardRows = (db?.transactions ?? []).filter((t) => {
     if (t.accountId !== summary.account.id && t.toAccountId !== summary.account.id) {
       return false;
@@ -210,11 +215,36 @@ function CreditCardDetailSheet({
           ) : (
             <Figure label="Outstanding" value={summary.outstanding} emphasis />
           )}
-          <Figure label="Spent this month" value={summary.spentThisMonth} />
+          <Figure label="Spent this cycle" value={summary.currentCycle.spent} />
           {summary.detail && (
             <Figure label="Credit limit" value={summary.detail.creditLimit} />
           )}
         </div>
+
+        {summary.lastStatement && (
+          <section className="rounded-xl border border-line bg-surface p-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="text-[14px] font-medium text-ink">Last statement</h3>
+              <span className="text-[12px] text-ink-tertiary tnum">
+                {formatDayMonth(summary.lastStatement.start)} –{" "}
+                {formatDayMonth(summary.lastStatement.end)}
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-4">
+              <Figure label="Statement amount" value={summary.lastStatement.spent} emphasis />
+              <Figure
+                label="Paid so far"
+                value={Math.min(summary.lastStatement.paidAmount, summary.lastStatement.spent)}
+                tone={summary.lastStatement.paidInFull ? "positive" : undefined}
+              />
+            </div>
+            <p className="mt-2.5 text-[12.5px] leading-relaxed text-ink-secondary">
+              {summary.lastStatement.paidInFull
+                ? `Paid in full — due ${formatDayMonth(summary.lastStatement.dueDate)}.`
+                : `Due ${formatDayMonth(summary.lastStatement.dueDate)}.`}
+            </p>
+          </section>
+        )}
 
         {summary.outstanding > 0 && (
           <section className="rounded-xl border border-line bg-surface p-4">

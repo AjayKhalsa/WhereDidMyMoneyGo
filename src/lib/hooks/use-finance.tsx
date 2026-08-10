@@ -209,9 +209,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           account,
           db?.creditCards.find((c) => c.accountId === account.id),
           transactions,
-          month,
           now,
-          cycleStartDay,
         ),
       );
 
