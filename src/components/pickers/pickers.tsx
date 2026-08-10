@@ -2,9 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { Check, Search } from "lucide-react";
-import { CONTEXT_DEFINITIONS, contextLabel } from "@/lib/domain/contexts";
-import type { Account, Person, TransactionContext } from "@/lib/domain/types";
-import { makeContext } from "@/lib/domain/contexts";
+import {
+  contextDefinition,
+  contextLabel,
+  contextScopeFor,
+  DIMENSION_LABELS,
+  DIMENSION_ORDER,
+  makeContext,
+} from "@/lib/domain/contexts";
+import type { Account, ContextType, Person, TransactionContext } from "@/lib/domain/types";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { cn } from "@/lib/utils";
 import { SelectableChip } from "@/components/ui/primitives";
@@ -70,7 +76,59 @@ export function CategoryPicker({
 }
 
 /**
+ * Type picker — step two, only shown when the chosen category actually has
+ * children. Includes an explicit "Skip" option: a category alone is a
+ * perfectly valid, complete answer (spec: don't make every field mandatory).
+ */
+export function TypePicker({
+  categoryId,
+  value,
+  onChange,
+  className,
+}: {
+  /** The parent (top-level) category id whose children to offer. */
+  categoryId: string;
+  value: string | undefined;
+  onChange: (categoryId: string) => void;
+  className?: string;
+}) {
+  const { categories } = useFinance();
+  const types = categories.leavesOf(categoryId);
+
+  return (
+    <div className={cn("space-y-4", className)}>
+      <div className="flex flex-wrap gap-1.5">
+        {types.map((type) => (
+          <SelectableChip
+            key={type.id}
+            selected={type.id === value}
+            onClick={() => onChange(type.id)}
+          >
+            {type.id === value && (
+              <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+            )}
+            {type.name}
+          </SelectableChip>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(categoryId)}
+        className="text-[13px] font-medium text-ink-tertiary underline-offset-2 hover:text-ink-secondary hover:underline"
+      >
+        Skip — just {categories.nameOf(categoryId)}
+      </button>
+    </div>
+  );
+}
+
+/**
  * Context picker.
+ *
+ * Only offers context values relevant to the given category/type — see
+ * `contextScopeFor` in `contexts.ts`. Not a universal taxonomy dumped on
+ * every transaction: a flight has no use for "Alcohol", a cab ride has no
+ * use for "Birthday".
  *
  * Timestamp-derived contexts (weekend, late night) are shown as read-only
  * facts rather than toggles — they describe when the money was spent, and
@@ -80,56 +138,59 @@ export function CategoryPicker({
 export function ContextPicker({
   value,
   onChange,
+  categoryId,
   className,
 }: {
   value: TransactionContext[];
   onChange: (contexts: TransactionContext[]) => void;
+  /** Scopes which context values are offered. Omit for the generic default. */
+  categoryId?: string;
   className?: string;
 }) {
-  const selected = new Set(value.map((c) => c.value));
+  // Keyed by (type, value): the same value can be selected under two
+  // different dimensions at once (e.g. "work" as both Purpose and Who with)
+  // and toggling one must never clear the other.
+  const selected = new Set(value.map((c) => `${c.type}:${c.value}`));
   const derived = value.filter(
     (c) => c.value === "weekend" || c.value === "late-night",
   );
 
-  const toggle = (contextValue: string) => {
-    const next = selected.has(contextValue)
-      ? value.filter((c) => c.value !== contextValue)
-      : [...value, makeContext(contextValue)];
+  const toggle = (contextValue: string, type: ContextType) => {
+    const key = `${type}:${contextValue}`;
+    const next = selected.has(key)
+      ? value.filter((c) => `${c.type}:${c.value}` !== key)
+      : [...value, makeContext(contextValue, type)];
     onChange(next);
   };
 
-  const byType = {
-    PEOPLE: CONTEXT_DEFINITIONS.filter((c) => c.type === "PEOPLE"),
-    OCCASION: CONTEXT_DEFINITIONS.filter(
-      (c) => c.type === "OCCASION" && c.value !== "weekend" && c.value !== "late-night",
-    ),
-    ATTRIBUTE: CONTEXT_DEFINITIONS.filter((c) => c.type === "ATTRIBUTE"),
-  };
-
-  const sections: { label: string; items: typeof CONTEXT_DEFINITIONS }[] = [
-    { label: "Who with", items: byType.PEOPLE },
-    { label: "Attributes", items: byType.ATTRIBUTE },
-    { label: "Occasion", items: byType.OCCASION },
-  ];
+  const scope = contextScopeFor(categoryId);
+  const sections = DIMENSION_ORDER.map((type) => ({
+    type,
+    label: DIMENSION_LABELS[type],
+    values: scope[type] ?? [],
+  })).filter((section) => section.values.length > 0);
 
   return (
     <div className={cn("space-y-4", className)}>
       {sections.map((section) => (
-        <div key={section.label}>
+        <div key={section.type}>
           <p className="mb-2 text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">
             {section.label}
           </p>
           <div className="flex flex-wrap gap-1.5">
-            {section.items.map((definition) => (
-              <SelectableChip
-                key={definition.value}
-                selected={selected.has(definition.value)}
-                onClick={() => toggle(definition.value)}
-                title={definition.description}
-              >
-                {definition.label}
-              </SelectableChip>
-            ))}
+            {section.values.map((contextValue) => {
+              const definition = contextDefinition(contextValue);
+              return (
+                <SelectableChip
+                  key={contextValue}
+                  selected={selected.has(`${section.type}:${contextValue}`)}
+                  onClick={() => toggle(contextValue, section.type)}
+                  title={definition?.description}
+                >
+                  {definition?.label ?? contextLabel(contextValue)}
+                </SelectableChip>
+              );
+            })}
           </div>
         </div>
       ))}

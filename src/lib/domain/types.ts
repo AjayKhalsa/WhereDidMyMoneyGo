@@ -68,16 +68,29 @@ export interface Category {
 }
 
 /**
- * A context is a *second dimension* on a transaction.
+ * A context is a *further dimension* on a transaction, layered on top of
+ * Category (what kind of thing) and — where the category has one — Type
+ * (what specifically: `Category.parentId` gives a leaf category like
+ * "dining.lunch" its own row, with the parent as the group).
  *
- * A ₹3,200 dinner can be Dining (category) AND Friends AND Alcohol
- * (contexts) simultaneously. This lets "how much did I spend on dates?"
- * and "how much did I spend eating out?" both be answered from the same
- * single transaction, without ever double-counting it.
+ * A ₹3,200 dinner can be Dining › Dinner (category/type) AND Friends AND
+ * Alcohol (contexts) simultaneously. This lets "how much did I spend on
+ * dates?" and "how much did I spend eating out?" both be answered from the
+ * same single transaction, without ever double-counting it.
+ *
+ * Which context values are worth *offering* depends on the category and
+ * type — a cab ride has no use for "Alcohol", a flight has no use for
+ * "Friends" most of the time. See `contextScopeFor` in `contexts.ts` for
+ * the category/type → relevant-dimensions lookup that drives the picker UI.
+ * The same value can legitimately appear under more than one dimension for
+ * different categories (e.g. "work" as PURPOSE for a cab ride vs PEOPLE for
+ * who you had lunch with) — the `type` stored on each `TransactionContext`
+ * is what was actually picked, not a fixed property of the value.
  */
 export type ContextType =
   | "PEOPLE" // who you were with: dating, friends, family, work, solo
-  | "OCCASION" // why: weekend, birthday, vacation, celebration
+  | "PURPOSE" // why the money moved: commute, work, airport, travel, personal
+  | "OCCASION" // why, if it wasn't routine: birthday, vacation, celebration
   | "ATTRIBUTE"; // what was distinctive about it: alcohol, gift, shared
 
 export interface TransactionContext {

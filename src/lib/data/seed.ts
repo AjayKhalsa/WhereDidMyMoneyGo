@@ -356,12 +356,12 @@ const BUCKETS: Bucket[] = [
     id: "dining",
     typicalAmount: 900,
     templates: [
-      { description: "Dinner at Toit", categoryId: "dining", merchant: "Toit", hours: [19, 22], account: "card" },
-      { description: "Lunch", categoryId: "dining", hours: [12, 15], account: "card" },
+      { description: "Dinner at Toit", categoryId: "dining.dinner", merchant: "Toit", hours: [19, 22], account: "card" },
+      { description: "Lunch", categoryId: "dining.lunch", hours: [12, 15], account: "card" },
       { description: "Swiggy order", categoryId: "dining", merchant: "Swiggy", hours: [13, 22], account: "card" },
       { description: "Zomato order", categoryId: "dining", merchant: "Zomato", hours: [13, 22], account: "card" },
-      { description: "Coffee", categoryId: "dining", merchant: "Blue Tokai", hours: [8, 18], account: "hdfc" },
-      { description: "Breakfast", categoryId: "dining", hours: [8, 11], account: "hdfc" },
+      { description: "Coffee", categoryId: "dining.coffee", merchant: "Blue Tokai", hours: [8, 18], account: "hdfc" },
+      { description: "Breakfast", categoryId: "dining.breakfast", hours: [8, 11], account: "hdfc" },
       { description: "Biryani", categoryId: "dining", hours: [13, 21], account: "cash" },
     ],
   },
@@ -370,10 +370,10 @@ const BUCKETS: Bucket[] = [
     typicalAmount: 1600,
     weekendBias: true,
     templates: [
-      { description: "Dinner", categoryId: "dining", contexts: ["dating"], hours: [19, 22], account: "card" },
-      { description: "Drinks", categoryId: "dining", contexts: ["dating", "alcohol"], hours: [20, 23], account: "card" },
-      { description: "Movie", categoryId: "entertainment", merchant: "PVR", contexts: ["dating"], hours: [17, 22], account: "card" },
-      { description: "Coffee date", categoryId: "dining", contexts: ["dating"], hours: [16, 19], account: "hdfc" },
+      { description: "Dinner", categoryId: "dining.dinner", contexts: ["dating"], hours: [19, 22], account: "card" },
+      { description: "Drinks", categoryId: "dining.drinks", contexts: ["dating", "alcohol"], hours: [20, 23], account: "card" },
+      { description: "Movie", categoryId: "entertainment.movie", merchant: "PVR", contexts: ["dating"], hours: [17, 22], account: "card" },
+      { description: "Coffee date", categoryId: "dining.coffee", contexts: ["dating"], hours: [16, 19], account: "hdfc" },
       { description: "Gift", categoryId: "gifts", contexts: ["dating", "gift"], hours: [12, 20], account: "card" },
     ],
   },
@@ -381,11 +381,11 @@ const BUCKETS: Bucket[] = [
     id: "transport",
     typicalAmount: 340,
     templates: [
-      { description: "Uber to office", categoryId: "transport", merchant: "Uber", contexts: ["work"], hours: [8, 11], account: "hdfc" },
-      { description: "Uber home", categoryId: "transport", merchant: "Uber", hours: [18, 23], account: "hdfc" },
-      { description: "Ola ride", categoryId: "transport", merchant: "Ola", hours: [9, 22], account: "hdfc" },
-      { description: "Rapido", categoryId: "transport", merchant: "Rapido", hours: [8, 20], account: "hdfc" },
-      { description: "Metro", categoryId: "transport", hours: [8, 21], account: "cash" },
+      { description: "Uber to office", categoryId: "transport.cab", merchant: "Uber", contexts: ["work"], hours: [8, 11], account: "hdfc" },
+      { description: "Uber home", categoryId: "transport.cab", merchant: "Uber", hours: [18, 23], account: "hdfc" },
+      { description: "Ola ride", categoryId: "transport.cab", merchant: "Ola", hours: [9, 22], account: "hdfc" },
+      { description: "Rapido", categoryId: "transport.cab", merchant: "Rapido", hours: [8, 20], account: "hdfc" },
+      { description: "Metro", categoryId: "transport.metro", hours: [8, 21], account: "cash" },
     ],
   },
   {
@@ -402,10 +402,10 @@ const BUCKETS: Bucket[] = [
     id: "shopping",
     typicalAmount: 1400,
     templates: [
-      { description: "T-shirts", categoryId: "shopping", merchant: "Myntra", hours: [11, 22], account: "card" },
-      { description: "Sneakers", categoryId: "shopping", merchant: "Decathlon", hours: [12, 20], account: "card" },
+      { description: "T-shirts", categoryId: "shopping.clothing", merchant: "Myntra", hours: [11, 22], account: "card" },
+      { description: "Sneakers", categoryId: "shopping.clothing", merchant: "Decathlon", hours: [12, 20], account: "card" },
       { description: "Amazon order", categoryId: "shopping", merchant: "Amazon", hours: [10, 23], account: "card" },
-      { description: "Headphones", categoryId: "shopping", merchant: "Amazon", hours: [10, 22], account: "card" },
+      { description: "Headphones", categoryId: "shopping.electronics", merchant: "Amazon", hours: [10, 22], account: "card" },
     ],
   },
   {
@@ -413,10 +413,10 @@ const BUCKETS: Bucket[] = [
     typicalAmount: 1600,
     weekendBias: true,
     templates: [
-      { description: "Dinner with friends", categoryId: "dining", contexts: ["friends"], hours: [19, 23], account: "card" },
-      { description: "Drinks with the gang", categoryId: "dining", contexts: ["friends", "alcohol"], hours: [20, 23], account: "card" },
-      { description: "House party contribution", categoryId: "entertainment", contexts: ["friends", "alcohol"], hours: [18, 23], account: "hdfc" },
-      { description: "Brunch with friends", categoryId: "dining", contexts: ["friends"], hours: [11, 15], account: "card" },
+      { description: "Dinner with friends", categoryId: "dining.dinner", contexts: ["friends"], hours: [19, 23], account: "card" },
+      { description: "Drinks with the gang", categoryId: "dining.drinks", contexts: ["friends", "alcohol"], hours: [20, 23], account: "card" },
+      { description: "House party contribution", categoryId: "entertainment.event", contexts: ["friends", "alcohol"], hours: [18, 23], account: "hdfc" },
+      { description: "Brunch with friends", categoryId: "dining.breakfast", contexts: ["friends"], hours: [11, 15], account: "card" },
     ],
   },
   {
@@ -424,9 +424,9 @@ const BUCKETS: Bucket[] = [
     typicalAmount: 900,
     weekendBias: true,
     templates: [
-      { description: "Movie tickets", categoryId: "entertainment", merchant: "BookMyShow", hours: [16, 22], account: "card" },
-      { description: "Comedy show", categoryId: "entertainment", merchant: "BookMyShow", hours: [19, 22], account: "card" },
-      { description: "Steam game", categoryId: "entertainment", merchant: "Steam", hours: [20, 23], account: "card" },
+      { description: "Movie tickets", categoryId: "entertainment.movie", merchant: "BookMyShow", hours: [16, 22], account: "card" },
+      { description: "Comedy show", categoryId: "entertainment.event", merchant: "BookMyShow", hours: [19, 22], account: "card" },
+      { description: "Steam game", categoryId: "entertainment.games", merchant: "Steam", hours: [20, 23], account: "card" },
     ],
   },
   {
@@ -467,7 +467,7 @@ function contextsFor(
   if (day === 0 || day === 6) values.push("weekend");
   const hour = when.getHours();
   if (hour >= 22 || hour < 4) values.push("late-night");
-  return [...new Set(values)].map(makeContext);
+  return [...new Set(values)].map((value) => makeContext(value));
 }
 
 function pickDay(rng: Rng, maxDay: number, weekendBias: boolean, month: MonthKey): number {

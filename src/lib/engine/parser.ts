@@ -281,7 +281,7 @@ export function parseExpenseInput(
     amount: amountMatch?.amount ?? null,
     description: description || (merchant ?? ""),
     categoryId,
-    contexts: normaliseContexts(contextValues.map(makeContext)),
+    contexts: normaliseContexts(contextValues.map((value) => makeContext(value))),
     merchant,
     type,
     confidence,
