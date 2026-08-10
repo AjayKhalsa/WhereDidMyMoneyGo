@@ -18,7 +18,6 @@ import type {
 } from "@/lib/domain/types";
 import {
   creditCardOutstanding,
-  isExpense,
   liquidBalance,
   monthTotals,
   monthTransactions,
@@ -34,13 +33,26 @@ import {
  * the "how is this calculated?" panel comes from the `breakdown` array below
  * — there is no second, prettier version of this maths in the UI.
  *
- * The subtle part is credit cards. A naive implementation subtracts both
- * "spent this month" and "card outstanding", which double-counts every meal
- * you put on the card: the expense is already recorded, and the outstanding
- * balance is just the unpaid tail of those same expenses. So we subtract
- * spending in full, and then add back only the portion of card debt that was
- * *carried in from previous months*, since this month's income has to cover
- * that too but no expense row in this month represents it.
+ * Two different questions live here, and conflating them is what this module
+ * exists to prevent:
+ *
+ * `safeAmount` — *cash position*. What is actually yours to spend right now:
+ * money sitting in bank/cash accounts, minus every rupee already promised to
+ * a credit card, minus commitments still to come this cycle. Grounded in
+ * real balances, so it can never claim you can spend money you don't have.
+ *
+ * `monthlySurplus` — *cash flow*. This cycle's income minus this cycle's
+ * outgoings. A budgeting view: "how much of what I earned is unallocated".
+ * Useful, but not spendable-cash — an income-minus-expenses figure ignores
+ * that card bills paid this cycle settled *last* cycle's spending, so it runs
+ * systematically optimistic. It is never the headline.
+ *
+ * Credit cards are the subtle part, and the cash formulation handles them
+ * without any double-counting: charging a card raises `cardOutstanding` and
+ * so lowers `safeAmount` exactly once, on the day of the purchase. Paying the
+ * card lowers cash and `cardOutstanding` by the same amount, leaving
+ * `safeAmount` untouched — because that money stopped being yours when you
+ * spent it, not when the payment cleared.
  */
 
 export type BreakdownDirection = "add" | "subtract";
@@ -55,8 +67,17 @@ export interface BreakdownLine {
 }
 
 export interface SafeToSpendResult {
-  /** Discretionary money left for the rest of the month. */
+  /**
+   * Uncommitted cash: what's in your accounts, less card debt and what's
+   * already promised this cycle. The headline figure.
+   */
   safeAmount: Paise;
+  /**
+   * This cycle's income minus its outgoings. A budgeting metric, NOT
+   * spendable cash — see the module comment. Never render this as
+   * "safe to spend".
+   */
+  monthlySurplus: Paise;
   /** `safeAmount` spread over the days that remain, including today. */
   dailyAllowance: Paise;
   remainingDays: number;
@@ -80,7 +101,10 @@ export interface SafeToSpendResult {
   /** bankBalance − cardOutstanding: money that is really yours. */
   unencumberedCash: Paise;
 
+  /** The receipt behind `safeAmount`. */
   breakdown: BreakdownLine[];
+  /** The receipt behind `monthlySurplus`. */
+  monthlySurplusBreakdown: BreakdownLine[];
 }
 
 export interface SafeToSpendInput {
@@ -214,20 +238,18 @@ export function calculateSafeToSpend(
   const expected = expectedMonthlyIncome(input.incomeSources);
   const incomeBasis = Math.max(expected, totals.income);
 
-  // --- Card debt carried in from previous months --------------------------
+  // --- Cash position ------------------------------------------------------
+  const bankBalance = liquidBalance(accounts, transactions);
   const cards = accounts.filter((a) => a.type === "CREDIT_CARD" && a.isActive);
   const cardOutstanding = cards.reduce(
     (acc, card) => acc + creditCardOutstanding(transactions, card.id),
     0,
   );
-  const cardSpendThisMonth = total(
-    monthTransactions(transactions, month, cycleStartDay).filter(
-      (t) => isExpense(t) && t.accountId && cards.some((c) => c.id === t.accountId),
-    ),
-  );
-  // Anything owed beyond what was charged this month predates the month, so
-  // it is a real claim on this month's income that no expense row covers.
-  const carriedCardDebt = Math.max(0, cardOutstanding - cardSpendThisMonth);
+  // Salary due this cycle that hasn't landed yet. Without this, opening the
+  // app on payday morning — before the credit posts — would show a near-zero
+  // safe-to-spend that jumps hours later. Zero once pay has arrived, so it
+  // never inflates the figure mid-cycle.
+  const expectedNotYetReceived = Math.max(0, expected - totals.income);
 
   // --- Other commitments --------------------------------------------------
   const upcoming = upcomingRecurring(input.recurring, transactions, month, now, cycleStartDay);
@@ -241,13 +263,26 @@ export function calculateSafeToSpend(
   const goalMoney = goalAllocations(input.goals, transactions, month, cycleStartDay);
 
   // --- The calculation ----------------------------------------------------
+  // Cash you hold, less what's already promised. Card debt is subtracted in
+  // full rather than netted against this cycle's card spending: every rupee
+  // owed has to be paid out of this same cash, whenever it was charged.
   const safeAmount =
+    bankBalance -
+    cardOutstanding +
+    expectedNotYetReceived -
+    upcomingTotal -
+    plannedInvestmentsLeft -
+    goalMoney;
+
+  // The budgeting view, kept deliberately separate. No card term at all:
+  // what's owed on a card was already counted as spending the day it was
+  // charged, and settling an older bill isn't this cycle's outgoing.
+  const monthlySurplus =
     incomeBasis -
     totals.invested -
     plannedInvestmentsLeft -
     totals.spent -
     upcomingTotal -
-    carriedCardDebt -
     goalMoney;
 
   const remainingDays = remainingDaysInMonth(now, month, cycleStartDay);
@@ -258,9 +293,66 @@ export function calculateSafeToSpend(
   const projectedRemainingSpend = velocity.perDay * Math.max(0, remainingDays - 1);
   const projectedSurplus = safeAmount - projectedRemainingSpend;
 
-  const bankBalance = liquidBalance(accounts, transactions);
-
+  // Ordered so the first two lines read as the sentence the number is:
+  // cash in bank, less what's owed on cards, equals what's actually yours.
   const breakdown: BreakdownLine[] = [
+    {
+      id: "cash",
+      label: "Cash in bank",
+      amount: bankBalance,
+      direction: "add",
+      hint: "Across your bank and cash accounts right now",
+    },
+    {
+      id: "card-outstanding",
+      label: "Already owed on cards",
+      amount: cardOutstanding,
+      direction: "subtract",
+      hint: "You've spent this money — it just hasn't left your account yet",
+    },
+  ];
+
+  if (expectedNotYetReceived > 0) {
+    breakdown.push({
+      id: "expected-income",
+      label: "Salary still to land",
+      amount: expectedNotYetReceived,
+      direction: "add",
+      hint: "Expected this cycle but not yet credited",
+    });
+  }
+
+  if (upcomingTotal > 0) {
+    breakdown.push({
+      id: "upcoming",
+      label: "Bills still to come",
+      amount: upcomingTotal,
+      direction: "subtract",
+      hint: `${upcoming.length} recurring ${upcoming.length === 1 ? "charge" : "charges"} due before this cycle ends`,
+    });
+  }
+
+  if (plannedInvestmentsLeft > 0) {
+    breakdown.push({
+      id: "planned-investments",
+      label: "Investments still due",
+      amount: plannedInvestmentsLeft,
+      direction: "subtract",
+      hint: "Held back so your monthly contributions stay on track",
+    });
+  }
+
+  if (goalMoney > 0) {
+    breakdown.push({
+      id: "goals",
+      label: "Set aside for goals",
+      amount: goalMoney,
+      direction: "subtract",
+      hint: "Your monthly goal contributions",
+    });
+  }
+
+  const monthlySurplusBreakdown: BreakdownLine[] = [
     {
       id: "income",
       label: totals.income > expected ? "Income this month" : "Expected income",
@@ -281,7 +373,7 @@ export function calculateSafeToSpend(
   ];
 
   if (plannedInvestmentsLeft > 0) {
-    breakdown.push({
+    monthlySurplusBreakdown.push({
       id: "planned-investments",
       label: "Investments still due",
       amount: plannedInvestmentsLeft,
@@ -290,7 +382,7 @@ export function calculateSafeToSpend(
     });
   }
 
-  breakdown.push({
+  monthlySurplusBreakdown.push({
     id: "spent",
     label: "Spent so far",
     amount: totals.spent,
@@ -299,27 +391,17 @@ export function calculateSafeToSpend(
   });
 
   if (upcomingTotal > 0) {
-    breakdown.push({
+    monthlySurplusBreakdown.push({
       id: "upcoming",
       label: "Bills still to come",
       amount: upcomingTotal,
       direction: "subtract",
-      hint: `${upcoming.length} recurring ${upcoming.length === 1 ? "charge" : "charges"} due before month end`,
-    });
-  }
-
-  if (carriedCardDebt > 0) {
-    breakdown.push({
-      id: "carried-card",
-      label: "Card debt carried over",
-      amount: carriedCardDebt,
-      direction: "subtract",
-      hint: "Last month's balance — this month's spending is already counted above",
+      hint: `${upcoming.length} recurring ${upcoming.length === 1 ? "charge" : "charges"} due before this cycle ends`,
     });
   }
 
   if (goalMoney > 0) {
-    breakdown.push({
+    monthlySurplusBreakdown.push({
       id: "goals",
       label: "Set aside for goals",
       amount: goalMoney,
@@ -330,6 +412,7 @@ export function calculateSafeToSpend(
 
   return {
     safeAmount,
+    monthlySurplus,
     dailyAllowance,
     remainingDays,
     incomeBasis,
@@ -343,5 +426,6 @@ export function calculateSafeToSpend(
     cardOutstanding,
     unencumberedCash: bankBalance - cardOutstanding,
     breakdown,
+    monthlySurplusBreakdown,
   };
 }

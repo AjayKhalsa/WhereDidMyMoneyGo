@@ -81,11 +81,11 @@ export function FinancialHero() {
             <>
               You&rsquo;ve committed{" "}
               <Amount value={Math.abs(safeToSpend.safeAmount)} size="xs" /> more
-              than this month&rsquo;s income covers, once investments, bills and
-              card balances are accounted for.
+              than you hold, once card balances, bills and investments are
+              accounted for.
             </>
           ) : (
-            "Based on your income, investments, upcoming bills and committed card spending."
+            "What's actually yours right now — your cash, less what you already owe on cards and everything committed this cycle."
           )}
         </p>
 
