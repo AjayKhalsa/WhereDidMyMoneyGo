@@ -6,6 +6,7 @@ import {
   contextDefinition,
   contextLabel,
   contextScopeFor,
+  DERIVED_CONTEXT_VALUES,
   DIMENSION_LABELS,
   DIMENSION_ORDER,
   makeContext,
@@ -164,11 +165,23 @@ export function ContextPicker({
   };
 
   const scope = contextScopeFor(categoryId);
-  const sections = DIMENSION_ORDER.map((type) => ({
-    type,
-    label: DIMENSION_LABELS[type],
-    values: scope[type] ?? [],
-  })).filter((section) => section.values.length > 0);
+  const sections = DIMENSION_ORDER.map((type) => {
+    const scoped = scope[type] ?? [];
+    // A value already set on this transaction stays visible and toggle-able
+    // even if it falls outside the curated scope for the current category —
+    // e.g. editing an older transaction, or one whose category just changed.
+    // Nothing the user (or the parser) already tagged silently becomes
+    // un-removable just because this category doesn't usually offer it.
+    const already = value
+      .filter(
+        (c) =>
+          c.type === type &&
+          !scoped.includes(c.value) &&
+          !DERIVED_CONTEXT_VALUES.has(c.value),
+      )
+      .map((c) => c.value);
+    return { type, label: DIMENSION_LABELS[type], values: [...scoped, ...already] };
+  }).filter((section) => section.values.length > 0);
 
   return (
     <div className={cn("space-y-4", className)}>
