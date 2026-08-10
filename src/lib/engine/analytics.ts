@@ -89,6 +89,11 @@ export function monthTotals(
 
   for (const t of transactions) {
     if (!inMonth(t, key, cycleStartDay)) continue;
+    // A reconciliation adjustment corrects a balance that drifted; it is not
+    // earnings or spending. It still moves cash (see `accountBalance`, which
+    // deliberately doesn't filter by category) — it just must never land in
+    // Income/Spent, where it would distort the monthly surplus and Insights.
+    if (t.categoryId === "adjustment") continue;
     switch (t.type) {
       case "INCOME":
         // A refund is money credited back against earlier spending, not new
@@ -696,6 +701,17 @@ export interface CardBilling {
 }
 
 /**
+ * Slack allowed when deciding whether a statement was settled in full.
+ *
+ * Charges entered by hand get rounded to the rupee, and a statement built
+ * from several of them can land a few paise away from the payment that
+ * actually cleared it. Without this, a bill short by ₹0.70 renders as
+ * "Overdue" — alarming, and wrong. Deliberately sub-rupee-scale: it absorbs
+ * rounding residue, never a real underpayment.
+ */
+const PAID_IN_FULL_TOLERANCE: Paise = 100;
+
+/**
  * A card's own billing cycle — entirely independent of the app's personal
  * pay cycle. `detail.statementDay` is the day a statement is *generated and
  * dated*, not the last day of activity on it — a real statement dated the
@@ -750,7 +766,7 @@ export function summariseCardBilling(
         spent,
         dueDate: nextDayOnOrAfter(detail.dueDay, prevEnd),
         paidAmount,
-        paidInFull: paidAmount >= spent,
+        paidInFull: paidAmount >= spent - PAID_IN_FULL_TOLERANCE,
       };
     }
   }
