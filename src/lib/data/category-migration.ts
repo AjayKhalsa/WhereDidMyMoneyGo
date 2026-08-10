@@ -203,30 +203,35 @@ function stripImportDerivedContexts(t: Transaction): { row: Transaction; changed
 }
 
 /**
- * Adds category rows introduced since a database was first seeded — e.g. the
- * Type children reintroduced under each category — without touching
- * anything already there. Existing rows are left exactly as they are (a
- * user's own customisations, if any, are never a target here since only
- * built-in ids are compared), so this is safe to run on every boot.
+ * Category rows introduced since a database was first seeded — e.g. the
+ * Type children reintroduced under each category — that this database
+ * doesn't have yet. Existing rows are never a target here (only built-in
+ * ids are compared), so this is safe to check on every boot.
+ *
+ * Deliberately returns just the missing rows rather than folding them into
+ * `remapLegacyCategories`'s full-`db` result: callers write these back with
+ * a targeted `putMany`, never `replaceAll` — over a networked backend,
+ * `replaceAll` deletes and re-inserts a user's *entire* dataset row by row,
+ * which is a real risk (partial failure mid-flight, rate limits, a slow
+ * connection dropping out) to invite just to add a handful of category
+ * rows that don't touch anything else.
  */
-function addMissingCategories(categories: Category[]): {
-  categories: Category[];
-  changed: boolean;
-} {
-  const existingIds = new Set(categories.map((c) => c.id));
-  const missing = buildCategorySeed().filter((c) => !existingIds.has(c.id));
-  if (missing.length === 0) return { categories, changed: false };
-  return { categories: [...categories, ...missing], changed: true };
+export function missingBuiltInCategories(existing: Category[]): Category[] {
+  const existingIds = new Set(existing.map((c) => c.id));
+  return buildCategorySeed().filter((c) => !existingIds.has(c.id));
 }
 
 /**
  * Pure function: rewrites any legacy category ids found on transactions,
- * rules, or recurring rules, and backfills any category rows (built-in
- * groups or Type children) missing from `db.categories` — whether that's
- * because legacy ids forced a full reseed, or because a category was added
- * to the tree after this database was first created. Returns the same `db`
- * reference (and `changed: false`) when there's nothing to do, so callers
- * can skip a write for brand-new users and on every subsequent boot.
+ * rules, or recurring rules, and — only when genuinely legacy ids turn up —
+ * fully reseeds `categories` from the current tree. This is the rarer,
+ * more invasive path (categoryId values on other rows are changing too, not
+ * just categories), which is why it's still a `replaceAll`; the common case
+ * of just adding new built-in categories to an otherwise-current database
+ * goes through `missingBuiltInCategories` + a targeted `putMany` instead —
+ * see `initStore` in `store.ts`. Returns the same `db` reference (and
+ * `changed: false`) when there's nothing to do, so callers can skip a write
+ * for brand-new users and on every subsequent boot.
  */
 export function remapLegacyCategories(db: Database): { db: Database; changed: boolean } {
   let changed = false;
@@ -249,19 +254,11 @@ export function remapLegacyCategories(db: Database): { db: Database; changed: bo
     return result.row;
   });
 
-  // A full reseed (legacy ids present) always wins over an incremental
-  // backfill — buildCategorySeed() already contains every current id.
   const needsFullReseed = db.categories.some((c) => isLegacyId(c.id));
   let categories = db.categories;
   if (needsFullReseed) {
     changed = true;
     categories = buildCategorySeed();
-  } else {
-    const backfilled = addMissingCategories(db.categories);
-    if (backfilled.changed) {
-      changed = true;
-      categories = backfilled.categories;
-    }
   }
 
   if (!changed) return { db, changed: false };
