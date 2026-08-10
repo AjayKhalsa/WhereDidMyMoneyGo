@@ -1,7 +1,10 @@
 import { groupIdOf, UNCATEGORISED_ID } from "@/lib/domain/categories";
 import {
+  addMonths,
+  endOfMonth,
   monthKey,
   monthKeyToDate,
+  nextDayOnOrAfter,
   previousMonths,
   type MonthKey,
   daysBetween,
@@ -579,16 +582,27 @@ export function spendingConsistency(
  * underlying purchases are already counted, and the payment only reduces
  * this balance (spec §17).
  */
+interface CardActivity {
+  charged: Paise;
+  paid: Paise;
+}
+
 /**
- * Signed charged-minus-paid. Positive means money is owed on the card;
- * negative means payments overshot charges and the card is sitting on a
- * credit. `creditCardOutstanding`/`creditCardCreditBalance` are the two
- * one-sided, always-non-negative views callers actually want.
+ * Classifies every row touching a card into "charged" (increases what's
+ * owed) or "paid" (reduces it), optionally restricted to a date range. With
+ * no range this reproduces the old `netCardBalance`'s behaviour exactly —
+ * same branches, same accumulation — just factored out so lifetime and
+ * per-cycle figures can't drift apart from duplicated classification rules.
  */
-function netCardBalance(transactions: Transaction[], cardAccountId: string): Paise {
+function cardActivity(
+  transactions: Transaction[],
+  cardAccountId: string,
+  inRange: (date: Date) => boolean = () => true,
+): CardActivity {
   let charged = 0;
   let paid = 0;
   for (const t of transactions) {
+    if (!inRange(new Date(t.date))) continue;
     if (t.type === "EXPENSE" && t.accountId === cardAccountId) {
       charged += t.amount;
     } else if (t.type === "TRANSFER" && t.toAccountId === cardAccountId) {
@@ -603,6 +617,40 @@ function netCardBalance(transactions: Transaction[], cardAccountId: string): Pai
       charged -= t.amount;
     }
   }
+  return { charged, paid };
+}
+
+function dateWithin(from: Date | null, to: Date | null) {
+  return (d: Date) => (from === null || d >= from) && (to === null || d <= to);
+}
+
+/** Pure charges in a range — not netted against payments (a statement amount is what you charged, not what you still owe). */
+function chargedInRange(
+  transactions: Transaction[],
+  cardAccountId: string,
+  from: Date | null,
+  to: Date | null,
+): Paise {
+  return cardActivity(transactions, cardAccountId, dateWithin(from, to)).charged;
+}
+
+function paidInRange(
+  transactions: Transaction[],
+  cardAccountId: string,
+  from: Date | null,
+  to: Date | null,
+): Paise {
+  return cardActivity(transactions, cardAccountId, dateWithin(from, to)).paid;
+}
+
+/**
+ * Signed charged-minus-paid, all-time. Positive means money is owed on the
+ * card; negative means payments overshot charges and the card is sitting on
+ * a credit. `creditCardOutstanding`/`creditCardCreditBalance` are the two
+ * one-sided, always-non-negative views callers actually want.
+ */
+function netCardBalance(transactions: Transaction[], cardAccountId: string): Paise {
+  const { charged, paid } = cardActivity(transactions, cardAccountId);
   return charged - paid;
 }
 
@@ -625,13 +673,98 @@ export function creditCardCreditBalance(
   return Math.max(0, -netCardBalance(transactions, cardAccountId));
 }
 
+export interface CardBillingCycle {
+  start: Date;
+  end: Date;
+  /** Charges so far this cycle — not netted against payments. */
+  spent: Paise;
+}
+
+export interface CardStatement extends CardBillingCycle {
+  /** dueDay occurring on/after this statement's close — may fall in the next calendar month. */
+  dueDate: Date;
+  /** Payments landing on the card between this statement's close and "now". */
+  paidAmount: Paise;
+  paidInFull: boolean;
+}
+
+export interface CardBilling {
+  /** The cycle currently accumulating — hasn't closed/statemented yet. */
+  currentCycle: CardBillingCycle;
+  /** The most recently closed cycle, or null if the card didn't exist yet the last time this statement day passed. */
+  lastStatement: CardStatement | null;
+}
+
+/**
+ * A card's own billing cycle — entirely independent of the app's personal
+ * pay cycle. `detail.statementDay` is the day a cycle *closes* (a statement
+ * on the 25th covers charges up to and including the 25th, and the new
+ * cycle starts the 26th) — `monthKey`/`endOfMonth` treat their parameter as
+ * the day a cycle *starts* instead, so `statementDay + 1` is what's actually
+ * passed through. `statementDay` is UI-clamped to 1-28 (see
+ * `accounts-panel.tsx`'s `clampDay`), so `+1` never overflows into a
+ * wraparound edge case.
+ */
+export function summariseCardBilling(
+  account: Account,
+  detail: CreditCardDetail | undefined,
+  transactions: Transaction[],
+  now: Date,
+): CardBilling {
+  // No known statement day — fall back to a plain calendar month. An honest
+  // approximation for a card with no detail row yet, not a fabricated statement.
+  const cycleAnchor = detail ? detail.statementDay + 1 : 1;
+
+  const cycleKey = monthKey(now, cycleAnchor);
+  const cycleStart = monthKeyToDate(cycleKey);
+  const currentCycle: CardBillingCycle = {
+    start: cycleStart,
+    end: endOfMonth(cycleKey, cycleAnchor),
+    spent: chargedInRange(transactions, account.id, cycleStart, now),
+  };
+
+  let lastStatement: CardStatement | null = null;
+  if (detail) {
+    const prevKey = addMonths(cycleKey, -1, cycleAnchor);
+    const prevStart = monthKeyToDate(prevKey);
+    const prevEnd = endOfMonth(prevKey, cycleAnchor);
+    // Don't fabricate a statement for a cycle with no real activity to
+    // attribute to it. Checked against the transaction ledger rather than
+    // `account.createdAt` — that field reflects when the *row* was written,
+    // not when the card was actually first used (seeded/imported/migrated
+    // accounts routinely have history reaching back well before their
+    // createdAt timestamp).
+    const hasActivityBeforeClose = transactions.some(
+      (t) =>
+        (t.accountId === account.id || t.toAccountId === account.id) &&
+        new Date(t.date) <= prevEnd,
+    );
+    if (hasActivityBeforeClose) {
+      const spent = chargedInRange(transactions, account.id, prevStart, prevEnd);
+      const paidAmount = paidInRange(transactions, account.id, prevEnd, now);
+      lastStatement = {
+        start: prevStart,
+        end: prevEnd,
+        spent,
+        dueDate: nextDayOnOrAfter(detail.dueDay, prevEnd),
+        paidAmount,
+        paidInFull: paidAmount >= spent,
+      };
+    }
+  }
+
+  return { currentCycle, lastStatement };
+}
+
 export interface CreditCardSummary {
   account: Account;
   detail?: CreditCardDetail;
   outstanding: Paise;
   /** Payments that overshot charges — a credit sitting on the card. */
   creditBalance: Paise;
-  spentThisMonth: Paise;
+  currentCycle: CardBillingCycle;
+  lastStatement: CardStatement | null;
+  /** = lastStatement?.dueDate ?? null */
   dueDate: Date | null;
   daysUntilDue: number | null;
   utilisation: number | null;
@@ -641,42 +774,21 @@ export function summariseCreditCard(
   account: Account,
   detail: CreditCardDetail | undefined,
   transactions: Transaction[],
-  key: MonthKey,
   now: Date,
-  cycleStartDay = 1,
 ): CreditCardSummary {
   const outstanding = creditCardOutstanding(transactions, account.id);
   const creditBalance = creditCardCreditBalance(transactions, account.id);
-  const spentThisMonth = total(
-    monthTransactions(transactions, key, cycleStartDay).filter(
-      (t) => isExpense(t) && t.accountId === account.id,
-    ),
-  );
-
-  let dueDate: Date | null = null;
-  let daysUntilDue: number | null = null;
-  if (detail) {
-    const candidate = new Date(now.getFullYear(), now.getMonth(), detail.dueDay);
-    // If this month's due date has passed, the next one is what matters.
-    if (candidate < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
-      candidate.setMonth(candidate.getMonth() + 1);
-    }
-    dueDate = candidate;
-    daysUntilDue = Math.round(
-      (new Date(candidate.getFullYear(), candidate.getMonth(), candidate.getDate()).getTime() -
-        new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) /
-        86_400_000,
-    );
-  }
+  const { currentCycle, lastStatement } = summariseCardBilling(account, detail, transactions, now);
 
   return {
     account,
     detail,
     outstanding,
     creditBalance,
-    spentThisMonth,
-    dueDate,
-    daysUntilDue,
+    currentCycle,
+    lastStatement,
+    dueDate: lastStatement?.dueDate ?? null,
+    daysUntilDue: lastStatement ? daysBetween(now, lastStatement.dueDate) : null,
     utilisation:
       detail && detail.creditLimit > 0
         ? (outstanding / detail.creditLimit) * 100

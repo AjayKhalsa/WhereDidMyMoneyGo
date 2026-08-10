@@ -81,7 +81,15 @@ function groupContexts(
 
 function wrap<T>(operation: string, work: () => Promise<T>): Promise<T> {
   return work().catch((cause) => {
-    throw new RepositoryError(`Supabase request failed during ${operation}`, cause);
+    // A RepositoryError thrown deeper down (e.g. assertNoError inside a
+    // putMany's per-row putOne, or requireUserId's "Not signed in") already
+    // carries the real, specific message — re-wrapping it here would bury
+    // that behind a second, generic "Supabase request failed during X"
+    // layer, which is exactly why toasts have only ever shown the outer
+    // label with no detail. Let an already-detailed error propagate as-is.
+    if (cause instanceof RepositoryError) throw cause;
+    const detail = cause instanceof Error ? `: ${cause.message}` : "";
+    throw new RepositoryError(`Supabase request failed during ${operation}${detail}`, cause);
   });
 }
 

@@ -26,6 +26,19 @@ export function clampToMonth(year: number, monthIndex: number, day: number): Dat
   return new Date(year, monthIndex, Math.min(Math.max(1, day), lastDay));
 }
 
+/**
+ * The next date `day`-of-month occurs on or after `from`. Time-of-day on
+ * `from` is ignored (normalised to midnight first), so a caller can pass an
+ * `endOfMonth()`-shaped Date — which carries 23:59:59.999 — without that
+ * pushing the result out a spurious month.
+ */
+export function nextDayOnOrAfter(day: number, from: Date): Date {
+  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const thisMonth = clampToMonth(start.getFullYear(), start.getMonth(), day);
+  if (thisMonth >= start) return thisMonth;
+  return clampToMonth(start.getFullYear(), start.getMonth() + 1, day);
+}
+
 function toKey(year: number, monthIndex: number, day: number): MonthKey {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${year}-${pad(monthIndex + 1)}-${pad(day)}`;
