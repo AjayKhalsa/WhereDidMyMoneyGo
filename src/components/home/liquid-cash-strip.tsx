@@ -47,7 +47,12 @@ export function LiquidCashStrip() {
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
-          <Amount value={safeToSpend.bankBalance} size="sm" />
+          <Amount
+            value={safeToSpend.bankBalance}
+            size="sm"
+            signed
+            className={safeToSpend.bankBalance < 0 ? "text-danger" : undefined}
+          />
           <ChevronDown
             className={cn(
               "h-3.5 w-3.5 text-ink-tertiary transition-transform duration-200 ease-[var(--ease-out-soft)]",
