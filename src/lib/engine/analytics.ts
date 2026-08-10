@@ -697,13 +697,15 @@ export interface CardBilling {
 
 /**
  * A card's own billing cycle — entirely independent of the app's personal
- * pay cycle. `detail.statementDay` is the day a cycle *closes* (a statement
- * on the 25th covers charges up to and including the 25th, and the new
- * cycle starts the 26th) — `monthKey`/`endOfMonth` treat their parameter as
- * the day a cycle *starts* instead, so `statementDay + 1` is what's actually
- * passed through. `statementDay` is UI-clamped to 1-28 (see
- * `accounts-panel.tsx`'s `clampDay`), so `+1` never overflows into a
- * wraparound edge case.
+ * pay cycle. `detail.statementDay` is the day a statement is *generated and
+ * dated*, not the last day of activity on it — a real statement dated the
+ * 25th only covers charges up to and including the 24th; anything charged
+ * on the 25th itself belongs to the *next* cycle, which starts accumulating
+ * that same day. So `statementDay` is exactly the day a new cycle starts —
+ * fed straight into `monthKey`/`endOfMonth`, which already treat their
+ * parameter as a cycle-start day, this naturally makes each cycle run
+ * `statementDay` through `statementDay - 1` of the following month with no
+ * further adjustment needed.
  */
 export function summariseCardBilling(
   account: Account,
@@ -713,7 +715,7 @@ export function summariseCardBilling(
 ): CardBilling {
   // No known statement day — fall back to a plain calendar month. An honest
   // approximation for a card with no detail row yet, not a fabricated statement.
-  const cycleAnchor = detail ? detail.statementDay + 1 : 1;
+  const cycleAnchor = detail ? detail.statementDay : 1;
 
   const cycleKey = monthKey(now, cycleAnchor);
   const cycleStart = monthKeyToDate(cycleKey);
