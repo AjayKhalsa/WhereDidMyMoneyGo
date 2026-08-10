@@ -34,8 +34,16 @@ import { pluralise } from "@/lib/utils";
  */
 
 export default function MoneyPage() {
-  const { status, db, safeToSpend, creditCards, peopleBalances, month, cycleStartDay } =
-    useFinance();
+  const {
+    status,
+    db,
+    safeToSpend,
+    creditCards,
+    peopleBalances,
+    netWorth,
+    month,
+    cycleStartDay,
+  } = useFinance();
 
   if (status === "loading" || status === "idle") {
     return (
@@ -73,10 +81,12 @@ export default function MoneyPage() {
       />
 
       {/*
-        Cash and card debt side by side, because the whole point of the pairing
-        is that the first number is not really yours until the second is paid.
+        Cash, card debt and net worth side by side — three distinct questions
+        that must never blend into one number: what's actually sitting in
+        the bank right now, what's owed against it, and what everything
+        (cash + investments + people) nets out to once debt is subtracted.
       */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <StatBlock
           label="Cash available"
           value={safeToSpend.bankBalance}
@@ -91,6 +101,11 @@ export default function MoneyPage() {
               ? `${formatMoney(safeToSpend.unencumberedCash)} is really yours`
               : "Nothing outstanding"
           }
+        />
+        <StatBlock
+          label="Net worth"
+          value={netWorth}
+          detail="Cash + invested + owed to you, minus cards"
         />
       </div>
 
@@ -216,7 +231,14 @@ function StatBlock({
         <Amount
           value={value}
           size="xl"
-          className={tone === "warning" ? "text-warning" : undefined}
+          signed
+          className={
+            tone === "warning"
+              ? "text-warning"
+              : value < 0
+                ? "text-danger"
+                : undefined
+          }
         />
       </div>
       <p className="mt-1.5 text-[12.5px] text-ink-tertiary">{detail}</p>

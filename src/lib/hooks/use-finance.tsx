@@ -17,7 +17,7 @@ import {
 } from "@/lib/domain/categories";
 import { contextLabel } from "@/lib/domain/contexts";
 import { addMonths, monthKey, type MonthKey } from "@/lib/domain/dates";
-import type { Database } from "@/lib/domain/types";
+import type { Database, Paise } from "@/lib/domain/types";
 import {
   calculateFinancialScore,
   generateInsights,
@@ -33,6 +33,7 @@ import { personBalances, type PersonBalance } from "@/lib/engine/splits";
 import {
   monthTotals,
   monthTransactions,
+  netWorth,
   spendByGroup,
   spendingConsistency,
   spendByContext,
@@ -92,6 +93,12 @@ export interface FinanceContextValue {
   monthRows: Database["transactions"];
   /** Net owed-to-me / I-owe balance per active person. */
   peopleBalances: PersonBalance[];
+  /**
+   * Cash + invested (at cost) + net owed by people − card debt. Distinct
+   * from `safeToSpend.bankBalance` (cash only) and `safeToSpend.safeAmount`
+   * (forward-looking) — never conflate the three.
+   */
+  netWorth: Paise;
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null);
@@ -214,6 +221,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       );
 
     const peopleBalances = personBalances(db?.people ?? [], db?.splits ?? []);
+    const netWorthValue = netWorth(db?.accounts ?? [], transactions, peopleBalances);
 
     return {
       status: state.status,
@@ -236,6 +244,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       creditCards,
       monthRows,
       peopleBalances,
+      netWorth: netWorthValue,
     };
   }, [db, pinnedMonth, now, cycleStartDay, categories, state.status, state.error]);
 
