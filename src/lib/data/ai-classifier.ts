@@ -26,14 +26,23 @@ export interface Suggestion {
 /**
  * Whether a parse is weak enough to be worth a second opinion.
  *
- * Two cases only: we landed on Uncategorised (the parser recognised nothing),
- * or confidence is genuinely low. Anything a learned rule matched is left
- * alone — the user already taught us that one, and overruling it with a model
- * would undo the whole point of the learning store.
+ * Three cases: we landed on Uncategorised (the parser recognised nothing),
+ * confidence is genuinely low, or a rule matched but hasn't earned trust yet.
+ * A rule at or above RULE_TRUST_THRESHOLD is left alone — the user already
+ * taught us that one, and overruling it with a model would undo the whole
+ * point of the learning store. But a brand-new or just-corrected rule
+ * (learning.ts's NEW_RULE_CONFIDENCE = 0.6) still gets one more AI opinion
+ * until it's confirmed once (+CONFIRM_STEP → 0.68, above the bar). Without
+ * this, a bad early-learned rule could never be challenged again short of
+ * another manual correction.
  */
+const RULE_TRUST_THRESHOLD = 0.65;
+
 export function shouldAskForHelp(parse: ParseResult): boolean {
-  if (parse.matchedRuleId) return false;
   if (parse.amount === null) return false;
+  if (parse.matchedRuleId) {
+    return (parse.matchedRuleConfidence ?? 1) < RULE_TRUST_THRESHOLD;
+  }
   return parse.categoryId === UNCATEGORISED_ID || parse.confidence < 0.5;
 }
 

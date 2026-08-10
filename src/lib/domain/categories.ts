@@ -99,6 +99,8 @@ export const CATEGORY_TREE: CategorySeed[] = [
       { id: "internet", name: "Internet" },
       { id: "utilities", name: "Utilities" },
       { id: "subscription", name: "Subscription" },
+      { id: "insurance", name: "Insurance" },
+      { id: "fees", name: "Fees & Interest" },
       OTHER_CHILD,
     ],
   },

@@ -78,6 +78,9 @@ export const MERCHANTS: MerchantEntry[] = [
   { name: "OnePlus", aliases: ["oneplus"], categoryId: "shopping.electronics" },
   // Home
   { name: "IKEA", aliases: ["ikea"], categoryId: "shopping.home" },
+  { name: "Urban Company", aliases: ["urbancompany", "uc"], categoryId: "shopping.home" },
+  { name: "Housejoy", aliases: ["housejoy"], categoryId: "shopping.home" },
+  { name: "NoBroker", aliases: ["nobroker"], categoryId: "shopping.home" },
   // Subscriptions / OTT
   { name: "Netflix", aliases: ["netflix"], categoryId: "bills.subscription" },
   { name: "Spotify", aliases: ["spotify"], categoryId: "bills.subscription" },
@@ -88,6 +91,10 @@ export const MERCHANTS: MerchantEntry[] = [
   { name: "SonyLIV", aliases: ["sonyliv"], categoryId: "bills.subscription" },
   { name: "ZEE5", aliases: ["zee5"], categoryId: "bills.subscription" },
   { name: "JioCinema", aliases: ["jiocinema"], categoryId: "bills.subscription" },
+  { name: "Voot", aliases: ["voot"], categoryId: "bills.subscription" },
+  { name: "MX Player", aliases: ["mxplayer"], categoryId: "bills.subscription" },
+  { name: "Aha", aliases: ["ahavideo"], categoryId: "bills.subscription" },
+  { name: "ALTBalaji", aliases: ["altbalaji"], categoryId: "bills.subscription" },
   { name: "Apple TV", aliases: ["appletv"], categoryId: "bills.subscription" },
   { name: "Apple Music", aliases: ["applemusic"], categoryId: "bills.subscription" },
   { name: "Audible", aliases: ["audible"], categoryId: "bills.subscription" },
@@ -161,6 +168,26 @@ export const MERCHANTS: MerchantEntry[] = [
   { name: "Netmeds", aliases: ["netmeds"], categoryId: "essentials" },
   { name: "MedPlus", aliases: ["medplus"], categoryId: "essentials" },
   { name: "Practo", aliases: ["practo"], categoryId: "health.doctor" },
+  // Insurance
+  { name: "LIC", aliases: ["lic"], categoryId: "bills.insurance" },
+  { name: "HDFC Life", aliases: ["hdfclife"], categoryId: "bills.insurance" },
+  { name: "ICICI Prudential", aliases: ["iciciprudential", "icicipru"], categoryId: "bills.insurance" },
+  { name: "Star Health", aliases: ["starhealth"], categoryId: "bills.insurance" },
+  { name: "Niva Bupa", aliases: ["nivabupa"], categoryId: "bills.insurance" },
+  { name: "Bajaj Allianz", aliases: ["bajajallianz"], categoryId: "bills.insurance" },
+  { name: "Tata AIG", aliases: ["tataaig"], categoryId: "bills.insurance" },
+  { name: "ACKO", aliases: ["acko"], categoryId: "bills.insurance" },
+  { name: "Digit Insurance", aliases: ["digitinsurance", "godigit"], categoryId: "bills.insurance" },
+  // Education
+  { name: "BYJU'S", aliases: ["byjus"], categoryId: "education" },
+  { name: "Unacademy", aliases: ["unacademy"], categoryId: "education" },
+  { name: "Vedantu", aliases: ["vedantu"], categoryId: "education" },
+  { name: "PhysicsWallah", aliases: ["physicswallah", "pw"], categoryId: "education" },
+  { name: "upGrad", aliases: ["upgrad"], categoryId: "education" },
+  { name: "Coursera", aliases: ["coursera"], categoryId: "education" },
+  { name: "Udemy", aliases: ["udemy"], categoryId: "education" },
+  { name: "Scaler", aliases: ["scaler"], categoryId: "education" },
+  { name: "GeeksforGeeks", aliases: ["geeksforgeeks", "gfg"], categoryId: "education" },
   // Protein / diet
   { name: "MuscleBlaze", aliases: ["muscleblaze", "optimumnutrition"], categoryId: "essentials" },
   { name: "MyProtein", aliases: ["myprotein"], categoryId: "essentials" },
@@ -335,7 +362,10 @@ export const ACTIVITIES: ActivityEntry[] = [
     weight: 8,
   },
   {
-    keywords: ["furniture", "decor", "kitchen", "sofa", "mattress", "curtain", "utensils", "cookware"],
+    keywords: [
+      "furniture", "decor", "kitchen", "sofa", "mattress", "curtain", "utensils", "cookware",
+      "plumber", "electrician", "carpenter", "repair", "repairs", "handyman",
+    ],
     categoryId: "shopping.home",
     weight: 7,
   },
@@ -351,6 +381,8 @@ export const ACTIVITIES: ActivityEntry[] = [
   { keywords: ["internet", "wifi", "broadband", "fiber", "fibre"], categoryId: "bills.internet", weight: 9 },
   { keywords: ["electricity", "water", "utility", "utilities", "lpg", "cylinder", "maintenance"], categoryId: "bills.utilities", weight: 9 },
   { keywords: ["subscription", "subscriptions", "renewal"], categoryId: "bills.subscription", weight: 8 },
+  { keywords: ["insurance", "premium", "policy", "mediclaim"], categoryId: "bills.insurance", weight: 9 },
+  { keywords: ["fee", "fees", "penalty", "surcharge"], categoryId: "bills.fees", weight: 9 },
   // Health
   {
     keywords: ["gym", "workout", "workouts", "trainer", "training", "fitness", "membership", "boxing", "yoga", "pilates", "crossfit", "zumba", "swimming"],

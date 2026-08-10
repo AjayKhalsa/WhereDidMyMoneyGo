@@ -1,6 +1,8 @@
-import { groupIdOf } from "@/lib/domain/categories";
+import { groupIdOf, UNCATEGORISED_ID } from "@/lib/domain/categories";
 import { CONTEXT_DEFINITIONS } from "@/lib/domain/contexts";
 import {
+  addMonths,
+  endOfMonth,
   monthKey,
   monthKeyToDate,
   toDateInputValue,
@@ -45,6 +47,8 @@ export interface TransactionFilter {
   /** Inclusive ISO date bounds, "2026-07-01" style. */
   from?: string;
   to?: string;
+  /** Expenses the parser/AI never resolved a real category for. */
+  needsReview?: boolean;
 }
 
 export type TermKind =
@@ -72,6 +76,8 @@ export interface SearchContext {
   accounts: Account[];
   /** Anchors relative phrases like "last month". */
   now: Date;
+  /** Same pay-cycle boundary Home/Insights/Safe-to-spend use for "this month". */
+  cycleStartDay: number;
 }
 
 const MONTH_NAMES = [
@@ -160,9 +166,12 @@ function dayBounds(start: Date, end: Date): { from: string; to: string } {
   return { from: toDateInputValue(start), to: toDateInputValue(end) };
 }
 
-function monthBounds(key: MonthKey): { from: string; to: string } {
+function monthBounds(
+  key: MonthKey,
+  cycleStartDay: number,
+): { from: string; to: string } {
   const start = monthKeyToDate(key);
-  const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+  const end = endOfMonth(key, cycleStartDay);
   return dayBounds(start, end);
 }
 
@@ -208,20 +217,21 @@ export function parseSearchQuery(
   }
 
   // --- Dates ---------------------------------------------------------------
-  const { now } = context;
+  const { now, cycleStartDay } = context;
   const relative: { phrase: string; label: string; range: () => { from: string; to: string } }[] =
     [
       {
         phrase: "this month",
         label: "This month",
-        range: () => monthBounds(monthKey(now)),
+        range: () => monthBounds(monthKey(now, cycleStartDay), cycleStartDay),
       },
       {
         phrase: "last month",
         label: "Last month",
         range: () =>
           monthBounds(
-            monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+            addMonths(monthKey(now, cycleStartDay), -1, cycleStartDay),
+            cycleStartDay,
           ),
       },
       {
@@ -296,8 +306,8 @@ export function parseSearchQuery(
       if (!hit) continue;
       const year =
         index > now.getMonth() ? now.getFullYear() - 1 : now.getFullYear();
-      const key = monthKey(new Date(year, index, 1));
-      const range = monthBounds(key);
+      const key = monthKey(new Date(year, index, 1), cycleStartDay);
+      const range = monthBounds(key, cycleStartDay);
       filter.from = range.from;
       filter.to = range.to;
       terms.push({
@@ -464,6 +474,13 @@ export function filterTransactions(
 
     if (filter.text && !matchesText(t, filter.text)) return false;
 
+    if (
+      filter.needsReview &&
+      !(t.type === "EXPENSE" && t.categoryId === UNCATEGORISED_ID)
+    ) {
+      return false;
+    }
+
     return true;
   });
 }
@@ -509,7 +526,8 @@ export function isFilterEmpty(filter: TransactionFilter): boolean {
     filter.minAmount === undefined &&
     filter.maxAmount === undefined &&
     !filter.from &&
-    !filter.to
+    !filter.to &&
+    !filter.needsReview
   );
 }
 

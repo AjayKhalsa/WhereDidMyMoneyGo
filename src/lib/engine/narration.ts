@@ -49,6 +49,10 @@ const STRIP_PREFIXES = [
 
 const INTEREST_PATTERNS = [/int\.?\s*pd/i, /interest\s*paid/i, /interest\s*credit/i];
 const CARD_PAYMENT_PATTERNS = [/credit\s*card/i, /card\s*payment/i, /billdesk/i, /\bcc\s*bill/i];
+// A card narration mentioning a fee/penalty is spending against the card,
+// not a payment towards it — e.g. "ANNUAL FEE-CREDIT CARD" must not force
+// TRANSFER just because it also matches a CARD_PAYMENT_PATTERNS regex.
+const CARD_FEE_EXCLUSION = /\b(fee|fees|penalty|surcharge)\b/i;
 const SIP_KEYWORDS = [/\bsip\b/i, /mutual\s*fund/i, /\bmf\b/i, /folio/i];
 const ACH_MANDATE = /^(ach|ecs)-/i;
 
@@ -63,7 +67,10 @@ export function cleanBankNarration(raw: string): NarrationCleanupResult {
   }
 
   let typeHint: TransactionType | undefined;
-  if (CARD_PAYMENT_PATTERNS.some((p) => p.test(original))) {
+  if (
+    CARD_PAYMENT_PATTERNS.some((p) => p.test(original)) &&
+    !CARD_FEE_EXCLUSION.test(original)
+  ) {
     typeHint = "TRANSFER";
   } else if (ACH_MANDATE.test(original) && SIP_KEYWORDS.some((p) => p.test(original))) {
     typeHint = "INVESTMENT";

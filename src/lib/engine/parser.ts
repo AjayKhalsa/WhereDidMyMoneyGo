@@ -10,6 +10,7 @@ import type {
   TransactionType,
 } from "@/lib/domain/types";
 import { matchAccountMentions, type AccountHit } from "./account-match";
+import { levenshteinDistance } from "./fuzzy-match";
 import { ACTIVITIES, CONTEXT_KEYWORDS, MERCHANTS, STOP_WORDS } from "./lexicon";
 
 /**
@@ -48,6 +49,8 @@ export interface ParseResult {
   reasons: string[];
   /** Id of the learned rule that drove this, if any. */
   matchedRuleId?: string;
+  /** Confidence of the matched rule itself, if any — lets a weak/fresh rule still get a second AI opinion. */
+  matchedRuleConfidence?: number;
   /** Alternative categories worth offering as quick corrections. */
   alternatives: string[];
 }
@@ -103,8 +106,40 @@ function findMerchant(tokens: Token[]) {
   for (const token of tokens) {
     for (const merchant of MERCHANTS) {
       if (merchant.aliases.includes(token.clean)) {
-        return { merchant, matchedWord: token.clean };
+        return { merchant, matchedWord: token.clean, fuzzy: false };
       }
+    }
+  }
+  return null;
+}
+
+/**
+ * A typo'd merchant ("swiggyy") still deserves a category guess — but it
+ * must never be trusted as much as an exact hit. Only tried when the exact
+ * match fails. Ambiguous ties (two different merchants equally close) are
+ * dropped rather than guessed, same rule `account-match.ts` follows.
+ */
+function findMerchantFuzzy(tokens: Token[]) {
+  for (const token of tokens) {
+    if (token.clean.length < 5) continue;
+    const threshold = token.clean.length >= 8 ? 2 : 1;
+    const hits: { merchant: (typeof MERCHANTS)[number]; distance: number }[] = [];
+    for (const merchant of MERCHANTS) {
+      for (const alias of merchant.aliases) {
+        if (Math.abs(alias.length - token.clean.length) > 2) continue;
+        const distance = levenshteinDistance(token.clean, alias);
+        if (distance > 0 && distance <= threshold) {
+          hits.push({ merchant, distance });
+        }
+      }
+    }
+    if (hits.length === 0) continue;
+    const min = Math.min(...hits.map((h) => h.distance));
+    const closest = new Map(
+      hits.filter((h) => h.distance === min).map((h) => [h.merchant.name, h.merchant]),
+    );
+    if (closest.size === 1) {
+      return { merchant: [...closest.values()][0]!, matchedWord: token.clean, fuzzy: true };
     }
   }
   return null;
@@ -158,9 +193,13 @@ function findRule(
   normalised: string,
   rules: ClassificationRule[],
 ): ClassificationRule | null {
+  // Word-boundary match, not raw substring — a rule pattern is always a
+  // single token (see `deriveRulePattern`), so "tea" must not match inside
+  // "steak".
+  const words = normalised.split(" ");
   let best: ClassificationRule | null = null;
   for (const rule of rules) {
-    if (!normalised.includes(rule.pattern)) continue;
+    if (!words.includes(rule.pattern)) continue;
     if (
       !best ||
       rule.pattern.length > best.pattern.length ||
@@ -229,6 +268,9 @@ function detectTransferShape(
  * alongside "paid" and/or "card". Source account defaults to the user's
  * default bank/cash account (or the sole one), never guessed between two.
  */
+/** A fee/penalty on the card is an expense, not a payment towards it. */
+const FEE_WORDS = new Set(["fee", "fees", "penalty", "surcharge"]);
+
 function detectCardPayment(
   tokens: Token[],
   hits: AccountHit[],
@@ -240,6 +282,13 @@ function detectCardPayment(
       .map((h) => [h.account.id, h] as const),
   );
   if (cardHits.size !== 1) return null;
+  // Fees/interest accrue against the card — the bare word "card" would
+  // otherwise satisfy `hasPaymentWord` below and mislabel spending as a
+  // transfer. The dedicated interest-is-expense check right after this
+  // function gets the final say on "interest" phrases.
+  if (tokens.some((t) => FEE_WORDS.has(t.clean) || t.clean === "interest")) {
+    return null;
+  }
   const hasPaymentWord = tokens.some(
     (t) => t.clean === "paid" || t.clean === "card",
   );
@@ -267,7 +316,17 @@ interface TypeDetection {
   reason?: string;
   /** True when accounts were resolved from an unambiguous phrase shape. */
   strong: boolean;
+  /** Deterministic category override for a structural (not lexicon) signal. */
+  categoryId?: string;
 }
+
+/**
+ * "interest" alone is an INCOME keyword (bank interest credited) — but
+ * "220 HDFC card interest charged" is the opposite: interest *charged on*
+ * a card is spending, not income. Evidence of that: the phrase mentions a
+ * credit-card account, or uses charge/late wording even without one.
+ */
+const CARD_INTEREST_EVIDENCE = new Set(["charged", "charge", "late"]);
 
 function detectType(tokens: Token[], accounts: Account[]): TypeDetection {
   const hits = matchAccountMentions(tokens, accounts);
@@ -277,6 +336,14 @@ function detectType(tokens: Token[], accounts: Account[]): TypeDetection {
 
   const cardPayment = detectCardPayment(tokens, hits, accounts);
   if (cardPayment) return { type: "TRANSFER", ...cardPayment, strong: true };
+
+  const hasCardMention = hits.some((h) => h.account.type === "CREDIT_CARD");
+  const isCardInterestExpense =
+    tokens.some((t) => t.clean === "interest") &&
+    (hasCardMention || tokens.some((t) => CARD_INTEREST_EVIDENCE.has(t.clean)));
+  if (isCardInterestExpense) {
+    return { type: "EXPENSE", strong: false, categoryId: "bills.fees" };
+  }
 
   for (const token of tokens) {
     for (const hint of TYPE_HINTS) {
@@ -353,7 +420,7 @@ export function parseExpenseInput(
   const rule = findRule(normalised, rules);
 
   // ---- 2. Lexicon signals ------------------------------------------------
-  const merchantHit = findMerchant(tokens);
+  const merchantHit = findMerchant(tokens) ?? findMerchantFuzzy(tokens);
   const activityHits = findActivities(tokens);
   const contextHits = findContexts(tokens);
 
@@ -388,10 +455,17 @@ export function parseExpenseInput(
         : `"${top.matchedWord}" was more specific than "${merchantHit.matchedWord}"`,
     );
     if (!agree) alternatives.push(merchantCategory);
+    // A typo'd merchant can never be trusted enough to one-tap-save, no
+    // matter how well it agrees with an activity keyword.
+    if (merchantHit.fuzzy) baseScore = Math.min(baseScore, 0.65);
   } else if (merchantHit) {
     categoryId = merchantHit.merchant.categoryId;
-    baseScore = 0.85;
-    reasons.push(`${merchantHit.merchant.name} is usually this category`);
+    baseScore = merchantHit.fuzzy ? 0.65 : 0.85;
+    reasons.push(
+      merchantHit.fuzzy
+        ? `Read "${merchantHit.matchedWord}" as ${merchantHit.merchant.name}`
+        : `${merchantHit.merchant.name} is usually this category`,
+    );
   } else if (activityHits.length > 0) {
     const top = activityHits[0]!;
     categoryId = top.categoryId;
@@ -400,6 +474,12 @@ export function parseExpenseInput(
     for (const other of activityHits.slice(1, 3)) {
       alternatives.push(other.categoryId);
     }
+  } else if (typeDetection.categoryId) {
+    // Structural signal (e.g. card interest charged) — deterministic, no
+    // lexicon guess involved.
+    categoryId = typeDetection.categoryId;
+    baseScore = 0.85;
+    reasons.push("Interest charged on your card");
   } else {
     baseScore = 0.2;
     reasons.push("Nothing in the description was recognisable");
@@ -460,6 +540,7 @@ export function parseExpenseInput(
     confidence,
     reasons,
     matchedRuleId: rule?.id,
+    matchedRuleConfidence: rule?.confidence,
     alternatives: [...new Set(alternatives)].filter((a) => a !== categoryId),
   };
 }
