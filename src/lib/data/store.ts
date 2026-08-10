@@ -1,7 +1,7 @@
 import type { Database, UserProfile } from "@/lib/domain/types";
 import { getRepository } from "./local-adapter";
 import type { CollectionMap, CollectionName } from "./repository";
-import { remapLegacyCategories } from "./category-migration";
+import { missingBuiltInCategories, remapLegacyCategories } from "./category-migration";
 
 /**
  * A tiny observable store holding the whole dataset in memory.
@@ -75,11 +75,24 @@ export function initStore(onEmpty: () => Database): Promise<void> {
       } else {
         // Self-healing migration for data written under the old
         // multi-level category tree — no-ops after the first successful
-        // run. Covers both backends since both funnel through here.
+        // run. Covers both backends since both funnel through here. Rare:
+        // only genuinely legacy (pre-flatten) ids trigger this, and it's the
+        // one case where other rows change too, so a full reseed is right.
         const migrated = remapLegacyCategories(data);
         if (migrated.changed) {
           data = migrated.db;
           await repo.replaceAll(data);
+        }
+
+        // The common case: new built-in categories (e.g. the Type children)
+        // added to the tree after this database was first seeded. Written
+        // with a targeted putMany, never replaceAll — this must never risk
+        // a full delete-and-reinsert of someone's whole dataset just to add
+        // a few category rows that touch nothing else.
+        const missing = missingBuiltInCategories(data.categories);
+        if (missing.length > 0) {
+          await repo.putMany("categories", missing);
+          data = { ...data, categories: [...data.categories, ...missing] };
         }
       }
       emit({ status: "ready", data, error: null });
