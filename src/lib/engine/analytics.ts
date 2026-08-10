@@ -88,7 +88,12 @@ export function monthTotals(
     if (!inMonth(t, key, cycleStartDay)) continue;
     switch (t.type) {
       case "INCOME":
-        income += t.amount;
+        // A refund is money credited back against earlier spending, not new
+        // income — it nets against `spent` instead. `spent` can legitimately
+        // dip below what a naive expense-only sum would show if a refund
+        // lands in a later cycle than the purchase; that's the honest figure.
+        if (t.isRefund) spent -= t.amount;
+        else income += t.amount;
         break;
       case "EXPENSE":
         spent += t.amount;
@@ -146,11 +151,14 @@ export function spendByGroup(
 ): BreakdownSlice[] {
   const buckets = new Map<string, { amount: Paise; count: number }>();
   for (const t of transactions) {
-    if (!isExpense(t)) continue;
+    const refund = t.type === "INCOME" && t.isRefund;
+    if (!isExpense(t) && !refund) continue;
     const id = t.categoryId ? groupIdOf(t.categoryId) : UNCATEGORISED_ID;
     const bucket = buckets.get(id) ?? { amount: 0, count: 0 };
-    bucket.amount += t.amount;
-    bucket.count += 1;
+    bucket.amount += refund ? -t.amount : t.amount;
+    // Only real expenses count toward "N expenses" — a refund reduces the
+    // total but isn't itself a spending event.
+    if (!refund) bucket.count += 1;
     buckets.set(id, bucket);
   }
   return toSlices(buckets, labelFor);
@@ -164,11 +172,12 @@ export function spendByCategory(
 ): BreakdownSlice[] {
   const buckets = new Map<string, { amount: Paise; count: number }>();
   for (const t of transactions) {
-    if (!isExpense(t) || !t.categoryId) continue;
+    const refund = t.type === "INCOME" && t.isRefund;
+    if ((!isExpense(t) && !refund) || !t.categoryId) continue;
     if (groupId && groupIdOf(t.categoryId) !== groupId) continue;
     const bucket = buckets.get(t.categoryId) ?? { amount: 0, count: 0 };
-    bucket.amount += t.amount;
-    bucket.count += 1;
+    bucket.amount += refund ? -t.amount : t.amount;
+    if (!refund) bucket.count += 1;
     buckets.set(t.categoryId, bucket);
   }
   return toSlices(buckets, labelFor);
@@ -584,6 +593,11 @@ export function creditCardOutstanding(
     } else if (t.type === "TRANSFER" && t.accountId === cardAccountId) {
       // A cash advance or a refund routed out of the card increases the debt.
       charged += t.amount;
+    } else if (t.type === "INCOME" && t.isRefund && t.accountId === cardAccountId) {
+      // A merchant refund credited back to the card reduces what's owed —
+      // this works whether or not it's linked to the original charge, since
+      // only "landed back in the card account" matters here.
+      charged -= t.amount;
     }
   }
   return Math.max(0, charged - paid);

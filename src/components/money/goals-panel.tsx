@@ -25,11 +25,11 @@ import { GoalCard } from "./goal-card";
  */
 
 export function GoalsPanel() {
-  const { db } = useFinance();
+  const { db, month, cycleStartDay } = useFinance();
   const [creating, setCreating] = useState(false);
 
   const goals = db?.goals ?? [];
-  const earmarked = goalAllocations(goals);
+  const earmarked = goalAllocations(goals, db?.transactions ?? [], month, cycleStartDay);
   const funded = goals.filter((g) => g.currentAmount >= g.targetAmount).length;
 
   if (goals.length === 0) {

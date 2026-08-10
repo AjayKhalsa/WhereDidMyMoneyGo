@@ -11,7 +11,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { UNCATEGORISED_ID } from "@/lib/domain/categories";
 import { contextLabel } from "@/lib/domain/contexts";
-import { toDateInputValue } from "@/lib/domain/dates";
+import { formatFullDate, toDateInputValue } from "@/lib/domain/dates";
 import { formatMoney, formatMoneyPrecise, parseAmountInput } from "@/lib/domain/money";
 import type {
   Transaction,
@@ -102,6 +102,8 @@ interface DraftState {
   toAccountId?: string;
   merchant?: string;
   investmentId?: string;
+  isRefund: boolean;
+  reversesTransactionId?: string;
   notes: string;
   date: string;
 }
@@ -122,7 +124,9 @@ export function AddTransactionSheet({
   const [text, setText] = useState(options.initialText ?? "");
   const [saving, setSaving] = useState(false);
   const [showDetail, setShowDetail] = useState(Boolean(editing));
-  const [panel, setPanel] = useState<"category" | "type" | "context" | null>(null);
+  const [panel, setPanel] = useState<
+    "category" | "type" | "context" | "account" | "toAccount" | null
+  >(null);
   const [touched, setTouched] = useState<Set<keyof DraftState>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -146,6 +150,8 @@ export function AddTransactionSheet({
           toAccountId: editing.toAccountId,
           merchant: editing.merchant,
           investmentId: editing.investmentId,
+          isRefund: editing.isRefund ?? false,
+          reversesTransactionId: editing.reversesTransactionId,
           notes: editing.notes ?? "",
           date: toDateInputValue(editing.date),
         }
@@ -156,6 +162,7 @@ export function AddTransactionSheet({
           categoryId: UNCATEGORISED_ID,
           contexts: [],
           accountId: db?.accounts.find((a) => a.isDefault)?.id,
+          isRefund: false,
           notes: "",
           date: toDateInputValue(new Date()),
         },
@@ -173,8 +180,10 @@ export function AddTransactionSheet({
     return parseExpenseInput(text, {
       rules: db?.rules ?? [],
       date: new Date(draft.date),
+      accounts: db?.accounts ?? [],
+      recentTransactions: db?.transactions ?? [],
     });
-  }, [text, db?.rules, editing, draft.date]);
+  }, [text, db?.rules, db?.accounts, db?.transactions, editing, draft.date]);
 
   /**
    * The parser drives the draft, but only for fields the user hasn't taken
@@ -193,6 +202,19 @@ export function AddTransactionSheet({
       if (!touched.has("merchant")) next.merchant = parsed.merchant;
       if (!touched.has("type")) next.type = parsed.type;
       if (!touched.has("description")) next.description = parsed.description;
+      // Only a resolved transfer/card-payment shape ever sets these — a
+      // plain expense/income phrase leaves accountId as whatever "paid
+      // with" already held, and clears toAccountId entirely.
+      if (!touched.has("accountId")) {
+        next.accountId =
+          parsed.type === "TRANSFER" ? parsed.accountId : current.accountId;
+      }
+      if (!touched.has("toAccountId")) {
+        next.toAccountId = parsed.type === "TRANSFER" ? parsed.toAccountId : undefined;
+      }
+      if (!touched.has("isRefund")) {
+        next.isRefund = parsed.type === "INCOME" && Boolean(parsed.isRefund);
+      }
       return next;
     });
   }, [parsed, touched]);
@@ -285,8 +307,22 @@ export function AddTransactionSheet({
   const accounts = db?.accounts ?? [];
   const investments = (db?.investments ?? []).filter((i) => i.isActive);
 
+  // For manually linking a refund to what it reverses — last 90 days,
+  // most recent first, so the relevant one is usually right there.
+  const recentExpenses = useMemo(() => {
+    const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+    return (db?.transactions ?? [])
+      .filter((t) => t.type === "EXPENSE" && new Date(t.date).getTime() >= cutoff)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 30);
+  }, [db?.transactions]);
+
   const wasCorrected =
-    touched.has("categoryId") || touched.has("contexts") || touched.has("merchant");
+    touched.has("categoryId") ||
+    touched.has("contexts") ||
+    touched.has("merchant") ||
+    (draft.type === "TRANSFER" &&
+      (touched.has("accountId") || touched.has("toAccountId")));
 
   const confident = parsed ? canQuickSave(parsed) && !wasCorrected : false;
 
@@ -322,6 +358,9 @@ export function AddTransactionSheet({
       toAccountId: draft.toAccountId,
       merchant: draft.merchant,
       investmentId: draft.investmentId,
+      isRefund: draft.type === "INCOME" ? draft.isRefund : undefined,
+      reversesTransactionId:
+        draft.type === "INCOME" ? draft.reversesTransactionId : undefined,
       notes: draft.notes,
       source: editing ? editing.source : parsed ? "parsed" : "manual",
     };
@@ -517,10 +556,15 @@ export function AddTransactionSheet({
                 categories.groupOf(draft.categoryId)?.id ?? draft.categoryId,
               ).length > 0
             }
+            accountName={accounts.find((a) => a.id === draft.accountId)?.name}
+            toAccountName={accounts.find((a) => a.id === draft.toAccountId)?.name}
             onEditCategory={() => setPanel("category")}
             onEditType={() => setPanel("type")}
             onEditContexts={() => setPanel("context")}
+            onEditAccount={() => setPanel("account")}
+            onEditToAccount={() => setPanel("toAccount")}
             showCategory={isExpense || draft.type === "INCOME"}
+            showAccounts={draft.type === "TRANSFER"}
           />
         )}
 
@@ -560,6 +604,60 @@ export function AddTransactionSheet({
               </span>
             </motion.div>
           )}
+        </AnimatePresence>
+
+        {/* Refund reversal suggestion — a prompt, never auto-linked. */}
+        <AnimatePresence initial={false}>
+          {parsed?.suggestedReversalId &&
+            !touched.has("reversesTransactionId") &&
+            (() => {
+              const original = db?.transactions.find(
+                (t) => t.id === parsed.suggestedReversalId,
+              );
+              if (!original) return null;
+              return (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-accent/25 bg-accent-soft/50 p-3"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium text-ink">
+                      Refund for {original.description || original.merchant || "this"}?
+                    </span>
+                    <span className="mt-0.5 block text-[12px] text-ink-secondary">
+                      {formatMoney(original.amount)} on {formatFullDate(original.date)}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="quiet"
+                      onClick={() => markTouched("reversesTransactionId")}
+                    >
+                      No
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => {
+                        patch({
+                          reversesTransactionId: original.id,
+                          categoryId: touched.has("categoryId")
+                            ? draft.categoryId
+                            : (original.categoryId ?? draft.categoryId),
+                        });
+                        markTouched("reversesTransactionId");
+                      }}
+                    >
+                      Link
+                    </Button>
+                  </span>
+                </motion.div>
+              );
+            })()}
         </AnimatePresence>
 
         {/* Alternatives the parser considered — one tap to switch. */}
@@ -708,12 +806,19 @@ export function AddTransactionSheet({
 
                 <div className="space-y-1.5">
                   <p className="text-[13px] font-medium text-ink-secondary">
-                    {draft.type === "TRANSFER" ? "From account" : "Paid with"}
+                    {draft.type === "TRANSFER"
+                      ? "From account"
+                      : draft.type === "INCOME"
+                        ? "Credited to"
+                        : "Paid with"}
                   </p>
                   <AccountPicker
                     accounts={accounts}
                     value={draft.accountId}
-                    onChange={(id) => patch({ accountId: id })}
+                    onChange={(id) => {
+                      patch({ accountId: id });
+                      markTouched("accountId");
+                    }}
                     allowNone
                   />
                 </div>
@@ -726,12 +831,72 @@ export function AddTransactionSheet({
                     <AccountPicker
                       accounts={accounts.filter((a) => a.id !== draft.accountId)}
                       value={draft.toAccountId}
-                      onChange={(id) => patch({ toAccountId: id })}
+                      onChange={(id) => {
+                        patch({ toAccountId: id });
+                        markTouched("toAccountId");
+                      }}
                     />
                     <p className="text-[12.5px] text-ink-tertiary">
                       Moving money between accounts is never counted as
                       spending.
                     </p>
+                  </div>
+                )}
+
+                {draft.type === "INCOME" && (
+                  <div className="space-y-2 rounded-xl border border-line p-3.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        patch({
+                          isRefund: !draft.isRefund,
+                          reversesTransactionId: draft.isRefund
+                            ? draft.reversesTransactionId
+                            : undefined,
+                        });
+                        markTouched("isRefund");
+                      }}
+                      className="flex w-full items-center justify-between text-[13px] font-medium text-ink-secondary"
+                    >
+                      <span>This is a refund</span>
+                      <Chip tone={draft.isRefund ? "accent" : "neutral"}>
+                        {draft.isRefund ? "On" : "Off"}
+                      </Chip>
+                    </button>
+
+                    {draft.isRefund && (
+                      <div className="space-y-2 pt-1">
+                        <p className="text-[12.5px] text-ink-tertiary">
+                          Link the expense it reverses, so it nets out of that
+                          category instead of counting as new income.
+                          Optional.
+                        </p>
+                        <div className="flex gap-1.5 overflow-x-auto pb-1">
+                          {recentExpenses.map((t) => (
+                            <SelectableChip
+                              key={t.id}
+                              selected={draft.reversesTransactionId === t.id}
+                              onClick={() =>
+                                patch({
+                                  reversesTransactionId:
+                                    draft.reversesTransactionId === t.id
+                                      ? undefined
+                                      : t.id,
+                                })
+                              }
+                            >
+                              {t.description || t.merchant || "Expense"} ·{" "}
+                              {formatMoney(t.amount)} · {formatFullDate(t.date)}
+                            </SelectableChip>
+                          ))}
+                          {recentExpenses.length === 0 && (
+                            <p className="text-[12.5px] text-ink-tertiary">
+                              No recent expenses to link.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -824,6 +989,40 @@ export function AddTransactionSheet({
           }}
         />
       </Sheet>
+
+      <Sheet
+        open={panel === "account"}
+        onClose={() => setPanel(null)}
+        title="From account"
+        size="md"
+      >
+        <AccountPicker
+          accounts={accounts}
+          value={draft.accountId}
+          onChange={(id) => {
+            patch({ accountId: id });
+            markTouched("accountId");
+            setPanel(null);
+          }}
+        />
+      </Sheet>
+
+      <Sheet
+        open={panel === "toAccount"}
+        onClose={() => setPanel(null)}
+        title="To account"
+        size="md"
+      >
+        <AccountPicker
+          accounts={accounts.filter((a) => a.id !== draft.accountId)}
+          value={draft.toAccountId}
+          onChange={(id) => {
+            patch({ toAccountId: id });
+            markTouched("toAccountId");
+            setPanel(null);
+          }}
+        />
+      </Sheet>
     </Sheet>
   );
 }
@@ -853,10 +1052,15 @@ function Interpretation({
   categoryName,
   typeName,
   hasTypes,
+  accountName,
+  toAccountName,
   onEditCategory,
   onEditType,
   onEditContexts,
+  onEditAccount,
+  onEditToAccount,
   showCategory,
+  showAccounts,
 }: {
   draft: DraftState;
   parsedConfidence: number | null;
@@ -866,10 +1070,18 @@ function Interpretation({
   typeName?: string;
   /** Whether the category has any Type children at all. */
   hasTypes: boolean;
+  /** Resolved "from" account name, for a TRANSFER. */
+  accountName?: string;
+  /** Resolved "to" account name, for a TRANSFER. */
+  toAccountName?: string;
   onEditCategory: () => void;
   onEditType: () => void;
   onEditContexts: () => void;
+  onEditAccount: () => void;
+  onEditToAccount: () => void;
   showCategory: boolean;
+  /** True for a TRANSFER — shows the from/to account chips instead. */
+  showAccounts: boolean;
 }) {
   const uncertain = parsedConfidence !== null && parsedConfidence < 0.82;
   const visibleContexts = draft.contexts.filter(
@@ -907,6 +1119,19 @@ function Interpretation({
         )}
         {showCategory && !typeName && hasTypes && (
           <SelectableChip onClick={onEditType}>Add type</SelectableChip>
+        )}
+        {showAccounts && (
+          <SelectableChip selected={Boolean(accountName)} onClick={onEditAccount}>
+            {accountName ?? "From account"}
+          </SelectableChip>
+        )}
+        {showAccounts && (
+          <SelectableChip selected={Boolean(toAccountName)} onClick={onEditToAccount}>
+            {toAccountName ?? "To account"}
+          </SelectableChip>
+        )}
+        {draft.type === "INCOME" && draft.isRefund && (
+          <Chip tone="neutral">Refund</Chip>
         )}
         {visibleContexts.map((context) => (
           <SelectableChip

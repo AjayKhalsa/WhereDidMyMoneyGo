@@ -47,6 +47,9 @@ export interface TransactionDraft {
   toAccountId?: string;
   merchant?: string;
   investmentId?: string;
+  goalId?: string;
+  isRefund?: boolean;
+  reversesTransactionId?: string;
   notes?: string;
   source?: Transaction["source"];
 }
@@ -76,7 +79,10 @@ function materialise(
   const derived = source === "imported" ? [] : derivedContexts(iso);
   const contexts = normaliseContexts([...authored, ...derived]);
 
-  // Only expenses carry a category; a card payment has no "category".
+  // Only expenses carry a category; a card payment has no "category". INCOME
+  // already keeps whatever categoryId was set (unused by plain income, but
+  // it's what lets a refund net against the same bucket the original spend
+  // landed in).
   const categoryId = draft.type === "TRANSFER" ? undefined : draft.categoryId;
 
   return {
@@ -91,6 +97,10 @@ function materialise(
     categoryId,
     contexts,
     investmentId: draft.type === "INVESTMENT" ? draft.investmentId : undefined,
+    goalId: draft.type === "TRANSFER" ? draft.goalId : undefined,
+    isRefund: draft.type === "INCOME" ? draft.isRefund || undefined : undefined,
+    reversesTransactionId:
+      draft.type === "INCOME" ? draft.reversesTransactionId : undefined,
     notes: draft.notes?.trim() || undefined,
     recurringId: existing?.recurringId,
     source,
@@ -240,7 +250,20 @@ export async function updateTransaction(
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
-  await removeRow("transactions", id);
+  const db = getSnapshot().data;
+  // Detach any refund pointing at this row rather than leaving a dangling
+  // reference — the refund itself is still real money and stays.
+  const orphaned = (db?.transactions ?? [])
+    .filter((t) => t.reversesTransactionId === id)
+    .map((t) => ({
+      ...t,
+      reversesTransactionId: undefined,
+      updatedAt: new Date().toISOString(),
+    }));
+  await applyBatch({
+    puts: orphaned.length ? { transactions: orphaned } : {},
+    deletes: { transactions: [id] },
+  });
 }
 
 /**
@@ -302,6 +325,9 @@ export async function addIncome(params: {
   description: string;
   accountId?: string;
   date?: Date;
+  categoryId?: string;
+  isRefund?: boolean;
+  reversesTransactionId?: string;
 }): Promise<Transaction> {
   return addTransaction(
     {
@@ -310,6 +336,9 @@ export async function addIncome(params: {
       description: params.description,
       date: params.date ?? new Date(),
       accountId: params.accountId,
+      categoryId: params.categoryId,
+      isRefund: params.isRefund,
+      reversesTransactionId: params.reversesTransactionId,
       contexts: [],
     },
     { learn: false },
@@ -370,7 +399,17 @@ export async function saveGoal(goal: Goal): Promise<void> {
 }
 
 export async function deleteGoal(id: string): Promise<void> {
-  await removeRow("goals", id);
+  const db = getSnapshot().data;
+  // Detach contribution transactions rather than deleting them — the money
+  // really left the account, so that history stays real even if the goal
+  // it was earmarked for goes away.
+  const orphaned = (db?.transactions ?? [])
+    .filter((t) => t.goalId === id)
+    .map((t) => ({ ...t, goalId: undefined, updatedAt: new Date().toISOString() }));
+  await applyBatch({
+    puts: orphaned.length ? { transactions: orphaned } : {},
+    deletes: { goals: [id] },
+  });
 }
 
 export async function saveInvestment(investment: Investment): Promise<void> {
@@ -498,15 +537,44 @@ export async function markRecurringPaid(
   return transaction;
 }
 
-/** Moves money into a goal's pot. Tracked on the goal, not as spending. */
-export async function contributeToGoal(
-  goalId: string,
-  amount: Paise,
-): Promise<void> {
-  const goal = getSnapshot().data?.goals.find((g) => g.id === goalId);
-  if (!goal) return;
-  await putRow("goals", {
-    ...goal,
-    currentAmount: Math.max(0, goal.currentAmount + amount),
+/**
+ * Moves real money into a goal's pot: a TRANSFER out of `fromAccountId`
+ * (never spending — same "moved, not spent" treatment as a credit-card
+ * payment), which also bumps the goal's `currentAmount`. Recorded as a
+ * TRANSFER rather than an INVESTMENT so a goal sitting in a bank account
+ * never pollutes `totals.invested`/the real investments list.
+ */
+export async function contributeToGoal(params: {
+  goalId: string;
+  amount: Paise;
+  fromAccountId: string;
+  date?: Date;
+  description?: string;
+}): Promise<Transaction> {
+  const goal = getSnapshot().data?.goals.find((g) => g.id === params.goalId);
+  const transaction = materialise({
+    type: "TRANSFER",
+    amount: params.amount,
+    description: params.description ?? `${goal?.name ?? "Goal"} contribution`,
+    date: params.date ?? new Date(),
+    accountId: params.fromAccountId,
+    goalId: params.goalId,
+    contexts: [],
   });
+  await applyBatch({
+    puts: {
+      transactions: [transaction],
+      ...(goal
+        ? {
+            goals: [
+              {
+                ...goal,
+                currentAmount: Math.max(0, goal.currentAmount + params.amount),
+              },
+            ],
+          }
+        : {}),
+    },
+  });
+  return transaction;
 }
