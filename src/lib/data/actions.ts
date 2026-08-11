@@ -249,21 +249,59 @@ export async function updateTransaction(
   return transaction;
 }
 
-export async function deleteTransaction(id: string): Promise<void> {
+/**
+ * Everything needed to put a delete back exactly as it was — the row itself
+ * plus any refunds whose link to it was detached on the way out.
+ */
+export interface DeletedTransaction {
+  transaction: Transaction;
+  detachedRefunds: Transaction[];
+}
+
+export async function deleteTransaction(
+  id: string,
+): Promise<DeletedTransaction | undefined> {
   const db = getSnapshot().data;
+  const transaction = db?.transactions.find((t) => t.id === id);
   // Detach any refund pointing at this row rather than leaving a dangling
-  // reference — the refund itself is still real money and stays.
-  const orphaned = (db?.transactions ?? [])
-    .filter((t) => t.reversesTransactionId === id)
-    .map((t) => ({
-      ...t,
-      reversesTransactionId: undefined,
-      updatedAt: new Date().toISOString(),
-    }));
+  // reference — the refund itself is still real money and stays. Their
+  // pre-detach state is returned so an undo can restore the link too.
+  const detachedRefunds = (db?.transactions ?? []).filter(
+    (t) => t.reversesTransactionId === id,
+  );
+  const orphaned = detachedRefunds.map((t) => ({
+    ...t,
+    reversesTransactionId: undefined,
+    updatedAt: new Date().toISOString(),
+  }));
   await applyBatch({
     puts: orphaned.length ? { transactions: orphaned } : {},
     deletes: { transactions: [id] },
   });
+  return transaction ? { transaction, detachedRefunds } : undefined;
+}
+
+/**
+ * Puts a deleted transaction back, links and all.
+ *
+ * Rows are re-put under their original ids, so anything still pointing at
+ * them — splits, refund links, recurring charges — lines up again rather
+ * than being orphaned by a new id.
+ */
+export async function restoreTransaction(
+  deleted: DeletedTransaction,
+): Promise<void> {
+  await applyBatch({
+    puts: {
+      transactions: [deleted.transaction, ...deleted.detachedRefunds],
+    },
+  });
+}
+
+/** Removes a batch of transactions — the undo half of an import. */
+export async function deleteTransactions(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await applyBatch({ deletes: { transactions: ids } });
 }
 
 /**

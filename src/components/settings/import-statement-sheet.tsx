@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { AlertTriangle, Loader2, Upload } from "lucide-react";
 import { formatDayMonth } from "@/lib/domain/dates";
 import { formatMoney } from "@/lib/domain/money";
-import { importTransactions } from "@/lib/data/actions";
+import { deleteTransactions, importTransactions } from "@/lib/data/actions";
 import {
   buildImportDrafts,
   type ImportDraft,
@@ -157,7 +157,7 @@ export function ImportStatementSheet({
     setCommitting(true);
     try {
       const included = rows.filter((r) => r.included);
-      await importTransactions(
+      const created = await importTransactions(
         included.map((r) => ({
           draft: {
             type: r.type,
@@ -178,6 +178,12 @@ export function ImportStatementSheet({
       toast.show({
         tone: "success",
         title: `${included.length} transaction${included.length === 1 ? "" : "s"} imported`,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void deleteTransactions(created.map((t) => t.id));
+          },
+        },
       });
       reset();
       onClose();

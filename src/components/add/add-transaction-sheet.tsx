@@ -22,6 +22,7 @@ import {
   addTransaction,
   deleteTransaction,
   recordSplits,
+  restoreTransaction,
   updateTransaction,
   type TransactionDraft,
 } from "@/lib/data/actions";
@@ -395,8 +396,19 @@ export function AddTransactionSheet({
     if (!editing) return;
     setSaving(true);
     try {
-      await deleteTransaction(editing.id);
-      toast.show({ tone: "info", title: "Transaction deleted" });
+      const deleted = await deleteTransaction(editing.id);
+      toast.show({
+        tone: "info",
+        title: "Transaction deleted",
+        action: deleted
+          ? {
+              label: "Undo",
+              onClick: () => {
+                void restoreTransaction(deleted);
+              },
+            }
+          : undefined,
+      });
       onClose();
     } finally {
       setSaving(false);
