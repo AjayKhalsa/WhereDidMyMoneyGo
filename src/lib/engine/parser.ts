@@ -65,6 +65,11 @@ export interface Token {
 function tokenize(input: string): Token[] {
   return input
     .toLowerCase()
+    // Digit grouping must be resolved before the comma is turned into a
+    // separator, or "1,200" splits into "1" and "200" and the largest-token
+    // rule silently books ₹200. Only commas *between digits* are removed, so
+    // ordinary punctuation ("dinner, coffee") still separates words.
+    .replace(/(\d),(?=\d)/g, "$1")
     .replace(/[^\p{L}\p{N}\s.+-]/gu, " ")
     .split(/[\s+]+/)
     .filter(Boolean)

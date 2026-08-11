@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { daysBetween } from "@/lib/domain/dates";
+import { daysBetween, toDateInputValue } from "@/lib/domain/dates";
 import { formatMoney, parseAmountInput } from "@/lib/domain/money";
 import type { Investment, InvestmentKind } from "@/lib/domain/types";
 import {
@@ -308,7 +308,7 @@ function InvestmentSheet({
         </SelectField>
         <MoneyField
           label="Planned monthly contribution"
-          hint="Held back from safe-to-spend until it's actually paid."
+          hint="Held back from safe-to-spend every cycle until it's actually paid. Leave blank for a one-off like a fixed deposit."
           value={monthly}
           onChange={(e) => setMonthly(e.target.value)}
           placeholder="30000"
@@ -347,6 +347,7 @@ function ContributionSheet({
   const toast = useToast();
   const [amount, setAmount] = useState("");
   const [selected, setSelected] = useState<string | undefined>(investment?.id);
+  const [date, setDate] = useState(() => toDateInputValue(new Date()));
   const [fromAccountId, setFromAccountId] = useState<string | undefined>(
     () => db?.accounts.find((a) => a.type === "BANK")?.id,
   );
@@ -355,6 +356,7 @@ function ContributionSheet({
   if (investment?.id !== lastId) {
     setLastId(investment?.id);
     setSelected(investment?.id);
+    setDate(toDateInputValue(new Date()));
     setAmount(
       investment?.monthlyContribution
         ? String(investment.monthlyContribution / 100)
@@ -371,6 +373,10 @@ function ContributionSheet({
       investmentId: selected,
       amount: value,
       fromAccountId,
+      // An FD opened months ago must debit the account on the day it actually
+      // left, not today — otherwise recording it re-breaks the balance you
+      // reconciled against your statement.
+      date: date ? new Date(`${date}T12:00:00`) : undefined,
     });
     toast.show({
       tone: "success",
@@ -421,6 +427,14 @@ function ContributionSheet({
             ))}
           </div>
         </div>
+        <TextField
+          label="Date"
+          type="date"
+          hint="When the money actually left your account."
+          value={date}
+          max={toDateInputValue(new Date())}
+          onChange={(e) => setDate(e.target.value)}
+        />
         <div className="space-y-1.5">
           <p className="text-[13px] font-medium text-ink-secondary">From</p>
           <AccountPicker
