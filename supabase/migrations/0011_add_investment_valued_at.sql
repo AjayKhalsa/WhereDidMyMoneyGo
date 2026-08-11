@@ -1,0 +1,22 @@
+-- Portfolio valuation: when `investments.current_value` was last stamped by
+-- hand. The value column itself has existed since 0001_init.sql and needs no
+-- change here — it was simply never written to.
+--
+-- The pair is what makes a live value derivable without a price feed and
+-- without mutating rows on every contribution: contributions dated after
+-- `valued_at` are added on top of `current_value` at read time, so logging a
+-- SIP raises value and cost equally, leaving the derived gain unchanged and
+-- the stamp still meaningful.
+--
+-- Nullable and additive, with no foreign key and no touch to any primary key
+-- (investments.id was untouched by 0007_scope_categories_per_user.sql, which
+-- only rescoped categories) — so this cannot disturb existing rows. An
+-- investment that has never been valued keeps `null` here and falls back to
+-- its contributed total, which is exactly today's behaviour.
+--
+-- `if not exists` so an accidental second run is a no-op rather than the
+-- confusing "column already exists" abort that 0007's re-run produced.
+--
+-- Run this once in the Supabase SQL editor.
+
+alter table investments add column if not exists valued_at timestamptz;

@@ -194,10 +194,17 @@ export interface Investment {
   isActive: boolean;
   createdAt: string;
   /**
-   * V2 hook: current market value for portfolio tracking. Deliberately
-   * unused in V1 — contribution tracking only.
+   * Hand-stamped market value, as of `valuedAt`. Never auto-updated: the
+   * app has no price feed, so this is only ever as good as the last time
+   * you checked — which is why `valuedAt` travels with it.
    */
   currentValue?: Paise;
+  /**
+   * When `currentValue` was last entered. Contributions made *after* this
+   * date are added on top when the live value is derived, so logging a SIP
+   * raises value and cost equally and never needs a re-stamp.
+   */
+  valuedAt?: string;
 }
 
 export interface IncomeSource {

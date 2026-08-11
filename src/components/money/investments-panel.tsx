@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
+import { daysBetween } from "@/lib/domain/dates";
 import { formatMoney, parseAmountInput } from "@/lib/domain/money";
 import type { Investment, InvestmentKind } from "@/lib/domain/types";
 import {
   investmentContributions,
   investmentRate,
+  portfolioValue,
+  valueInvestments,
 } from "@/lib/engine/analytics";
 import {
   addInvestmentContribution,
@@ -27,12 +30,11 @@ import { MoneyRow } from "./disclosure-panel";
 /**
  * Investments (spec §20).
  *
- * V1 tracks contributions, not portfolio value. That is a deliberate scope
- * decision: "how much am I actually putting away each month?" is answerable
- * from your own data and useful immediately, whereas live valuations need
- * price feeds and would make the number less trustworthy, not more.
- *
- * `Investment.currentValue` exists in the model as the hook for V2.
+ * Contributions come from your own transactions and are always exact. Value
+ * cannot be — there is no price feed — so it is whatever you last typed in,
+ * shown with how long ago that was. Gain is never entered, only derived
+ * (`value − contributed`), so the two can't drift apart, and an investment
+ * you've never valued simply reports its contributions.
  */
 
 const KINDS: { value: InvestmentKind; label: string }[] = [
@@ -46,7 +48,7 @@ const KINDS: { value: InvestmentKind; label: string }[] = [
 ];
 
 export function InvestmentsPanel() {
-  const { db, month, cycleStartDay, totals } = useFinance();
+  const { db, month, cycleStartDay, totals, now } = useFinance();
   const [editing, setEditing] = useState<Investment | null>(null);
   const [creating, setCreating] = useState(false);
   const [contributing, setContributing] = useState<Investment | null>(null);
@@ -57,31 +59,83 @@ export function InvestmentsPanel() {
     month,
     cycleStartDay,
   );
+  const valuations = valueInvestments(
+    db?.investments ?? [],
+    db?.transactions ?? [],
+    now,
+  );
+  const portfolio = portfolioValue(
+    db?.investments ?? [],
+    db?.transactions ?? [],
+    now,
+  );
+  const totalContributed = valuations
+    .filter((v) => v.investment.isActive)
+    .reduce((acc, v) => acc + v.contributed, 0);
+  const totalGain = portfolio - totalContributed;
 
   const rate = investmentRate(totals);
 
   return (
     <>
       <div className="-mx-3">
-        {breakdown.map(({ investment, contributed, planned }) => {
-          const shortfall = planned - contributed;
+        {breakdown.map(({ investment, planned }) => {
+          const valuation = valuations.find(
+            (v) => v.investment.id === investment.id,
+          );
+          const contributed = valuation?.contributed ?? 0;
+          const gain = valuation?.gain ?? 0;
+          const valued = valuation?.valuedAt !== null;
           return (
             <MoneyRow
               key={investment.id}
               label={investment.name}
               sublabel={
-                planned > 0
-                  ? shortfall > 0
-                    ? `${formatMoney(shortfall)} still due this month`
-                    : `Plan met · ${formatMoney(planned)}/month`
-                  : "No monthly plan set"
+                valued
+                  ? `${formatMoney(contributed)} in · ${gain >= 0 ? "+" : "−"}${formatMoney(Math.abs(gain))} ${gain >= 0 ? "gain" : "loss"}`
+                  : planned > 0
+                    ? `${formatMoney(planned)}/month planned · value not set`
+                    : "Value not set"
               }
               onClick={() => setEditing(investment)}
-              value={<Amount value={contributed} size="sm" />}
+              value={
+                <Amount
+                  value={valuation?.value ?? contributed}
+                  size="sm"
+                  className={
+                    valued && gain > 0
+                      ? "text-positive"
+                      : valued && gain < 0
+                        ? "text-warning"
+                        : undefined
+                  }
+                />
+              }
             />
           );
         })}
       </div>
+
+      {portfolio > 0 && (
+        <div className="rounded-xl bg-surface-sunken p-3.5">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-[13px] text-ink-secondary">
+              Portfolio value
+            </span>
+            <Amount value={portfolio} size="md" />
+          </div>
+          <p className="mt-1.5 text-[12.5px] text-ink-tertiary">
+            {formatMoney(totalContributed)} contributed
+            {totalGain !== 0 && (
+              <>
+                {" "}· {totalGain > 0 ? "up" : "down"}{" "}
+                {formatMoney(Math.abs(totalGain))}
+              </>
+            )}
+            . Anything you haven&rsquo;t valued counts at what you put in.
+          </p>
+        </div>
+      )}
 
       {totals.invested > 0 && (
         <div className="rounded-xl bg-surface-sunken p-3.5">
@@ -164,6 +218,11 @@ function InvestmentSheet({
   const [monthly, setMonthly] = useState(
     investment ? String(investment.monthlyContribution / 100) : "",
   );
+  const [worth, setWorth] = useState(
+    investment?.currentValue !== undefined
+      ? String(investment.currentValue / 100)
+      : "",
+  );
 
   const [lastId, setLastId] = useState(investment?.id);
   if (investment?.id !== lastId) {
@@ -171,7 +230,18 @@ function InvestmentSheet({
     setName(investment?.name ?? "");
     setKind(investment?.kind ?? "MUTUAL_FUND");
     setMonthly(investment ? String(investment.monthlyContribution / 100) : "");
+    setWorth(
+      investment?.currentValue !== undefined
+        ? String(investment.currentValue / 100)
+        : "",
+    );
   }
+
+  // Only re-stamp `valuedAt` when the figure actually changed — otherwise
+  // saving an unrelated edit (a rename) would silently make a months-old
+  // valuation look freshly checked.
+  const enteredWorth = parseAmountInput(worth);
+  const worthChanged = enteredWorth !== null && enteredWorth !== investment?.currentValue;
 
   async function handleSave() {
     if (!name.trim()) return;
@@ -182,7 +252,10 @@ function InvestmentSheet({
       monthlyContribution: parseAmountInput(monthly) ?? 0,
       isActive: true,
       createdAt: investment?.createdAt ?? new Date().toISOString(),
-      currentValue: investment?.currentValue,
+      currentValue: enteredWorth ?? investment?.currentValue,
+      valuedAt: worthChanged
+        ? new Date().toISOString()
+        : investment?.valuedAt,
     });
     toast.show({ tone: "success", title: "Investment saved" });
     onClose();
@@ -240,9 +313,27 @@ function InvestmentSheet({
           onChange={(e) => setMonthly(e.target.value)}
           placeholder="30000"
         />
+        <MoneyField
+          label="What's it worth now?"
+          hint={valuedHint(investment)}
+          value={worth}
+          onChange={(e) => setWorth(e.target.value)}
+          placeholder="Leave blank to count it at what you put in"
+        />
       </div>
     </Sheet>
   );
+}
+
+/** Explains how stale the stored valuation is, in plain words. */
+function valuedHint(investment: Investment | null): string {
+  if (!investment?.valuedAt) {
+    return "Optional. Update it whenever you check — contributions you log after today are added on top automatically.";
+  }
+  const days = daysBetween(new Date(investment.valuedAt), new Date());
+  const when =
+    days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
+  return `Last valued ${when}. Contributions since then are already counted on top.`;
 }
 
 function ContributionSheet({

@@ -13,14 +13,18 @@ import { TextField } from "@/components/ui/fields";
 import { Button, Chip } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
+import { AccountPicker } from "@/components/pickers/pickers";
 import { createId } from "@/lib/utils";
 import { MoneyRow } from "./disclosure-panel";
 
 /**
  * Who you split expenses with (spec-adjacent: added for shared-expense
- * tracking). The transaction behind each split already recorded only your
- * real share — this panel is purely the "who owes what" side-ledger, so
- * settling one here never touches spend totals anywhere else in the app.
+ * tracking).
+ *
+ * The expense behind each split recorded the full amount that left your
+ * account, so an outstanding split is a genuine receivable. Settling one
+ * therefore moves money: it lands as a refund against the original expense,
+ * bringing cash back without pretending you earned it.
  */
 
 export function PeoplePanel() {
@@ -96,6 +100,11 @@ function PersonSheet({
   const toast = useToast();
 
   const [name, setName] = useState(person?.name ?? "");
+  const [settleAccountId, setSettleAccountId] = useState<string | undefined>(
+    () =>
+      db?.accounts.find((a) => a.isDefault && a.type === "BANK")?.id ??
+      db?.accounts.find((a) => a.type === "BANK")?.id,
+  );
 
   // Re-seed local state whenever a different person is opened.
   const [lastId, setLastId] = useState(person?.id);
@@ -130,11 +139,16 @@ function PersonSheet({
   }
 
   async function handleSettle(split: Split) {
-    await settleSplit(split.id);
+    await settleSplit(split.id, { accountId: settleAccountId });
+    const owedToMe = split.direction === "OWED_TO_ME";
     toast.show({
       tone: "success",
       title: `${formatMoney(split.amount)} settled`,
-      detail: person?.name,
+      detail: settleAccountId
+        ? owedToMe
+          ? "Added back to your balance, not counted as income"
+          : "Recorded as money leaving your account"
+        : person?.name,
     });
   }
 
@@ -168,6 +182,20 @@ function PersonSheet({
 
         {person && outstanding.length > 0 && (
           <div className="space-y-1.5">
+            <p className="text-[13px] font-medium text-ink-secondary">
+              Settling into
+            </p>
+            <AccountPicker
+              accounts={(db?.accounts ?? []).filter(
+                (a) => a.isActive && (a.type === "BANK" || a.type === "CASH"),
+              )}
+              value={settleAccountId}
+              onChange={setSettleAccountId}
+            />
+            <p className="pb-1 text-[12.5px] leading-relaxed text-ink-tertiary">
+              Settling moves the money for real. Being paid back isn&rsquo;t
+              income — it comes off the original expense instead.
+            </p>
             <p className="text-[13px] font-medium text-ink-secondary">
               Outstanding
             </p>

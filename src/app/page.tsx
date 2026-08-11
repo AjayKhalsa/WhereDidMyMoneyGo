@@ -40,6 +40,11 @@ export default function HomePage() {
   const { open } = useAddSheet();
   const [flowOpen, setFlowOpen] = useState(false);
   const [activeInsight, setActiveInsight] = useState<Insight | null>(null);
+  // Decided once, on the first loaded render, and then held. Re-deriving it
+  // every render would tear the setup flow down halfway through: its own
+  // first step saves an income source, which is exactly the condition that
+  // says "this user is no longer new".
+  const [onboarding, setOnboarding] = useState<boolean | null>(null);
 
   if (status === "loading" || status === "idle") return <HomeSkeleton />;
 
@@ -59,7 +64,15 @@ export default function HomePage() {
 
   const hasAnyData = (db?.transactions.length ?? 0) > 0;
   const hasIncomeSetUp = (db?.incomeSources.length ?? 0) > 0;
-  if (!hasAnyData && !hasIncomeSetUp) return <WelcomeScreen />;
+  if (onboarding === null) {
+    // `onboarded` alone isn't enough to go on: accounts created before that
+    // flag existed still carry `false`, and trapping someone with months of
+    // history in a setup wizard would be far worse than skipping it.
+    setOnboarding(!hasAnyData && !hasIncomeSetUp && !db?.profile.onboarded);
+  }
+  if (onboarding) {
+    return <WelcomeScreen onDone={() => setOnboarding(false)} />;
+  }
 
   const recent = [...monthRows]
     .sort((a, b) => b.date.localeCompare(a.date))
