@@ -221,7 +221,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       );
 
     const peopleBalances = personBalances(db?.people ?? [], db?.splits ?? []);
-    const netWorthValue = netWorth(db?.accounts ?? [], transactions, peopleBalances);
+    const netWorthValue = netWorth(
+      db?.accounts ?? [],
+      transactions,
+      db?.investments ?? [],
+      peopleBalances,
+      now,
+    );
 
     return {
       status: state.status,

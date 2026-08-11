@@ -105,7 +105,7 @@ export default function MoneyPage() {
         <StatBlock
           label="Net worth"
           value={netWorth}
-          detail="Cash + invested + owed to you, minus cards"
+          detail="Cash + portfolio + owed to you, minus cards"
         />
       </div>
 

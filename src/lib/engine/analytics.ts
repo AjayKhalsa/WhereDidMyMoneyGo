@@ -825,11 +825,10 @@ export function totalCommitted(
 }
 
 /**
- * What you're actually worth right now: cash + money already invested +
- * what people net owe you, minus card debt. Deliberately excludes anything
- * forward-looking — expected income, planned investments, goal targets —
- * because those aren't yours yet. Investments are counted at contributed
- * cost, not market value, since this app doesn't track returns.
+ * What you're actually worth right now: cash + the portfolio at its
+ * last-marked value + what people net owe you, minus card debt. Deliberately
+ * excludes anything forward-looking — expected income, planned investments,
+ * goal targets — because those aren't yours yet.
  *
  * This is a distinct question from `liquidBalance` ("what can I spend right
  * now") and `SafeToSpendResult.safeAmount` ("what's left over this cycle
@@ -838,13 +837,15 @@ export function totalCommitted(
 export function netWorth(
   accounts: Account[],
   transactions: Transaction[],
+  investments: Investment[],
   peopleBalances: { netAmount: Paise }[],
+  now: Date,
 ): Paise {
   const cash = liquidBalance(accounts, transactions);
-  const invested = total(ofType(transactions, "INVESTMENT"));
+  const portfolio = portfolioValue(investments, transactions, now);
   const cardDebt = totalCommitted(accounts, transactions);
   const netOwed = peopleBalances.reduce((acc, b) => acc + b.netAmount, 0);
-  return cash + invested + netOwed - cardDebt;
+  return cash + portfolio + netOwed - cardDebt;
 }
 
 // ---------------------------------------------------------------------------
@@ -891,6 +892,77 @@ export interface InvestmentBreakdown {
   investment: Investment;
   contributed: Paise;
   planned: Paise;
+}
+
+export interface InvestmentValuation {
+  investment: Investment;
+  /** Every rupee ever put in — the cost basis. */
+  contributed: Paise;
+  /** What it's worth: the last stamped value, plus anything added since. */
+  value: Paise;
+  /** value − contributed. Negative is a loss. */
+  gain: Paise;
+  /** Null when the value has never been stamped. */
+  valuedAt: Date | null;
+  /** Whole days since the stamp; null when never valued. */
+  daysSinceValued: number | null;
+}
+
+/**
+ * Portfolio valuation without a price feed.
+ *
+ * The app can't know what a fund is worth today, so `currentValue` is
+ * whatever the user last typed in. Rather than mutating it every time a
+ * contribution lands — which would couple every write path to this figure
+ * and drift the moment a transaction was edited or deleted — the live value
+ * is *derived*:
+ *
+ *     value = currentValue + contributions dated after valuedAt
+ *
+ * A SIP therefore raises value and cost by the same amount, leaving `gain`
+ * correctly unchanged and the old stamp still usable. An investment that has
+ * never been valued reports `value === contributed` (gain zero), which is
+ * exactly the contribution-only behaviour this app had before.
+ */
+export function valueInvestments(
+  investments: Investment[],
+  transactions: Transaction[],
+  now: Date,
+): InvestmentValuation[] {
+  const contributions = ofType(transactions, "INVESTMENT");
+  return investments.map((investment) => {
+    const mine = contributions.filter((t) => t.investmentId === investment.id);
+    const contributed = total(mine);
+    const valuedAt = investment.valuedAt ? new Date(investment.valuedAt) : null;
+
+    const value =
+      investment.currentValue === undefined || valuedAt === null
+        ? contributed
+        : investment.currentValue +
+          total(mine.filter((t) => new Date(t.date) > valuedAt));
+
+    return {
+      investment,
+      contributed,
+      value,
+      gain: value - contributed,
+      valuedAt,
+      daysSinceValued: valuedAt ? daysBetween(valuedAt, now) : null,
+    };
+  });
+}
+
+/** What the whole portfolio is worth, at last-marked values. */
+export function portfolioValue(
+  investments: Investment[],
+  transactions: Transaction[],
+  now: Date,
+): Paise {
+  return valueInvestments(
+    investments.filter((i) => i.isActive),
+    transactions,
+    now,
+  ).reduce((acc, v) => acc + v.value, 0);
 }
 
 export function investmentContributions(
