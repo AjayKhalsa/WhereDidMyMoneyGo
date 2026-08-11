@@ -29,6 +29,14 @@ export interface ImportDraft {
   confidence: number;
   reasons: string[];
   matchedRuleId?: string;
+  /**
+   * Where a TRANSFER landed. A statement only ever shows money leaving this
+   * account, never where it went, so this is deliberately left unset for the
+   * reviewer to fill in — committing a transfer without it would debit the
+   * bank and credit nothing, leaving a card's outstanding permanently too
+   * high.
+   */
+  toAccountId?: string;
   /** Same date + amount + description already exists on this account. */
   isLikelyDuplicate: boolean;
   /** The untouched bank narration, kept for the review screen. */
