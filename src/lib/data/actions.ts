@@ -555,11 +555,12 @@ export interface SplitInput {
 /**
  * Records the side-ledger for a shared expense.
  *
- * Call this right after `addTransaction` resolves, once the transaction has
- * already been saved with the user's real share as its `amount` — this never
- * touches the transaction itself. One `Split` row per person, all
- * `OUTSTANDING`, so settling later is a status flip rather than a new write
- * path.
+ * Call this right after `addTransaction` resolves. The transaction carries
+ * the **full amount that left your account**, not your share: that is what
+ * your bank actually shows, and recording only your share while also
+ * tracking a receivable would count the same money twice — cash short by
+ * their share, an asset for the same sum. Each `Split` row is one person's
+ * portion, `OUTSTANDING` until they pay you back.
  */
 export async function recordSplits(
   transactionId: string,
@@ -581,18 +582,64 @@ export async function recordSplits(
 }
 
 /**
- * Marks an IOU as squared away. Never creates a transaction — no money is
- * "earned" or "spent" when a split settles, it just stops being owed.
+ * Squares away an IOU — and moves the money, because real money moves.
+ *
+ * Being repaid is not income: you are recovering your own money from an
+ * expense already recorded in full. So it lands as an `isRefund` INCOME,
+ * the same mechanism a merchant refund uses — cash rises, and `monthTotals`
+ * nets it against `spent` rather than inflating what you earned. Inheriting
+ * the original expense's category makes it net against the very bucket the
+ * spending came from, so a ₹2,000 dinner split with one friend settles to
+ * ₹1,000 of dining once they pay.
+ *
+ * Paying someone back (`I_OWE`) is the mirror image: an ordinary expense.
+ *
+ * The split flip and the transaction go in one batch, so the IOU and the
+ * money can never disagree. Omitting `accountId` keeps the old
+ * status-only behaviour, for settling something that never touched an
+ * account you track.
  */
-export async function settleSplit(id: string): Promise<void> {
-  const split = getSnapshot().data?.splits.find((s) => s.id === id);
-  if (!split) return;
-  await putRow("splits", {
+export async function settleSplit(
+  id: string,
+  options: { accountId?: string; date?: Date } = {},
+): Promise<Transaction | undefined> {
+  const db = getSnapshot().data;
+  const split = db?.splits.find((s) => s.id === id);
+  if (!split) return undefined;
+
+  const settled: Split = {
     ...split,
     status: "SETTLED",
     settledDate: new Date().toISOString().slice(0, 10),
     updatedAt: new Date().toISOString(),
+  };
+
+  if (!options.accountId) {
+    await putRow("splits", settled);
+    return undefined;
+  }
+
+  const origin = db?.transactions.find((t) => t.id === split.transactionId);
+  const person = db?.people.find((p) => p.id === split.personId);
+  const owedToMe = split.direction === "OWED_TO_ME";
+
+  const transaction = materialise({
+    type: owedToMe ? "INCOME" : "EXPENSE",
+    amount: split.amount,
+    description: owedToMe
+      ? `${person?.name ?? "Someone"} paid you back`
+      : `Paid back ${person?.name ?? "someone"}`,
+    date: options.date ?? new Date(),
+    accountId: options.accountId,
+    categoryId: origin?.categoryId,
+    contexts: [],
+    isRefund: owedToMe || undefined,
   });
+
+  await applyBatch({
+    puts: { splits: [settled], transactions: [transaction] },
+  });
+  return transaction;
 }
 
 export async function updateProfile(

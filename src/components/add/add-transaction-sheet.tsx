@@ -134,7 +134,6 @@ export function AddTransactionSheet({
   // New entries only (spec-consistent scoping: retro-splitting an already
   // saved transaction is a different, riskier operation — not this sheet).
   const [splitEnabled, setSplitEnabled] = useState(false);
-  const [splitTotalText, setSplitTotalText] = useState("");
   const [splitPersonIds, setSplitPersonIds] = useState<string[]>([]);
   const people = db?.people ?? [];
 
@@ -225,30 +224,11 @@ export function AddTransactionSheet({
     return () => window.clearTimeout(timer);
   }, [open]);
 
-  // Recomputes your share whenever the total or the people list changes.
-  // The displayed/saved amount becomes your share, not the total you paid —
-  // that's the whole point (see `recordSplits` in `data/actions.ts`).
-  useEffect(() => {
-    if (!splitEnabled || splitPersonIds.length === 0) return;
-    const total = parseAmountInput(splitTotalText) ?? 0;
-    if (total <= 0) return;
-    const { yourShare } = computeSplitShares(total, splitPersonIds.length);
-    setDraft((current) => ({ ...current, amountText: String(yourShare / 100) }));
-    markTouched("amountText");
-  }, [splitEnabled, splitPersonIds, splitTotalText]);
-
   function toggleSplit() {
     if (splitEnabled) {
-      // Turning it off restores the full total as the amount — the split
-      // maths shouldn't leave a silently-shrunk figure behind.
-      if (splitTotalText) {
-        patch({ amountText: splitTotalText });
-        markTouched("amountText");
-      }
       setSplitEnabled(false);
       setSplitPersonIds([]);
     } else {
-      setSplitTotalText(draft.amountText);
       setSplitEnabled(true);
     }
   }
@@ -381,8 +361,7 @@ export function AddTransactionSheet({
 
         let splitDetail = "";
         if (splitEnabled && splitPersonIds.length > 0) {
-          const total = parseAmountInput(splitTotalText) ?? 0;
-          const { otherShare } = computeSplitShares(total, splitPersonIds.length);
+          const { otherShare } = computeSplitShares(amount, splitPersonIds.length);
           await recordSplits(
             created.id,
             splitPersonIds.map((personId) => ({
@@ -770,14 +749,6 @@ export function AddTransactionSheet({
 
                     {splitEnabled && (
                       <div className="space-y-3 pt-1">
-                        <TextField
-                          label="Total bill"
-                          value={splitTotalText}
-                          onChange={(e) => setSplitTotalText(e.target.value)}
-                          inputMode="decimal"
-                          prefix="₹"
-                          className="tnum"
-                        />
                         <PersonPicker
                           value={splitPersonIds}
                           onChange={setSplitPersonIds}
@@ -785,17 +756,18 @@ export function AddTransactionSheet({
                         />
                         {splitPersonIds.length > 0 &&
                           (() => {
-                            const total = parseAmountInput(splitTotalText) ?? 0;
                             const { yourShare, otherShare } = computeSplitShares(
-                              total,
+                              amount,
                               splitPersonIds.length,
                             );
                             return (
                               <p className="text-[12.5px] text-ink-tertiary">
                                 You: {formatMoneyPrecise(yourShare)} · each
                                 other person: {formatMoneyPrecise(otherShare)}.
-                                Recorded as your spend; the rest is tracked as
-                                owed to you under Money → People.
+                                The full {formatMoneyPrecise(amount)} is
+                                recorded as leaving your account — their share
+                                is tracked as owed to you under Money → People,
+                                and comes back when they settle up.
                               </p>
                             );
                           })()}
