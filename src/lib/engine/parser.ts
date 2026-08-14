@@ -12,6 +12,7 @@ import type {
 import { matchAccountMentions, type AccountHit } from "./account-match";
 import { levenshteinDistance } from "./fuzzy-match";
 import { ACTIVITIES, CONTEXT_KEYWORDS, MERCHANTS, STOP_WORDS } from "./lexicon";
+import { parseBankSms, type BankSmsRead } from "./sms";
 
 /**
  * Deterministic natural-language expense parser.
@@ -53,6 +54,11 @@ export interface ParseResult {
   matchedRuleConfidence?: number;
   /** Alternative categories worth offering as quick corrections. */
   alternatives: string[];
+  /**
+   * ISO date the *source* stated, e.g. the "on 14/08/26" in a bank SMS.
+   * Undefined for ordinary typing, which means today.
+   */
+  date?: string;
 }
 
 export const HIGH_CONFIDENCE = 0.82;
@@ -91,6 +97,11 @@ function extractAmount(tokens: Token[]): AmountMatch | null {
     if (parsed === null || parsed <= 0) return;
     // "2 pizzas" — a bare small integer mid-phrase is a count, not a price.
     if (index > 0 && AMOUNT_BLOCKLIST.has(token.clean)) return;
+    // A bare run of ten or more digits is a phone number, a reference or an
+    // account — not a price. Since the rule below takes the largest
+    // candidate, one stray "9840012345" would otherwise win outright. A real
+    // amount that long can still be typed with a comma, a decimal or a ₹.
+    if (/^\d{10,}$/.test(token.clean)) return;
     candidates.push({ amount: parsed, tokenIndex: index });
   });
   if (candidates.length === 0) return null;
@@ -405,10 +416,50 @@ export interface ParseOptions {
   recentTransactions?: Transaction[];
 }
 
+/**
+ * A pasted bank alert, read by its own rules and then categorised by the
+ * ordinary ones.
+ *
+ * The amount, direction, date and account come from the message, which states
+ * them as fact. The *category* does not exist in a bank SMS, so the merchant
+ * name is put back through the normal three tiers — a learned "nykaa" rule
+ * still wins, exactly as if it had been typed.
+ */
+function fromBankSms(sms: BankSmsRead, options: ParseOptions): ParseResult {
+  const inner = parseExpenseInput(sms.merchant ?? "", {
+    rules: options.rules,
+    date: sms.date ? new Date(sms.date) : options.date,
+  });
+
+  const categorised = inner.categoryId !== UNCATEGORISED_ID;
+  return {
+    ...inner,
+    amount: sms.amount,
+    type: sms.type,
+    merchant: sms.merchant ?? inner.merchant,
+    description: sms.merchant ?? inner.description,
+    accountId: sms.accountId ?? inner.accountId,
+    // A statement only ever names the account money left; where it landed is
+    // never in the message, so a transfer's destination stays for the user.
+    toAccountId: undefined,
+    isRefund: sms.isRefund,
+    date: sms.date,
+    // The figure and direction are certain; only the category is a guess.
+    confidence: categorised ? 0.9 : 0.55,
+    reasons: [...sms.reasons, ...inner.reasons],
+  };
+}
+
 export function parseExpenseInput(
   input: string,
   options: ParseOptions = {},
 ): ParseResult {
+  // A bank message before anything else: its numbers are dense with limits,
+  // dues, references and helplines, any of which the ordinary "largest
+  // number wins" rule would happily book as the amount.
+  const sms = parseBankSms(input, options.accounts ?? []);
+  if (sms) return fromBankSms(sms, options);
+
   const rules = options.rules ?? [];
   const tokens = tokenize(input);
   const amountMatch = extractAmount(tokens);

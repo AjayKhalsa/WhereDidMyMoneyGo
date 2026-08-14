@@ -77,14 +77,50 @@ function computeSplitShares(totalPaise: number, otherCount: number) {
  * common case stays a single line of text.
  */
 
-const QUICK_ENTRIES: { label: string; text: string }[] = [
-  { label: "Food", text: "lunch" },
-  { label: "Cab", text: "uber" },
-  { label: "Coffee", text: "coffee" },
-  { label: "Groceries", text: "groceries" },
-  { label: "Movie", text: "movie" },
-  { label: "Drinks", text: "drinks with friends" },
-];
+/**
+ * What the sheet looks like per direction.
+ *
+ * The quick-log bar offers three things money does — arrives, moves, leaves —
+ * so opening the same anonymous "Add" for all three throws that choice away.
+ * Each direction gets its own title, example and starters.
+ */
+const DIRECTION_PRESETS: Record<
+  "EXPENSE" | "INCOME" | "TRANSFER",
+  { title: string; placeholder: string; entries: { label: string; text: string }[] }
+> = {
+  EXPENSE: {
+    title: "Add expense",
+    placeholder: "2400 dinner with friends",
+    entries: [
+      { label: "Food", text: "lunch" },
+      { label: "Cab", text: "uber" },
+      { label: "Coffee", text: "coffee" },
+      { label: "Groceries", text: "groceries" },
+      { label: "Movie", text: "movie" },
+      { label: "Drinks", text: "drinks with friends" },
+    ],
+  },
+  INCOME: {
+    title: "Money in",
+    placeholder: "50000 salary",
+    entries: [
+      { label: "Salary", text: "salary" },
+      { label: "Refund", text: "refund from" },
+      { label: "Interest", text: "interest" },
+      { label: "Cashback", text: "cashback" },
+      { label: "Freelance", text: "freelance" },
+    ],
+  },
+  TRANSFER: {
+    title: "Move money",
+    placeholder: "20000 to HSBC card",
+    entries: [
+      { label: "Pay card", text: "paid to card" },
+      { label: "To savings", text: "transferred to savings" },
+      { label: "To goal", text: "transferred to" },
+    ],
+  },
+};
 
 const TYPE_OPTIONS: { value: TransactionType; label: string }[] = [
   { value: "EXPENSE", label: "Spent" },
@@ -124,15 +160,27 @@ export function AddTransactionSheet({
 
   const [text, setText] = useState(options.initialText ?? "");
   const [saving, setSaving] = useState(false);
-  const [showDetail, setShowDetail] = useState(Boolean(editing));
+  // Keyed on the direction chosen rather than the live type, so the sheet
+  // does not rename itself under you while you are typing into it.
+  const preset = DIRECTION_PRESETS[options.initialType ?? "EXPENSE"];
+  // A transfer with no destination is what silently overstated a card's
+  // balance, so its account pickers start visible instead of folded away.
+  const [showDetail, setShowDetail] = useState(
+    Boolean(editing) || options.initialType === "TRANSFER",
+  );
   const [panel, setPanel] = useState<
     "category" | "type" | "context" | "account" | "toAccount" | null
   >(null);
-  // A direction chosen from the quick-log bar counts as a decision already
-  // made, so the parser leaves `type` alone (see the effect below).
-  const [touched, setTouched] = useState<Set<keyof DraftState>>(
-    () => new Set<keyof DraftState>(options.initialType ? ["type"] : []),
-  );
+  const [touched, setTouched] = useState<Set<keyof DraftState>>(new Set());
+  /**
+   * The direction tapped on the quick-log bar.
+   *
+   * Held apart from `touched` because it is a weaker claim than a hand edit:
+   * it outranks the parser's guess from free text, but loses to a bank alert
+   * that states the direction outright. Folding it into `touched` made a
+   * manual type change get overwritten on the next keystroke.
+   */
+  const directionLock = options.initialType;
   const inputRef = useRef<HTMLInputElement>(null);
 
   // ---- Split with… ---------------------------------------------------------
@@ -204,7 +252,15 @@ export function AddTransactionSheet({
       if (!touched.has("categoryId")) next.categoryId = parsed.categoryId;
       if (!touched.has("contexts")) next.contexts = parsed.contexts;
       if (!touched.has("merchant")) next.merchant = parsed.merchant;
-      if (!touched.has("type")) next.type = parsed.type;
+      if (!touched.has("type")) {
+        // A bank alert states the direction as fact, so it outranks the
+        // button tapped a moment earlier. Free text does not — there the
+        // tapped direction stands. A hand edit beats both.
+        const fromBankSms = parsed.date !== undefined;
+        next.type = fromBankSms ? parsed.type : (directionLock ?? parsed.type);
+      }
+      // The message says when it happened; that beats "today".
+      if (!touched.has("date") && parsed.date) next.date = parsed.date;
       if (!touched.has("description")) next.description = parsed.description;
       // Only a resolved transfer/card-payment shape ever sets these — a
       // plain expense/income phrase leaves accountId as whatever "paid
@@ -221,7 +277,7 @@ export function AddTransactionSheet({
       }
       return next;
     });
-  }, [parsed, touched]);
+  }, [parsed, touched, directionLock]);
 
   useEffect(() => {
     if (!open) return;
@@ -289,6 +345,13 @@ export function AddTransactionSheet({
 
   const amount = parseAmountInput(draft.amountText) ?? 0;
   const isExpense = draft.type === "EXPENSE";
+  /** A bank alert (it carries a stated date) disagreeing with the tapped direction. */
+  const smsOverrodeDirection =
+    !editing &&
+    parsed?.date !== undefined &&
+    directionLock !== undefined &&
+    parsed.type !== directionLock &&
+    !touched.has("type");
   const accounts = db?.accounts ?? [];
   const investments = (db?.investments ?? []).filter((i) => i.isActive);
 
@@ -423,7 +486,7 @@ export function AddTransactionSheet({
     <Sheet
       open={open}
       onClose={onClose}
-      title={editing ? "Edit transaction" : "Add"}
+      title={editing ? "Edit transaction" : preset.title}
       description={
         editing ? undefined : "Type it the way you'd say it out loud"
       }
@@ -501,7 +564,7 @@ export function AddTransactionSheet({
                 void handleSave();
               }
             }}
-            placeholder="2400 dinner with friends"
+            placeholder={preset.placeholder}
             aria-label="Describe the transaction"
             autoComplete="off"
             className="h-12 text-[16px]"
@@ -520,7 +583,7 @@ export function AddTransactionSheet({
               className="overflow-hidden"
             >
               <div className="flex flex-wrap gap-1.5">
-                {QUICK_ENTRIES.map((entry) => (
+                {preset.entries.map((entry) => (
                   <SelectableChip
                     key={entry.label}
                     onClick={() => {
@@ -535,6 +598,25 @@ export function AddTransactionSheet({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/*
+          When a pasted bank alert contradicts the direction just tapped, the
+          alert wins — but silently changing what someone chose two seconds
+          ago is how an app loses trust, so it says so.
+        */}
+        {smsOverrodeDirection && (
+          <p className="text-[12.5px] leading-relaxed text-ink-secondary">
+            That message reads as{" "}
+            <span className="font-medium text-ink">
+              {draft.type === "INCOME"
+                ? "money in"
+                : draft.type === "TRANSFER"
+                  ? "money moved"
+                  : "money out"}
+            </span>
+            , so it&rsquo;s been set that way. Tap the type below to change it.
+          </p>
+        )}
 
         {/* What the app understood. Every chip here is tappable. */}
         {(amount > 0 || draft.categoryId !== UNCATEGORISED_ID || editing) && (
@@ -560,7 +642,9 @@ export function AddTransactionSheet({
             onEditContexts={() => setPanel("context")}
             onEditAccount={() => setPanel("account")}
             onEditToAccount={() => setPanel("toAccount")}
-            showCategory={isExpense || draft.type === "INCOME"}
+            // Salary has no category worth picking. A refund does: it nets
+            // against the bucket the original spending came out of.
+            showCategory={isExpense || (draft.type === "INCOME" && draft.isRefund)}
             showAccounts={draft.type === "TRANSFER"}
           />
         )}
