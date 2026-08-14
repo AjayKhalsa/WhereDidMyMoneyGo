@@ -9,6 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { formatMoney, formatMoneyCompact } from "@/lib/domain/money";
+import type { Paise } from "@/lib/domain/types";
 
 /**
  * Whether money figures are masked on screen.
@@ -103,4 +105,55 @@ export function useBalancesHidden(): boolean {
  */
 export function maskFigure(text: string): string {
   return text.replace(/\d/g, "•");
+}
+
+/**
+ * `formatMoney`, but honouring the hide-balances setting.
+ *
+ * A function rather than a component because most figures in this app are
+ * embedded in a sentence — "₹52,953 of this went to clearing card debt" —
+ * where a component cannot go. Use it in place of `formatMoney` anywhere the
+ * result is shown on a screen someone might be reading over your shoulder.
+ *
+ * Not used in the entry and import flows: masking a figure you are currently
+ * typing or reviewing would make the app unusable rather than private.
+ */
+export function useMoneyText(): (value: Paise) => string {
+  const hidden = useBalancesHidden();
+  return useCallback(
+    (value: Paise) => {
+      const text = formatMoney(value);
+      return hidden ? maskFigure(text) : text;
+    },
+    [hidden],
+  );
+}
+
+/**
+ * Masks the money inside a sentence the engine already formatted.
+ *
+ * Insight bodies, goal projections and affordability verdicts arrive as
+ * finished prose — "₹52,953 of this went to clearing card debt" — so there is
+ * no figure left to intercept. Only currency-shaped runs are masked, leaving
+ * percentages and counts ("up 75%", "across 12 transactions") readable, since
+ * those are the part that still makes the sentence worth showing.
+ */
+export function useMaskedProse(): (text: string) => string {
+  const hidden = useBalancesHidden();
+  return useCallback(
+    (text: string) => (hidden ? text.replace(/₹\s?[\d,]+/g, maskFigure) : text),
+    [hidden],
+  );
+}
+
+/** Compact form ("₹1.6L"), same masking rule. */
+export function useMoneyTextCompact(): (value: Paise) => string {
+  const hidden = useBalancesHidden();
+  return useCallback(
+    (value: Paise) => {
+      const text = formatMoneyCompact(value);
+      return hidden ? maskFigure(text) : text;
+    },
+    [hidden],
+  );
 }

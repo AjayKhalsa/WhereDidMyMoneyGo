@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { daysBetween, toDateInputValue } from "@/lib/domain/dates";
-import { formatMoney, parseAmountInput } from "@/lib/domain/money";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
+import { parseAmountInput } from "@/lib/domain/money";
 import type { Investment, InvestmentKind } from "@/lib/domain/types";
 import {
   investmentContributions,
@@ -48,6 +49,7 @@ const KINDS: { value: InvestmentKind; label: string }[] = [
 ];
 
 export function InvestmentsPanel() {
+  const money = useMoneyText();
   const { db, month, cycleStartDay, totals, now } = useFinance();
   const [editing, setEditing] = useState<Investment | null>(null);
   const [creating, setCreating] = useState(false);
@@ -92,9 +94,9 @@ export function InvestmentsPanel() {
               label={investment.name}
               sublabel={
                 valued
-                  ? `${formatMoney(contributed)} in · ${gain >= 0 ? "+" : "−"}${formatMoney(Math.abs(gain))} ${gain >= 0 ? "gain" : "loss"}`
+                  ? `${money(contributed)} in · ${gain >= 0 ? "+" : "−"}${money(Math.abs(gain))} ${gain >= 0 ? "gain" : "loss"}`
                   : planned > 0
-                    ? `${formatMoney(planned)}/month planned · value not set`
+                    ? `${money(planned)}/month planned · value not set`
                     : "Value not set"
               }
               onClick={() => setEditing(investment)}
@@ -125,11 +127,11 @@ export function InvestmentsPanel() {
             <Amount value={portfolio} size="md" />
           </div>
           <p className="mt-1.5 text-[12.5px] text-ink-tertiary">
-            {formatMoney(totalContributed)} contributed
+            {money(totalContributed)} contributed
             {totalGain !== 0 && (
               <>
                 {" "}· {totalGain > 0 ? "up" : "down"}{" "}
-                {formatMoney(Math.abs(totalGain))}
+                {money(Math.abs(totalGain))}
               </>
             )}
             . Anything you haven&rsquo;t valued counts at what you put in.
@@ -343,6 +345,7 @@ function ContributionSheet({
   investment: Investment | null;
   onClose: () => void;
 }) {
+  const money = useMoneyText();
   const { db } = useFinance();
   const toast = useToast();
   const [amount, setAmount] = useState("");
@@ -380,7 +383,7 @@ function ContributionSheet({
     });
     toast.show({
       tone: "success",
-      title: `${formatMoney(value)} invested`,
+      title: `${money(value)} invested`,
       detail: "Not counted as spending",
     });
     onClose();
@@ -399,7 +402,7 @@ function ContributionSheet({
           onClick={handleSave}
           disabled={value <= 0 || !selected}
         >
-          Save {value > 0 ? formatMoney(value) : ""}
+          Save {value > 0 ? money(value) : ""}
         </Button>
       }
     >

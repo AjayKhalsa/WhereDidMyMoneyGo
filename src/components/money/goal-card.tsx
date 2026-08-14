@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { formatFullDate } from "@/lib/domain/dates";
-import { formatMoney, parseAmountInput, percentOf } from "@/lib/domain/money";
+import { useMoneyText, useMaskedProse } from "@/lib/hooks/use-privacy";
+import { parseAmountInput, percentOf } from "@/lib/domain/money";
 import type { Goal } from "@/lib/domain/types";
 import { contributeToGoal, deleteGoal, saveGoal } from "@/lib/data/actions";
 import { useFinance } from "@/lib/hooks/use-finance";
@@ -25,6 +26,8 @@ import { useToast } from "@/components/ui/toast";
  */
 
 export function GoalCard({ goal }: { goal: Goal }) {
+  const prose = useMaskedProse();
+  const money = useMoneyText();
   const [editing, setEditing] = useState(false);
   const { safeToSpend, groupBreakdown } = useFinance();
 
@@ -71,7 +74,7 @@ export function GoalCard({ goal }: { goal: Goal }) {
 
         <div className="mt-2.5 flex items-baseline justify-between gap-3">
           <span className="text-[13px] text-ink-secondary tnum">
-            {formatMoney(goal.currentAmount)} of {formatMoney(goal.targetAmount)}
+            {money(goal.currentAmount)} of {money(goal.targetAmount)}
           </span>
           {goal.targetDate && (
             <span className="shrink-0 text-[12px] text-ink-tertiary">
@@ -82,7 +85,7 @@ export function GoalCard({ goal }: { goal: Goal }) {
 
         {projection && (
           <p className="mt-2.5 border-t border-line pt-2.5 text-[12.5px] leading-relaxed text-ink-secondary">
-            {projection}
+            {prose(projection)}
           </p>
         )}
       </Card>
@@ -105,6 +108,7 @@ export function GoalEditSheet({
   open: boolean;
   onClose: () => void;
 }) {
+  const money = useMoneyText();
   const toast = useToast();
   const { db } = useFinance();
   const [name, setName] = useState(goal.name);
@@ -147,7 +151,7 @@ export function GoalEditSheet({
       });
       toast.show({
         tone: "success",
-        title: `${formatMoney(topUpAmount)} added to ${goal.name}`,
+        title: `${money(topUpAmount)} added to ${goal.name}`,
         detail: "Recorded as a transfer — not new spending",
       });
       setTopUp("");
@@ -192,7 +196,7 @@ export function GoalEditSheet({
           <div className="mt-1 flex items-baseline gap-2">
             <Amount value={goal.currentAmount} size="lg" />
             <span className="text-[13px] text-ink-tertiary">
-              of {formatMoney(goal.targetAmount)}
+              of {money(goal.targetAmount)}
             </span>
           </div>
           <div className="mt-3 space-y-2">

@@ -9,9 +9,8 @@ import {
   formatMonthLong,
   greetingFor,
 } from "@/lib/domain/dates";
-import { formatMoney } from "@/lib/domain/money";
 import { useFinance } from "@/lib/hooks/use-finance";
-import { usePrivacy } from "@/lib/hooks/use-privacy";
+import { usePrivacy, useMoneyText } from "@/lib/hooks/use-privacy";
 import { AnimatedAmount, Amount } from "@/components/ui/amount";
 import { ProgressTrack } from "@/components/ui/charts";
 import { Sheet } from "@/components/ui/sheet";
@@ -55,6 +54,7 @@ function HideBalancesButton() {
 }
 
 export function FinancialHero() {
+  const money = useMoneyText();
   const { safeToSpend, month, now, isCurrentMonth, cycleStartDay, db } = useFinance();
   const [explaining, setExplaining] = useState(false);
 
@@ -88,7 +88,7 @@ export function FinancialHero() {
           </h1>
           {!overspent && safeToSpend.dailyAllowance > 0 && isCurrentMonth && (
             <span className="text-[15px] text-ink-secondary tnum">
-              {formatMoney(safeToSpend.dailyAllowance)}/day
+              {money(safeToSpend.dailyAllowance)}/day
             </span>
           )}
           <button

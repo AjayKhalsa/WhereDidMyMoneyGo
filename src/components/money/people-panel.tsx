@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { formatDayMonth } from "@/lib/domain/dates";
-import { formatMoney } from "@/lib/domain/money";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
 import type { Person, Split } from "@/lib/domain/types";
 import { savePerson, settleSplit } from "@/lib/data/actions";
 import type { PersonBalance } from "@/lib/engine/splits";
@@ -96,6 +96,7 @@ function PersonSheet({
   open: boolean;
   onClose: () => void;
 }) {
+  const money = useMoneyText();
   const { db, peopleBalances } = useFinance();
   const toast = useToast();
 
@@ -143,7 +144,7 @@ function PersonSheet({
     const owedToMe = split.direction === "OWED_TO_ME";
     toast.show({
       tone: "success",
-      title: `${formatMoney(split.amount)} settled`,
+      title: `${money(split.amount)} settled`,
       detail: settleAccountId
         ? owedToMe
           ? "Added back to your balance, not counted as income"

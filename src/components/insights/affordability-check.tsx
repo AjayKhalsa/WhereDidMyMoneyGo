@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { formatMoney, parseAmountInput } from "@/lib/domain/money";
+import { parseAmountInput } from "@/lib/domain/money";
+import { useMoneyText, useMaskedProse } from "@/lib/hooks/use-privacy";
 import {
   evaluateAffordability,
   type AffordabilityVerdict,
@@ -34,6 +35,8 @@ const VERDICT_STYLES: Record<
 };
 
 export function AffordabilityCheck() {
+  const prose = useMaskedProse();
+  const money = useMoneyText();
   const { safeToSpend } = useFinance();
   const [text, setText] = useState("");
 
@@ -73,7 +76,7 @@ export function AffordabilityCheck() {
             selected={amount === value * 100}
             onClick={() => setText(String(value))}
           >
-            {formatMoney(value * 100)}
+            {money(value * 100)}
           </SelectableChip>
         ))}
       </div>
@@ -103,7 +106,7 @@ export function AffordabilityCheck() {
                 {result.headline}
               </p>
               <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-secondary">
-                {result.explanation}
+                {prose(result.explanation)}
               </p>
 
               {result.verdict !== "no" && (
@@ -113,7 +116,7 @@ export function AffordabilityCheck() {
                       Daily allowance now
                     </dt>
                     <dd className="mt-0.5 text-[14px] font-medium text-ink tnum">
-                      {formatMoney(result.currentDaily)}
+                      {money(result.currentDaily)}
                     </dd>
                   </div>
                   <div>
@@ -121,7 +124,7 @@ export function AffordabilityCheck() {
                       After this purchase
                     </dt>
                     <dd className="mt-0.5 text-[14px] font-medium text-ink tnum">
-                      {formatMoney(result.projectedDaily)}
+                      {money(result.projectedDaily)}
                     </dd>
                   </div>
                 </dl>

@@ -1,8 +1,9 @@
 "use client";
 
 import { groupIdOf } from "@/lib/domain/categories";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
 import { formatMonthLabel, previousMonths } from "@/lib/domain/dates";
-import { formatMoney, percentOf } from "@/lib/domain/money";
+import { percentOf } from "@/lib/domain/money";
 import {
   compareToAverage,
   investmentRate,
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils";
  */
 
 export function MonthlyRecap() {
+  const money = useMoneyText();
   const { db, month, cycleStartDay, totals, groupBreakdown, safeToSpend } = useFinance();
 
   const transactions = db?.transactions ?? [];
@@ -118,7 +120,7 @@ export function MonthlyRecap() {
                   </span>
                 </span>
                 <span className="shrink-0 text-[14px] font-medium text-ink tnum">
-                  {formatMoney(slice.amount)}
+                  {money(slice.amount)}
                 </span>
               </li>
             ))}
@@ -150,7 +152,7 @@ export function MonthlyRecap() {
           detail={
             totals.invested > 0 ? (
               <span className="text-[13px] text-ink-secondary tnum">
-                {formatMoney(totals.invested)} · {invRate.toFixed(0)}% of income
+                {money(totals.invested)} · {invRate.toFixed(0)}% of income
               </span>
             ) : (
               <span className="text-[12.5px] text-ink-tertiary">
@@ -165,7 +167,7 @@ export function MonthlyRecap() {
           detail={
             top[0] ? (
               <span className="text-[13px] text-ink-secondary tnum">
-                {formatMoney(top[0].amount)} · {Math.round(top[0].share)}% of
+                {money(top[0].amount)} · {Math.round(top[0].share)}% of
                 spending
               </span>
             ) : null

@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { formatDayMonth, formatFullDate } from "@/lib/domain/dates";
-import { formatMoney, parseAmountInput } from "@/lib/domain/money";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
+import { parseAmountInput } from "@/lib/domain/money";
 import type {
   RecurringFrequency,
   RecurringTransaction,
@@ -57,6 +58,7 @@ const WEEKDAYS = [
 ];
 
 export function RecurringPanel() {
+  const money = useMoneyText();
   const { db, month, now, cycleStartDay } = useFinance();
   const [editing, setEditing] = useState<RecurringTransaction | null>(null);
   const [creating, setCreating] = useState(false);
@@ -106,7 +108,7 @@ export function RecurringPanel() {
                   {candidate.occurrences[0]!.description} looks recurring
                 </span>
                 <span className="mt-0.5 block text-[12px] text-ink-secondary">
-                  {candidate.occurrences.length} times, ~{formatMoney(candidate.suggestedAmount)}{" "}
+                  {candidate.occurrences.length} times, ~{money(candidate.suggestedAmount)}{" "}
                   every {candidate.suggestedFrequency === "WEEKLY" ? "week" : "month"} — last on{" "}
                   {formatFullDate(candidate.occurrences[0]!.date)}
                 </span>
@@ -193,6 +195,7 @@ function RecurringRow({
   live: boolean;
   onEdit: () => void;
 }) {
+  const money = useMoneyText();
   const toast = useToast();
   const { rule, nextDate, daysUntil, paidThisMonth } = status;
   const drift = priceDrift(status);
@@ -201,7 +204,7 @@ function RecurringRow({
     await markRecurringPaid(rule);
     toast.show({
       tone: "success",
-      title: `${formatMoney(rule.amount)} recorded`,
+      title: `${money(rule.amount)} recorded`,
       detail: rule.description,
     });
   }
@@ -230,7 +233,7 @@ function RecurringRow({
         </span>
         <span className="mt-0.5 block truncate text-[12.5px] text-ink-tertiary">
           {sublabel}
-          {drift && ` · was ${formatMoney(drift.previous)} last time`}
+          {drift && ` · was ${money(drift.previous)} last time`}
         </span>
       </button>
 

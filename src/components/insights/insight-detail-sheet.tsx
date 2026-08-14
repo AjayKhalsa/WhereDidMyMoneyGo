@@ -1,7 +1,7 @@
 "use client";
 
-import { formatMoney } from "@/lib/domain/money";
 import type { Insight } from "@/lib/engine/insights";
+import { useMoneyText, useMaskedProse } from "@/lib/hooks/use-privacy";
 import { Amount, DeltaBadge } from "@/components/ui/amount";
 import { Sheet } from "@/components/ui/sheet";
 import { TransactionList } from "@/components/transactions/transaction-list";
@@ -23,20 +23,22 @@ export function InsightDetailSheet({
   insight: Insight | null;
   onClose: () => void;
 }) {
+  const prose = useMaskedProse();
+  const money = useMoneyText();
   const comparison = insight?.comparison;
 
   return (
     <Sheet
       open={Boolean(insight)}
       onClose={onClose}
-      title={insight?.title}
+      title={insight ? prose(insight.title) : undefined}
       description={insight?.eyebrow}
       size="lg"
     >
       {insight && (
         <div className="space-y-6 py-1">
           <p className="text-[14px] leading-relaxed text-ink-secondary">
-            {insight.body}
+            {prose(insight.body)}
           </p>
 
           {comparison && comparison.monthsCounted > 0 && (
@@ -71,7 +73,7 @@ export function InsightDetailSheet({
                 <span className="text-[12px] text-ink-tertiary tnum">
                   {insight.transactions.length}{" "}
                   {insight.transactions.length === 1 ? "item" : "items"} ·{" "}
-                  {formatMoney(
+                  {money(
                     insight.transactions.reduce((acc, t) => acc + t.amount, 0),
                   )}
                 </span>

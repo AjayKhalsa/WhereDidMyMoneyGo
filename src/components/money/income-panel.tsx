@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { UNCATEGORISED_ID } from "@/lib/domain/categories";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
 import { formatFullDate, formatMonthLabel, previousMonths } from "@/lib/domain/dates";
-import { formatMoney, parseAmountInput } from "@/lib/domain/money";
+import { parseAmountInput } from "@/lib/domain/money";
 import type { IncomeSource } from "@/lib/domain/types";
 import { monthTotals } from "@/lib/engine/analytics";
 import {
@@ -33,6 +34,7 @@ import { MoneyRow } from "./disclosure-panel";
  */
 
 export function IncomePanel() {
+  const money = useMoneyText();
   const { db, month, cycleStartDay } = useFinance();
   const [editing, setEditing] = useState<IncomeSource | null>(null);
   const [creating, setCreating] = useState(false);
@@ -54,7 +56,7 @@ export function IncomePanel() {
           <MoneyRow
             key={source.id}
             label={source.name}
-            sublabel={`Recurring monthly${source.deductions > 0 ? ` · ${formatMoney(source.deductions)} deducted` : ""}`}
+            sublabel={`Recurring monthly${source.deductions > 0 ? ` · ${money(source.deductions)} deducted` : ""}`}
             onClick={() => setEditing(source)}
             value={<Amount value={source.amount} size="sm" />}
           />
@@ -105,7 +107,7 @@ export function IncomePanel() {
                       {formatMonthLabel(entry.key, cycleStartDay)}
                     </span>
                     <span className="text-[13.5px] font-medium text-ink tnum">
-                      {formatMoney(entry.amount)}
+                      {money(entry.amount)}
                     </span>
                   </li>
                 ))}
@@ -268,6 +270,7 @@ function OneOffIncomeSheet({
   open: boolean;
   onClose: () => void;
 }) {
+  const money = useMoneyText();
   const { db, categories } = useFinance();
   const toast = useToast();
   const [amount, setAmount] = useState("");
@@ -307,7 +310,7 @@ function OneOffIncomeSheet({
     });
     toast.show({
       tone: "success",
-      title: `${formatMoney(value)} recorded`,
+      title: `${money(value)} recorded`,
       detail: label,
     });
     setAmount("");
@@ -325,7 +328,7 @@ function OneOffIncomeSheet({
       size="sm"
       footer={
         <Button variant="primary" block onClick={handleSave} disabled={value <= 0}>
-          Save {value > 0 ? formatMoney(value) : ""}
+          Save {value > 0 ? money(value) : ""}
         </Button>
       }
     >
@@ -398,7 +401,7 @@ function OneOffIncomeSheet({
                     }
                   >
                     {t.description || t.merchant || "Expense"} ·{" "}
-                    {formatMoney(t.amount)} · {formatFullDate(t.date)}
+                    {money(t.amount)} · {formatFullDate(t.date)}
                   </SelectableChip>
                 ))}
                 {recentExpenses.length === 0 && (

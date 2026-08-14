@@ -2,6 +2,7 @@
 
 import { ArrowRight } from "lucide-react";
 import type { Insight, InsightTone } from "@/lib/engine/insights";
+import { useMaskedProse } from "@/lib/hooks/use-privacy";
 import { Amount } from "@/components/ui/amount";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,7 @@ export function InsightCard({
   compact?: boolean;
   className?: string;
 }) {
+  const prose = useMaskedProse();
   const interactive = Boolean(onSelect) && insight.transactions.length > 0;
   const Element = interactive ? "button" : "div";
 
@@ -72,7 +74,7 @@ export function InsightCard({
           compact ? "text-[15px]" : "text-[16.5px]",
         )}
       >
-        {insight.title}
+        {prose(insight.title)}
       </h3>
 
       {insight.amount !== undefined && !compact && (
@@ -87,7 +89,7 @@ export function InsightCard({
           compact ? "text-[12.5px]" : "text-[13.5px]",
         )}
       >
-        {insight.body}
+        {prose(insight.body)}
       </p>
 
       {interactive && insight.action && (

@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Receipt } from "lucide-react";
 import { dayKey, formatRelativeDay } from "@/lib/domain/dates";
-import { formatMoney } from "@/lib/domain/money";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
 import type { Transaction } from "@/lib/domain/types";
 import { useAddSheet } from "@/components/add/add-sheet-provider";
 import { EmptyState } from "@/components/ui/primitives";
@@ -35,6 +35,7 @@ export function TransactionList({
   className?: string;
   onSelect?: (transaction: Transaction) => void;
 }) {
+  const money = useMoneyText();
   const { open } = useAddSheet();
 
   const groups = useMemo(() => {
@@ -79,7 +80,7 @@ export function TransactionList({
               </h3>
               {showDayTotals && daySpend > 0 && (
                 <span className="text-[12px] text-ink-tertiary tnum">
-                  {formatMoney(daySpend)}
+                  {money(daySpend)}
                 </span>
               )}
             </header>

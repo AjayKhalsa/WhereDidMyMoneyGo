@@ -1,6 +1,6 @@
 "use client";
 
-import { formatMoney } from "@/lib/domain/money";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
 import {
   expectedMonthlyIncome,
   goalAllocations,
@@ -34,6 +34,7 @@ import { pluralise } from "@/lib/utils";
  */
 
 export default function MoneyPage() {
+  const money = useMoneyText();
   const {
     status,
     db,
@@ -98,7 +99,7 @@ export default function MoneyPage() {
           tone={safeToSpend.cardOutstanding > 0 ? "warning" : "neutral"}
           detail={
             safeToSpend.cardOutstanding > 0
-              ? `${formatMoney(safeToSpend.unencumberedCash)} is really yours`
+              ? `${money(safeToSpend.unencumberedCash)} is really yours`
               : "Nothing outstanding"
           }
         />
@@ -248,9 +249,10 @@ function StatBlock({
 
 /** The one figure in a panel header worth seeing without opening it. */
 function SummaryFigure({ value, suffix }: { value: number; suffix?: string }) {
+  const money = useMoneyText();
   return (
     <span className="text-[14px] font-medium text-ink-secondary tnum">
-      {formatMoney(value)}
+      {money(value)}
       {suffix && (
         <span className="text-[12px] font-normal text-ink-tertiary">
           {suffix}
