@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { Transaction } from "@/lib/domain/types";
+import type { Transaction, TransactionType } from "@/lib/domain/types";
 import { AddTransactionSheet } from "./add-transaction-sheet";
 
 /**
@@ -23,6 +23,12 @@ import { AddTransactionSheet } from "./add-transaction-sheet";
 export interface AddSheetOptions {
   /** Pre-fills the natural-language box, e.g. from a quick action. */
   initialText?: string;
+  /**
+   * Opens on a chosen direction — money out, in, or moved between accounts.
+   * An explicit choice, so it is treated as already-touched and the parser
+   * will not override it from the typed phrase.
+   */
+  initialType?: Extract<TransactionType, "EXPENSE" | "INCOME" | "TRANSFER">;
   /** Opens in edit mode for an existing row. */
   transaction?: Transaction;
 }
@@ -60,7 +66,12 @@ export function AddSheetProvider({ children }: { children: ReactNode }) {
       <AddTransactionSheet
         // Remounting per invocation guarantees a clean slate every time —
         // no stale amount left over from a half-finished entry.
-        key={state.open ? (state.options.transaction?.id ?? "new") : "closed"}
+        key={
+          state.open
+            ? (state.options.transaction?.id ??
+              `new:${state.options.initialType ?? "EXPENSE"}`)
+            : "closed"
+        }
         open={state.open}
         onClose={close}
         options={state.options}

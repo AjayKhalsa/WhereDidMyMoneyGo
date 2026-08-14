@@ -9,6 +9,7 @@ import {
   formatMoneyCompact,
 } from "@/lib/domain/money";
 import type { Paise } from "@/lib/domain/types";
+import { maskFigure, useBalancesHidden } from "@/lib/hooks/use-privacy";
 import { cn } from "@/lib/utils";
 
 /**
@@ -38,6 +39,7 @@ export function Amount({
   compact,
   signed,
   muted,
+  revealed,
 }: {
   value: Paise;
   size?: AmountSize;
@@ -46,16 +48,26 @@ export function Amount({
   /** Renders a leading − for negative values instead of hiding the sign. */
   signed?: boolean;
   muted?: boolean;
+  /**
+   * Shows the figure even when balances are hidden. For the few places where
+   * masking would defeat the purpose — checking an amount you are currently
+   * typing, or confirming a correction.
+   */
+  revealed?: boolean;
 }) {
   const style = SIZES[size];
   const negative = value < 0;
   const magnitude = Math.abs(value);
+  // Gated here rather than per screen: every money figure in the app renders
+  // through this component, so one check covers all of them.
+  const masked = useBalancesHidden() && !revealed;
 
   if (compact) {
+    const text = formatMoneyCompact(magnitude);
     return (
       <span className={cn("tnum", style.value, muted && "text-ink-secondary", className)}>
         {negative && signed ? "−" : ""}
-        {formatMoneyCompact(magnitude)}
+        {masked ? maskFigure(text) : text}
       </span>
     );
   }
@@ -72,7 +84,7 @@ export function Amount({
     >
       {negative && signed && <span className="mr-0.5">−</span>}
       <span className={cn(style.symbol, "mr-[0.08em] opacity-60")}>₹</span>
-      {formatAmountOnly(magnitude)}
+      {masked ? maskFigure(formatAmountOnly(magnitude)) : formatAmountOnly(magnitude)}
     </span>
   );
 }

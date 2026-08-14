@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { isActivePath, NAV_ITEMS } from "./navigation";
 import { useAddSheet } from "@/components/add/add-sheet-provider";
+import { QuickLogBar } from "./quick-log-bar";
 import type { ReactNode } from "react";
 
 /**
@@ -38,13 +39,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           className={cn(
             "mx-auto w-full max-w-[1120px] px-5 sm:px-8",
             "pt-6 sm:pt-8",
-            // Clears the mobile tab bar.
-            "pb-[calc(6rem+env(safe-area-inset-bottom,0px))] lg:pb-16",
+            // Clears the mobile tab bar *and* the quick-log bar above it.
+            "pb-[calc(9.5rem+env(safe-area-inset-bottom,0px))] lg:pb-16",
           )}
         >
           {children}
         </main>
       </div>
+      <QuickLogBar />
       <MobileTabBar />
     </div>
   );
@@ -146,12 +148,10 @@ function DesktopSidebar() {
 
 function MobileTabBar() {
   const pathname = usePathname();
-  const { open } = useAddSheet();
 
-  // Add sits between Insights and Money so the raised button lands centre.
-  const left = NAV_ITEMS.slice(0, 2);
-  const right = NAV_ITEMS.slice(2);
-
+  // No raised "+" here any more: the quick-log bar sits directly above and
+  // says what it does, so a second, vaguer route to the same sheet only took
+  // space the tabs could use.
   return (
     <nav
       aria-label="Main"
@@ -162,26 +162,7 @@ function MobileTabBar() {
       )}
     >
       <ul className="mx-auto flex max-w-md items-stretch justify-around px-2">
-        {left.map((item) => (
-          <TabItem key={item.href} item={item} pathname={pathname} />
-        ))}
-
-        <li className="flex items-center px-1">
-          <button
-            type="button"
-            onClick={() => open()}
-            aria-label="Add a transaction"
-            className={cn(
-              "flex h-12 w-12 items-center justify-center rounded-2xl bg-ink text-canvas",
-              "shadow-[0_4px_14px_-2px_rgb(25_25_23_/_0.3)]",
-              "transition-transform duration-150 ease-[var(--ease-out-soft)] active:scale-90",
-            )}
-          >
-            <Plus className="h-5 w-5" strokeWidth={2.25} />
-          </button>
-        </li>
-
-        {right.map((item) => (
+        {NAV_ITEMS.map((item) => (
           <TabItem key={item.href} item={item} pathname={pathname} />
         ))}
       </ul>

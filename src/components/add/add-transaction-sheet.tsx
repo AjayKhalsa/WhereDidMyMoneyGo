@@ -128,7 +128,11 @@ export function AddTransactionSheet({
   const [panel, setPanel] = useState<
     "category" | "type" | "context" | "account" | "toAccount" | null
   >(null);
-  const [touched, setTouched] = useState<Set<keyof DraftState>>(new Set());
+  // A direction chosen from the quick-log bar counts as a decision already
+  // made, so the parser leaves `type` alone (see the effect below).
+  const [touched, setTouched] = useState<Set<keyof DraftState>>(
+    () => new Set<keyof DraftState>(options.initialType ? ["type"] : []),
+  );
   const inputRef = useRef<HTMLInputElement>(null);
 
   // ---- Split with… ---------------------------------------------------------
@@ -156,7 +160,7 @@ export function AddTransactionSheet({
           date: toDateInputValue(editing.date),
         }
       : {
-          type: "EXPENSE",
+          type: options.initialType ?? "EXPENSE",
           amountText: "",
           description: "",
           categoryId: UNCATEGORISED_ID,
@@ -474,7 +478,9 @@ export function AddTransactionSheet({
               transition={{ duration: 0.18 }}
             >
               {amount > 0 ? (
-                <Amount value={amount} size="xl" />
+                // Never masked: this is the figure you are typing right now,
+                // and you have to be able to check it before saving.
+                <Amount value={amount} size="xl" revealed />
               ) : (
                 <span className="display-figure text-[clamp(1.75rem,5vw,2.25rem)] font-semibold text-ink-faint">
                   ₹0
