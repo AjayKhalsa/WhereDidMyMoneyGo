@@ -117,10 +117,36 @@ describe("bounds and structure", () => {
 });
 
 describe("payday morning", () => {
-  test("an income basis with nothing received yet does not collapse the score", () => {
-    // The original bug: every ratio divided by *actual* income, so at 00:01
-    // on payday `commitmentScore` fell to 0 and investment and savings with
-    // it — a score that cratered and recovered hours later, unprompted.
+  test("carried card debt is judged against expected pay, not zero", () => {
+    // The sharpest form of the original bug. With salary not yet received,
+    // `commitmentRatio` fell back to its `outstanding > 0 ? 1 : 0` branch and
+    // scored a flat 0 — so at 00:01 on payday anyone holding a card balance
+    // watched their score crater and recover hours later, untouched.
+    const card = makeCard();
+    const detail = makeCardDetail({
+      accountId: card.id,
+      statementDay: 25,
+      dueDay: 9,
+    });
+    const result = scoreFor({
+      // ₹40,000 statement outstanding, no salary in the ledger yet.
+      transactions: [
+        expense({ accountId: card.id, amount: rs(40_000), date: at("2026-07-01") }),
+      ],
+      accounts: [bank, card],
+      creditCards: [detail],
+      incomeBasis: SALARY,
+    });
+    const commitments = factor(result, "commitments")?.score ?? 0;
+    // 40k against a 250k basis is 16% — uncomfortable, nowhere near a zero.
+    assert.ok(
+      commitments > 60,
+      `commitments scored ${commitments} against an expected salary`,
+    );
+    assert.ok(result.score > 40, `score was ${result.score} before salary landed`);
+  });
+
+  test("an empty ledger before payday does not collapse the score", () => {
     const result = scoreFor({ transactions: [], incomeBasis: SALARY });
     assert.ok(result.score > 40, `score was ${result.score} before salary landed`);
     assert.ok((factor(result, "commitments")?.score ?? 0) > 90);
