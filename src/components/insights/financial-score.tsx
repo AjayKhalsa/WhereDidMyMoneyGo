@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { ScoreRating } from "@/lib/engine/insights";
+import { useMaskedProse } from "@/lib/hooks/use-privacy";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { ProgressTrack, ScoreDial } from "@/components/ui/charts";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ const RATING_TRACK: Record<ScoreRating, "positive" | "accent" | "warning" | "dan
 };
 
 export function FinancialScoreCard() {
+  const prose = useMaskedProse();
   const { score } = useFinance();
   const [expanded, setExpanded] = useState(true);
 
@@ -44,7 +46,7 @@ export function FinancialScoreCard() {
             Financial score
           </h2>
           <p className="mt-1.5 text-[14px] leading-relaxed text-ink-secondary">
-            {score.summary}
+            {prose(score.summary)}
           </p>
           <p className="mt-2.5 text-[12.5px] leading-relaxed text-ink-tertiary">
             Weighted from six measurable behaviours this month. It moves when
@@ -94,7 +96,7 @@ export function FinancialScoreCard() {
                 />
               </div>
               <p className="mt-1.5 text-[12.5px] text-ink-tertiary">
-                {factor.detail}
+                {prose(factor.detail)}
               </p>
             </li>
           ))}

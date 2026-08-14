@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { SearchX } from "lucide-react";
-import { formatMoney } from "@/lib/domain/money";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
 import {
   filterTransactions,
   isFilterEmpty,
@@ -37,6 +37,7 @@ import { pluralise } from "@/lib/utils";
  */
 
 export default function TransactionsPage() {
+  const money = useMoneyText();
   const { status, db, now, categories, cycleStartDay } = useFinance();
 
   const [query, setQuery] = useState("");
@@ -150,7 +151,7 @@ export default function TransactionsPage() {
           <span className="font-medium text-ink-secondary">
             {summary.largest.description}
           </span>{" "}
-          at {formatMoney(summary.largest.amount)}
+          at {money(summary.largest.amount)}
           {summary.largest.categoryId &&
             ` · ${categories.pathOf(summary.largest.categoryId)}`}
           .
@@ -174,6 +175,7 @@ function ResultSummary({
   headline: string;
   summary: ReturnType<typeof summariseResults>;
 }) {
+  const money = useMoneyText();
   return (
     <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4 sm:p-5">
       <p className="text-[13px] text-ink-secondary">{headline}</p>
@@ -185,7 +187,7 @@ function ResultSummary({
             <p className="mt-0.5 text-[12px] text-ink-tertiary">
               across {summary.expenseCount}{" "}
               {pluralise(summary.expenseCount, "expense")} · avg{" "}
-              {formatMoney(summary.averageExpense)}
+              {money(summary.averageExpense)}
             </p>
           </div>
         )}

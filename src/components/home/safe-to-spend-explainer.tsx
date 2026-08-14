@@ -1,7 +1,7 @@
 "use client";
 
-import { formatMoney } from "@/lib/domain/money";
 import type { BreakdownLine } from "@/lib/engine/safe-to-spend";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { Amount } from "@/components/ui/amount";
 import { Divider } from "@/components/ui/primitives";
@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
  */
 
 export function SafeToSpendExplainer() {
+  const money = useMoneyText();
   const { safeToSpend, isCurrentMonth } = useFinance();
   const {
     breakdown,
@@ -57,7 +58,7 @@ export function SafeToSpendExplainer() {
             Spread over {remainingDays}{" "}
             {remainingDays === 1 ? "day" : "days"} left, that&rsquo;s{" "}
             <span className="font-medium text-ink tnum">
-              {formatMoney(dailyAllowance)}
+              {money(dailyAllowance)}
             </span>{" "}
             a day.
           </p>
@@ -84,18 +85,18 @@ export function SafeToSpendExplainer() {
           <div className="mt-3 space-y-2 border-t border-line pt-3">
             <Line
               label="Where you started"
-              value={formatMoney(positionAtCycleStart)}
+              value={money(positionAtCycleStart)}
               hint="Cash minus card debt when this cycle began"
             />
             <Line
               label="Where you are now"
-              value={formatMoney(positionNow)}
+              value={money(positionNow)}
               emphasis
             />
           </div>
           {cardDebtCleared > 0 && (
             <p className="mt-3 text-[12.5px] leading-relaxed text-ink-secondary">
-              {formatMoney(cardDebtCleared)} of this went to clearing card debt
+              {money(cardDebtCleared)} of this went to clearing card debt
               rather than building up in your account — which is why it&rsquo;s
               larger than your bank balance.
             </p>
@@ -110,12 +111,12 @@ export function SafeToSpendExplainer() {
         <div className="space-y-2.5">
           <Line
             label="Projected spend by month end"
-            value={formatMoney(projectedMonthEndSpend)}
+            value={money(projectedMonthEndSpend)}
             hint="If you keep spending at your current pace"
           />
           <Line
             label={projectedSurplus >= 0 ? "Projected surplus" : "Projected shortfall"}
-            value={formatMoney(Math.abs(projectedSurplus))}
+            value={money(Math.abs(projectedSurplus))}
             hint={
               projectedSurplus >= 0
                 ? "What would be left over at that pace"
@@ -130,6 +131,7 @@ export function SafeToSpendExplainer() {
 }
 
 function BreakdownList({ lines }: { lines: BreakdownLine[] }) {
+  const money = useMoneyText();
   return (
     <ul className="space-y-0">
       {lines.map((line, index) => (
@@ -149,7 +151,7 @@ function BreakdownList({ lines }: { lines: BreakdownLine[] }) {
               )}
             >
               {line.direction === "add" ? "" : "− "}
-              {formatMoney(line.amount)}
+              {money(line.amount)}
             </span>
           </div>
         </li>

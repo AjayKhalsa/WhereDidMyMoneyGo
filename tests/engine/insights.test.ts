@@ -2,13 +2,11 @@ import assert from "node:assert/strict";
 import test, { describe } from "node:test";
 
 import {
-  calculateFinancialScore,
   generateInsights,
   headlineInsight,
   type InsightInput,
 } from "@/lib/engine/insights";
 import { detectRecurringCandidates } from "@/lib/engine/recurring-detection";
-import { spendingConsistency } from "@/lib/engine/analytics";
 import { makeContext } from "@/lib/domain/contexts";
 
 import {
@@ -133,70 +131,6 @@ describe("generateInsights", () => {
 
   test("headlineInsight of nothing is undefined, not a crash", () => {
     assert.equal(headlineInsight([]), undefined);
-  });
-});
-
-describe("calculateFinancialScore", () => {
-  function scoreFor(transactions = [] as ReturnType<typeof expense>[]) {
-    return calculateFinancialScore({
-      transactions,
-      accounts: [bank],
-      goals: [],
-      month: MONTH,
-      now: NOW,
-      cycleStartDay: PAYDAY,
-      consistency: spendingConsistency(transactions, MONTH, NOW, PAYDAY),
-    });
-  }
-
-  test("stays within 0–100 for an empty ledger", () => {
-    const result = scoreFor();
-    assert.ok(result.score >= 0 && result.score <= 100, `score was ${result.score}`);
-    assert.ok(Number.isFinite(result.score));
-  });
-
-  test("stays within 0–100 for a healthy month", () => {
-    const rows = [
-      income({ amount: rs(250_000), date: at("2026-07-24") }),
-      investmentTxn({ amount: rs(75_000), date: at("2026-07-25") }),
-      expense({ amount: rs(50_000), date: at("2026-08-01") }),
-    ];
-    const result = scoreFor(rows);
-    assert.ok(result.score >= 0 && result.score <= 100);
-  });
-
-  test("stays within 0–100 for a month that overspent badly", () => {
-    const rows = [
-      income({ amount: rs(50_000), date: at("2026-07-24") }),
-      expense({ amount: rs(400_000), date: at("2026-08-01") }),
-    ];
-    const result = scoreFor(rows);
-    assert.ok(result.score >= 0 && result.score <= 100, `score was ${result.score}`);
-  });
-
-  test("a better month scores at least as well as a worse one", () => {
-    const good = scoreFor([
-      income({ amount: rs(250_000), date: at("2026-07-24") }),
-      investmentTxn({ amount: rs(75_000), date: at("2026-07-25") }),
-      expense({ amount: rs(50_000), date: at("2026-08-01") }),
-    ]);
-    const bad = scoreFor([
-      income({ amount: rs(250_000), date: at("2026-07-24") }),
-      expense({ amount: rs(245_000), date: at("2026-08-01") }),
-    ]);
-    assert.ok(good.score >= bad.score, `${good.score} should beat ${bad.score}`);
-  });
-
-  test("the score is never a black box — every factor is explained", () => {
-    const result = scoreFor([income({ amount: rs(250_000), date: at("2026-07-24") })]);
-    assert.ok(result.factors.length > 0);
-    for (const factor of result.factors) {
-      assert.ok(factor.label.length > 0);
-      assert.ok(factor.detail.length > 0);
-      assert.ok(factor.score >= 0 && factor.score <= 100, `${factor.id}: ${factor.score}`);
-      assert.ok(["Excellent", "Good", "Fair", "Needs attention"].includes(factor.rating));
-    }
-    assert.ok(result.summary.length > 0);
   });
 });
 

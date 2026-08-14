@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { LENSES, matchesLens } from "@/lib/domain/lenses";
-import { formatMoney } from "@/lib/domain/money";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
 import { compareToAverage, lensTotals } from "@/lib/engine/analytics";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { Amount, DeltaBadge } from "@/components/ui/amount";
@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
  */
 
 export function LensAnswers() {
+  const money = useMoneyText();
   const { monthRows, db, month, cycleStartDay } = useFinance();
   const [active, setActive] = useState<LensResult | null>(null);
 
@@ -86,7 +87,7 @@ export function LensAnswers() {
         title={active?.lens.question}
         description={
           active
-            ? `${formatMoney(active.amount)} across ${active.count} ${active.count === 1 ? "transaction" : "transactions"}`
+            ? `${money(active.amount)} across ${active.count} ${active.count === 1 ? "transaction" : "transactions"}`
             : undefined
         }
         size="lg"
@@ -128,7 +129,7 @@ export function LensAnswers() {
               <p className="mb-2 text-[13px] leading-relaxed text-ink-secondary">
                 Average of{" "}
                 <span className="font-medium text-ink tnum">
-                  {formatMoney(Math.round(active.amount / Math.max(1, active.count)))}
+                  {money(Math.round(active.amount / Math.max(1, active.count)))}
                 </span>{" "}
                 per transaction.
               </p>

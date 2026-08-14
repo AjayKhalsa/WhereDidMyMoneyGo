@@ -31,6 +31,12 @@ interface Toast {
   title: string;
   detail?: string;
   action?: { label: string; onClick: () => void };
+  /**
+   * Milliseconds on screen. Defaults to `DURATION`, which is tuned for a
+   * confirmation you only need to glimpse. A toast carrying an `action` the
+   * user is meant to *decide* on needs longer than a glance.
+   */
+  duration?: number;
 }
 
 interface ToastContextValue {
@@ -54,7 +60,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const id = createId("toast");
       // Cap the stack — three is already more than anyone reads.
       setToasts((current) => [...current.slice(-2), { ...toast, id }]);
-      window.setTimeout(() => dismiss(id), DURATION);
+      window.setTimeout(() => dismiss(id), toast.duration ?? DURATION);
     },
     [dismiss],
   );

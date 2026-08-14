@@ -16,7 +16,12 @@ import {
   type CategoryLookup,
 } from "@/lib/domain/categories";
 import { contextLabel } from "@/lib/domain/contexts";
-import { addMonths, monthKey, type MonthKey } from "@/lib/domain/dates";
+import {
+  addMonths,
+  monthKey,
+  monthKeyToDate,
+  type MonthKey,
+} from "@/lib/domain/dates";
 import type { Database, Paise } from "@/lib/domain/types";
 import {
   calculateFinancialScore,
@@ -192,14 +197,42 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       groupLabel: (groupId) => categories.byId.get(groupId)?.name ?? "Other",
     });
 
+    const peopleBalances = personBalances(db?.people ?? [], db?.splits ?? []);
+    const netWorthValue = netWorth(
+      db?.accounts ?? [],
+      transactions,
+      db?.investments ?? [],
+      peopleBalances,
+      now,
+    );
+    // The same figure as it stood when the cycle opened, so the score can ask
+    // whether this cycle actually left you better off. Split balances are
+    // carried at today's values — the ledger keeps no history of when an IOU
+    // was raised — so the delta reflects cash, cards and portfolio, which is
+    // what moves within a cycle anyway.
+    const cycleStart = monthKeyToDate(month);
+    const netWorthAtCycleStart = netWorth(
+      db?.accounts ?? [],
+      transactions.filter((t) => new Date(t.date) < cycleStart),
+      db?.investments ?? [],
+      peopleBalances,
+      cycleStart,
+    );
+
     const score = calculateFinancialScore({
       transactions,
       accounts: db?.accounts ?? [],
+      creditCards: db?.creditCards ?? [],
       goals: db?.goals ?? [],
       month,
       now,
       cycleStartDay,
       consistency: spendingConsistency(transactions, month, now, cycleStartDay),
+      // One definition of "income" across the app — the same basis Safe to
+      // spend plans against.
+      incomeBasis: safeToSpend.incomeBasis,
+      netWorthNow: netWorthValue,
+      netWorthAtCycleStart,
     });
 
     const groupBreakdown = spendByGroup(
@@ -219,15 +252,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           now,
         ),
       );
-
-    const peopleBalances = personBalances(db?.people ?? [], db?.splits ?? []);
-    const netWorthValue = netWorth(
-      db?.accounts ?? [],
-      transactions,
-      db?.investments ?? [],
-      peopleBalances,
-      now,
-    );
 
     return {
       status: state.status,

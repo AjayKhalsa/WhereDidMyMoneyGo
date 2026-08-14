@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { CreditCard as CreditCardIcon } from "lucide-react";
 import { formatDayMonth } from "@/lib/domain/dates";
-import { formatMoney, parseAmountInput } from "@/lib/domain/money";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
+import { parseAmountInput } from "@/lib/domain/money";
 import type { CreditCardSummary } from "@/lib/engine/analytics";
 import { payCreditCard } from "@/lib/data/actions";
 import { useFinance } from "@/lib/hooks/use-finance";
@@ -36,6 +37,7 @@ export function CreditCardCard({
   summary: CreditCardSummary;
   compact?: boolean;
 }) {
+  const money = useMoneyText();
   const [detailOpen, setDetailOpen] = useState(false);
   const { daysUntilDue, outstanding, creditBalance, currentCycle, lastStatement, utilisation } =
     summary;
@@ -118,7 +120,7 @@ export function CreditCardCard({
           <div>
             <p className="text-[12px] text-ink-tertiary">This cycle</p>
             <p className="text-[14px] font-medium text-ink tnum">
-              {formatMoney(currentCycle.spent)}
+              {money(currentCycle.spent)}
             </p>
           </div>
           <Button size="sm" onClick={() => setDetailOpen(true)}>
@@ -145,6 +147,7 @@ function CreditCardDetailSheet({
   open: boolean;
   onClose: () => void;
 }) {
+  const money = useMoneyText();
   const { db } = useFinance();
   const toast = useToast();
   const [amountText, setAmountText] = useState("");
@@ -180,7 +183,7 @@ function CreditCardDetailSheet({
       });
       toast.show({
         tone: "success",
-        title: `${formatMoney(amount)} paid`,
+        title: `${money(amount)} paid`,
         detail: "Recorded as a transfer — not new spending",
       });
       setAmountText("");
@@ -280,7 +283,7 @@ function CreditCardDetailSheet({
                   disabled={!canPay}
                   className="flex-1"
                 >
-                  {paying ? "Recording…" : `Pay ${amount > 0 ? formatMoney(amount) : ""}`}
+                  {paying ? "Recording…" : `Pay ${amount > 0 ? money(amount) : ""}`}
                 </Button>
                 <Button
                   onClick={() =>

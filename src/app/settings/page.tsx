@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CloudUpload, Download, LogOut, RefreshCw, Trash2, Upload } from "lucide-react";
+import { ArrowRight, CloudUpload, Download, Eye, EyeOff, LogOut, RefreshCw, Trash2, Upload } from "lucide-react";
 import { formatFullDate } from "@/lib/domain/dates";
 import type { Database } from "@/lib/domain/types";
 import { updateProfile } from "@/lib/data/actions";
@@ -14,6 +14,7 @@ import { replaceDatabase, resetStoreBoot } from "@/lib/data/store";
 import { SupabaseRepository } from "@/lib/data/supabase-adapter";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/data/supabase-client";
 import { useFinance } from "@/lib/hooks/use-finance";
+import { usePrivacy } from "@/lib/hooks/use-privacy";
 import { PageHeader } from "@/components/layout/month-switcher";
 import { ImportStatementSheet } from "@/components/settings/import-statement-sheet";
 import { RulesPanel } from "@/components/settings/rules-panel";
@@ -57,6 +58,10 @@ export default function SettingsPage() {
 
       <Section title="You">
         <ProfileCard />
+      </Section>
+
+      <Section title="Privacy">
+        <PrivacyPanel />
       </Section>
 
       <Section
@@ -477,6 +482,34 @@ function DataPanel() {
 
       <ImportStatementSheet open={importing} onClose={() => setImporting(false)} />
     </>
+  );
+}
+
+/**
+ * Masking is per device, not per account — see `use-privacy.tsx`. Said out
+ * loud here so nobody expects it to follow them to another phone.
+ */
+function PrivacyPanel() {
+  const { hidden, toggle } = usePrivacy();
+  return (
+    <Card>
+      <DataRow
+        icon={
+          hidden ? (
+            <EyeOff className="h-4 w-4" strokeWidth={1.75} />
+          ) : (
+            <Eye className="h-4 w-4" strokeWidth={1.75} />
+          )
+        }
+        title="Hide balances"
+        description="Masks every figure in the app so you can hand your phone over. This device only — it won't hide them elsewhere."
+        action={
+          <Button size="sm" onClick={toggle} aria-pressed={hidden}>
+            {hidden ? "Show" : "Hide"}
+          </Button>
+        }
+      />
+    </Card>
   );
 }
 

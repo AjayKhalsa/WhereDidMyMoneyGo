@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AppShell } from "@/components/layout/app-shell";
+import { ServiceWorkerRegistrar } from "@/components/layout/service-worker-registrar";
 import { AddSheetProvider } from "@/components/add/add-sheet-provider";
 import { FinanceProvider } from "@/lib/hooks/use-finance";
+import { PrivacyProvider } from "@/lib/hooks/use-privacy";
 import { ToastProvider } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
@@ -37,11 +39,14 @@ export default function RootLayout({
           Skip to content
         </a>
         <ToastProvider>
-          <FinanceProvider>
-            <AddSheetProvider>
-              <AppShell>{children}</AppShell>
-            </AddSheetProvider>
-          </FinanceProvider>
+          <ServiceWorkerRegistrar />
+          <PrivacyProvider>
+            <FinanceProvider>
+              <AddSheetProvider>
+                <AppShell>{children}</AppShell>
+              </AddSheetProvider>
+            </FinanceProvider>
+          </PrivacyProvider>
         </ToastProvider>
       </body>
     </html>

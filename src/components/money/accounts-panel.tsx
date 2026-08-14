@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { formatFullDate } from "@/lib/domain/dates";
-import { formatMoney, parseAmountInput } from "@/lib/domain/money";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
+import { parseAmountInput } from "@/lib/domain/money";
 import type { Account, AccountType } from "@/lib/domain/types";
 import {
   accountBalance,
@@ -138,6 +139,7 @@ function AccountSheet({
   open: boolean;
   onClose: () => void;
 }) {
+  const money = useMoneyText();
   const { db } = useFinance();
   const toast = useToast();
   const detail = db?.creditCards.find((c) => c.accountId === account?.id);
@@ -219,7 +221,7 @@ function AccountSheet({
     }
     toast.show({
       tone: "success",
-      title: `${difference > 0 ? "+" : "−"}${formatMoney(Math.abs(difference))} recorded`,
+      title: `${difference > 0 ? "+" : "−"}${money(Math.abs(difference))} recorded`,
       detail: isCardAccount ? "Starting balance" : "Balance adjustment",
     });
     setReconciling(false);
@@ -377,7 +379,7 @@ function AccountSheet({
                 {isCardAccount ? "Current outstanding" : "Current balance"}
               </p>
               <span className="font-medium text-ink-secondary tnum text-[13px]">
-                {formatMoney(expectedBalance)}
+                {money(expectedBalance)}
               </span>
             </div>
             <p className="text-[12px] text-ink-tertiary">
@@ -409,7 +411,7 @@ function AccountSheet({
                   <p className="text-[12.5px] text-ink-secondary">
                     {difference === 0
                       ? "Matches — nothing to record."
-                      : `Difference: ${difference! > 0 ? "+" : "−"}${formatMoney(Math.abs(difference!))}`}
+                      : `Difference: ${difference! > 0 ? "+" : "−"}${money(Math.abs(difference!))}`}
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2">
@@ -431,7 +433,7 @@ function AccountSheet({
                   {actualBalance !== null && difference !== 0 && (
                     <Button size="sm" variant="primary" onClick={handleRecordAdjustment}>
                       Record {difference! > 0 ? "+" : "−"}
-                      {formatMoney(Math.abs(difference!))}
+                      {money(Math.abs(difference!))}
                     </Button>
                   )}
                 </div>

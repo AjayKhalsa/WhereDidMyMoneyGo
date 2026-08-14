@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Plus, Target } from "lucide-react";
-import { formatMoney, parseAmountInput } from "@/lib/domain/money";
+import { parseAmountInput } from "@/lib/domain/money";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
 import type { Goal } from "@/lib/domain/types";
 import { saveGoal } from "@/lib/data/actions";
 import { goalAllocations } from "@/lib/engine/safe-to-spend";
@@ -104,6 +105,7 @@ function NewGoalSheet({
   open: boolean;
   onClose: () => void;
 }) {
+  const money = useMoneyText();
   const toast = useToast();
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
@@ -137,7 +139,7 @@ function NewGoalSheet({
     toast.show({
       tone: "success",
       title: `${goal.name} created`,
-      detail: `Target ${formatMoney(goal.targetAmount)}`,
+      detail: `Target ${money(goal.targetAmount)}`,
     });
     reset();
     onClose();

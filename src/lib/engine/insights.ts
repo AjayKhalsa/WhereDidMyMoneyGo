@@ -1,6 +1,7 @@
 import { groupIdOf } from "@/lib/domain/categories";
 import { contextLabel } from "@/lib/domain/contexts";
 import {
+  elapsedDaysInMonth,
   endOfMonth,
   formatDayMonth,
   formatMonthLabel,
@@ -11,6 +12,7 @@ import { formatMoney, percentOf } from "@/lib/domain/money";
 import { LENSES, matchesLens, type Lens } from "@/lib/domain/lenses";
 import type {
   Account,
+  CreditCardDetail,
   Goal,
   Investment,
   Paise,
@@ -26,10 +28,10 @@ import {
   monthTotals,
   monthTransactions,
   outlierTransactions,
-  savingsRate,
   shareAfterHour,
   spendByGroup,
   spendingVelocity,
+  summariseCardBilling,
   total,
   weekendSplit,
   type ComparisonResult,
@@ -593,63 +595,179 @@ function rate(score: number): ScoreRating {
 export interface ScoreInput {
   transactions: Transaction[];
   accounts: Account[];
+  /** Needed to read each card's last statement rather than its lifetime debt. */
+  creditCards: CreditCardDetail[];
   goals: Goal[];
   month: MonthKey;
   now: Date;
   cycleStartDay: number;
   consistency: number;
+  /**
+   * Expected-or-actual income for the cycle — the same basis Safe to spend
+   * uses. Without it every ratio here divides by an income that hasn't landed
+   * yet, and the score collapses on payday morning for no reason.
+   */
+  incomeBasis: Paise;
+  /** Net worth now, and at the moment this cycle began. */
+  netWorthNow: Paise;
+  netWorthAtCycleStart: Paise;
 }
+
+/**
+ * Weights, summing to 1.
+ *
+ * Ordered by how much each says about whether someone is actually getting
+ * better off. Building assets and not carrying debt dominate; goal funding is
+ * a nudge, not a verdict, because plenty of healthy people set no goals.
+ */
+const SCORE_WEIGHTS = {
+  investment: 0.22,
+  savings: 0.18,
+  commitments: 0.18,
+  netWorth: 0.15,
+  pace: 0.12,
+  consistency: 0.1,
+  goals: 0.05,
+} as const;
+
+/** Used wherever there is genuinely not enough information yet to judge. */
+const NEUTRAL = 60;
+
+/** Cycles averaged for the rate-based factors, including the current one. */
+const SMOOTHING_CYCLES = 3;
+
+const clampScore = (value: number) => Math.max(0, Math.min(100, value));
+
+/**
+ * Per-cycle investment and savings rates across the recent past.
+ *
+ * Smoothed because one FD purchase, a late salary or an annual premium would
+ * otherwise swing a *health* score that is meant to describe a trend. Cycles
+ * with no income at all are skipped rather than scored as zero.
+ *
+ * Savings deliberately excludes what was invested: `spent` already excludes
+ * it, so counting it in both places let one rupee lift two factors carrying
+ * 40% of the score between them.
+ */
+function recentRates(
+  transactions: Transaction[],
+  month: MonthKey,
+  cycleStartDay: number,
+  incomeBasis: Paise,
+): { invested: number; saved: number }[] {
+  const keys = [
+    ...previousMonths(month, SMOOTHING_CYCLES - 1, cycleStartDay),
+    month,
+  ];
+  const out: { invested: number; saved: number }[] = [];
+  for (const key of keys) {
+    const totals = monthTotals(transactions, key, cycleStartDay);
+    // The live cycle plans against expected pay; closed cycles are settled,
+    // so their own actual income is the honest denominator.
+    const basis =
+      key === month ? Math.max(incomeBasis, totals.income) : totals.income;
+    if (basis <= 0) continue;
+    out.push({
+      invested: (totals.invested / basis) * 100,
+      saved: ((basis - totals.spent - totals.invested) / basis) * 100,
+    });
+  }
+  return out;
+}
+
+const mean = (values: number[]) =>
+  values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length;
 
 /**
  * A score built only from things the user can actually change, each shown
  * with its own rating so the number is never a black box.
  */
 export function calculateFinancialScore(input: ScoreInput): FinancialScore {
-  const { transactions, accounts, goals, month, now, cycleStartDay } = input;
+  const {
+    transactions,
+    accounts,
+    creditCards,
+    goals,
+    month,
+    now,
+    cycleStartDay,
+    incomeBasis,
+  } = input;
   const totals = monthTotals(transactions, month, cycleStartDay);
+  // Never divide by an income that simply hasn't arrived yet.
+  const basis = Math.max(incomeBasis, totals.income);
 
-  const invRate = investmentRate(totals);
-  const savRate = savingsRate(totals);
+  // --- Rates, smoothed over recent cycles ---------------------------------
+  const rates = recentRates(transactions, month, cycleStartDay, incomeBasis);
+  const invRate = mean(rates.map((r) => r.invested));
+  const savRate = mean(rates.map((r) => r.saved));
 
-  // Investment rate: 20% of income is the target, 35%+ is excellent.
-  const investmentScore = Math.max(0, Math.min(100, (invRate / 30) * 100));
+  // 30% of income invested is the ceiling; 20% is the common target.
+  const investmentScore =
+    rates.length === 0 ? NEUTRAL : clampScore((invRate / 30) * 100);
+  // Kept beyond what was invested — 45% is the ceiling.
+  const savingsScore =
+    rates.length === 0 ? NEUTRAL : clampScore((savRate / 45) * 100);
 
-  // Savings rate: what's left after spending, target 30%.
-  const savingsScore = Math.max(0, Math.min(100, (savRate / 45) * 100));
-
-  // Consistency comes straight from the analytics engine.
   const consistencyScore = input.consistency;
 
-  // Commitments: how much of income is locked up in card debt.
-  const outstanding = accounts
+  // --- Commitments: debt you are actually carrying ------------------------
+  // The unpaid part of each card's last *statement*, not lifetime outstanding.
+  // Charging everything to a card and clearing it monthly is good behaviour
+  // and used to score zero.
+  const unpaidStatements = accounts
     .filter((a) => a.type === "CREDIT_CARD" && a.isActive)
-    .reduce((acc, a) => acc + creditCardOutstanding(transactions, a.id), 0);
+    .reduce((acc, account) => {
+      const { lastStatement } = summariseCardBilling(
+        account,
+        creditCards.find((c) => c.accountId === account.id),
+        transactions,
+        now,
+      );
+      if (!lastStatement || lastStatement.paidInFull) return acc;
+      return acc + Math.max(0, lastStatement.spent - lastStatement.paidAmount);
+    }, 0);
   const commitmentRatio =
-    totals.income > 0 ? outstanding / totals.income : outstanding > 0 ? 1 : 0;
-  const commitmentScore = Math.max(0, Math.min(100, 100 - commitmentRatio * 250));
+    basis > 0 ? unpaidStatements / basis : unpaidStatements > 0 ? 1 : 0;
+  // Owing two thirds of a month's income bottoms this out; the old ×250 hit
+  // zero at 40%, which was punishing for ordinary card use.
+  const commitmentScore = clampScore(100 - commitmentRatio * 150);
 
-  // Pace: are we on course to overspend this month?
+  // --- Net worth: are you actually getting better off? --------------------
+  const netWorthDelta = input.netWorthNow - input.netWorthAtCycleStart;
+  const netWorthScore =
+    basis > 0
+      ? // Flat sits at 50; gaining half a month's income reaches 100.
+        clampScore(50 + (netWorthDelta / basis) * 100)
+      : netWorthDelta >= 0
+        ? NEUTRAL
+        : 100 - NEUTRAL;
+
+  // --- Pace ----------------------------------------------------------------
   const velocity = spendingVelocity(transactions, month, now, cycleStartDay);
+  const elapsed = elapsedDaysInMonth(now, month, cycleStartDay);
+  // A projection from two days of data is noise, not a signal.
   const paceScore =
-    totals.income > 0
-      ? Math.max(
-          0,
-          Math.min(100, 100 - Math.max(0, percentOf(velocity.projectedMonthEnd, totals.income) - 50) * 2),
-        )
-      : 50;
-
-  // Goals: average funded progress, or neutral when none are set.
-  const fundable = goals.filter((g) => g.targetAmount > 0);
-  const goalScore =
-    fundable.length === 0
-      ? 60
-      : Math.min(
-          100,
-          fundable.reduce(
-            (acc, g) => acc + percentOf(g.currentAmount, g.targetAmount),
-            0,
-          ) / fundable.length,
+    basis <= 0 || elapsed < 5
+      ? NEUTRAL
+      : clampScore(
+          100 - Math.max(0, percentOf(velocity.projectedMonthEnd, basis) - 55) * 2.2,
         );
+
+  // --- Goals: are you funding them, not how full they are ------------------
+  // Absolute % funded meant adding a goal instantly lowered the score, which
+  // punished exactly the behaviour the feature exists to encourage.
+  const planned = goals.reduce(
+    (acc, g) => acc + (g.currentAmount >= g.targetAmount ? 0 : g.monthlyContribution),
+    0,
+  );
+  const contributed = total(
+    monthTransactions(transactions, month, cycleStartDay).filter(
+      (t) => t.type === "TRANSFER" && t.goalId,
+    ),
+  );
+  const goalScore =
+    planned <= 0 ? NEUTRAL : clampScore((contributed / planned) * 100);
 
   const factors: ScoreFactor[] = [
     {
@@ -657,57 +775,77 @@ export function calculateFinancialScore(input: ScoreInput): FinancialScore {
       label: "Investment rate",
       score: investmentScore,
       rating: rate(investmentScore),
-      weight: 0.28,
-      detail: `${invRate.toFixed(1)}% of income invested${totals.invested > 0 ? ` (${formatMoney(totals.invested)})` : ""}`,
+      weight: SCORE_WEIGHTS.investment,
+      detail:
+        rates.length === 0
+          ? "No income recorded yet"
+          : `${invRate.toFixed(1)}% of income invested, averaged over ${rates.length} ${rates.length === 1 ? "cycle" : "cycles"}`,
     },
     {
       id: "savings",
       label: "Savings rate",
       score: savingsScore,
       rating: rate(savingsScore),
-      weight: 0.22,
-      detail: `${savRate.toFixed(1)}% of income not spent`,
-    },
-    {
-      id: "consistency",
-      label: "Spending consistency",
-      score: consistencyScore,
-      rating: rate(consistencyScore),
-      weight: 0.15,
+      weight: SCORE_WEIGHTS.savings,
       detail:
-        consistencyScore >= 62
-          ? "Your daily spending is fairly even"
-          : "Spending comes in unpredictable bursts",
+        rates.length === 0
+          ? "No income recorded yet"
+          : `${savRate.toFixed(1)}% kept beyond what you invested`,
     },
     {
       id: "commitments",
-      label: "Recurring commitments",
+      label: "Card debt carried",
       score: commitmentScore,
       rating: rate(commitmentScore),
-      weight: 0.15,
+      weight: SCORE_WEIGHTS.commitments,
       detail:
-        outstanding > 0
-          ? `${formatMoney(outstanding)} owed on cards — ${Math.round(commitmentRatio * 100)}% of a month's income`
-          : "Nothing outstanding on cards",
+        unpaidStatements > 0
+          ? `${formatMoney(unpaidStatements)} of your last statements unpaid — ${Math.round(commitmentRatio * 100)}% of a month's income`
+          : "Statements paid in full",
+    },
+    {
+      id: "net-worth",
+      label: "Net worth trend",
+      score: netWorthScore,
+      rating: rate(netWorthScore),
+      weight: SCORE_WEIGHTS.netWorth,
+      detail:
+        netWorthDelta === 0
+          ? "Unchanged this cycle"
+          : `${netWorthDelta > 0 ? "Up" : "Down"} ${formatMoney(Math.abs(netWorthDelta))} this cycle`,
     },
     {
       id: "pace",
       label: "Spending pace",
       score: paceScore,
       rating: rate(paceScore),
-      weight: 0.12,
-      detail: `On track for ${formatMoney(velocity.projectedMonthEnd)} by ${formatDayMonth(endOfMonth(month, cycleStartDay))}`,
+      weight: SCORE_WEIGHTS.pace,
+      detail:
+        elapsed < 5
+          ? "Too early in the cycle to judge"
+          : `On track for ${formatMoney(velocity.projectedMonthEnd)} by ${formatDayMonth(endOfMonth(month, cycleStartDay))}`,
+    },
+    {
+      id: "consistency",
+      label: "Spending consistency",
+      score: consistencyScore,
+      rating: rate(consistencyScore),
+      weight: SCORE_WEIGHTS.consistency,
+      detail:
+        consistencyScore >= 62
+          ? "Your daily spending is fairly even"
+          : "Spending comes in unpredictable bursts",
     },
     {
       id: "goals",
-      label: "Goal progress",
+      label: "Goal funding",
       score: goalScore,
       rating: rate(goalScore),
-      weight: 0.08,
+      weight: SCORE_WEIGHTS.goals,
       detail:
-        fundable.length === 0
-          ? "No goals set yet"
-          : `${fundable.length} ${fundable.length === 1 ? "goal" : "goals"}, ${Math.round(goalScore)}% funded on average`,
+        planned <= 0
+          ? "No monthly goal amount set"
+          : `${formatMoney(contributed)} of ${formatMoney(planned)} set aside this cycle`,
     },
   ];
 

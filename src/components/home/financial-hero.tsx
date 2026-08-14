@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Info } from "lucide-react";
+import { Eye, EyeOff, Info } from "lucide-react";
 import {
   daysInMonth,
   elapsedDaysInMonth,
@@ -9,8 +9,8 @@ import {
   formatMonthLong,
   greetingFor,
 } from "@/lib/domain/dates";
-import { formatMoney } from "@/lib/domain/money";
 import { useFinance } from "@/lib/hooks/use-finance";
+import { usePrivacy, useMoneyText } from "@/lib/hooks/use-privacy";
 import { AnimatedAmount, Amount } from "@/components/ui/amount";
 import { ProgressTrack } from "@/components/ui/charts";
 import { Sheet } from "@/components/ui/sheet";
@@ -28,7 +28,33 @@ import { SafeToSpendExplainer } from "./safe-to-spend-explainer";
  * The figure is deliberately not a bank balance — see `safe-to-spend.ts`.
  */
 
+/**
+ * Masks every figure in the app. Lives on the hero because that is where the
+ * largest number is, so it is to hand at the moment you'd want it — handing
+ * your phone over, or opening the app on a train.
+ */
+function HideBalancesButton() {
+  const { hidden, toggle } = usePrivacy();
+  const Icon = hidden ? EyeOff : Eye;
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-pressed={hidden}
+      aria-label={hidden ? "Show balances" : "Hide balances"}
+      className={cn(
+        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+        "text-ink-tertiary transition-colors hover:bg-surface-sunken hover:text-ink-secondary",
+        "active:scale-95",
+      )}
+    >
+      <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+    </button>
+  );
+}
+
 export function FinancialHero() {
+  const money = useMoneyText();
   const { safeToSpend, month, now, isCurrentMonth, cycleStartDay, db } = useFinance();
   const [explaining, setExplaining] = useState(false);
 
@@ -41,10 +67,13 @@ export function FinancialHero() {
 
   return (
     <section className="pt-1">
-      <p className="text-[15px] text-ink-secondary">
-        {greetingFor(now)}
-        {name && name !== "there" ? `, ${name}` : ""}
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[15px] text-ink-secondary">
+          {greetingFor(now)}
+          {name && name !== "there" ? `, ${name}` : ""}
+        </p>
+        <HideBalancesButton />
+      </div>
 
       <div className="mt-4">
         <AnimatedAmount
@@ -59,7 +88,7 @@ export function FinancialHero() {
           </h1>
           {!overspent && safeToSpend.dailyAllowance > 0 && isCurrentMonth && (
             <span className="text-[15px] text-ink-secondary tnum">
-              {formatMoney(safeToSpend.dailyAllowance)}/day
+              {money(safeToSpend.dailyAllowance)}/day
             </span>
           )}
           <button
