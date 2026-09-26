@@ -38,7 +38,11 @@ const serwist = new Serwist({
       // a cache, and /api/classify is a POST whose answer is specific to the
       // phrase just typed.
       matcher: ({ url }) =>
-        url.pathname.startsWith("/api/") || url.hostname.endsWith(".supabase.co"),
+        url.pathname.startsWith("/api/") ||
+        url.pathname.startsWith("/auth/") ||
+        url.pathname === "/login" ||
+        url.searchParams.has("code") ||
+        url.hostname.endsWith(".supabase.co"),
       handler: new NetworkOnly(),
     },
     ...defaultCache,

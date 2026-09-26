@@ -201,6 +201,14 @@ Everything is optional — copy `.env.example` to `.env.local`:
 
 For Supabase, run the migrations in `supabase/migrations/` in order from the SQL editor.
 
+### Email sign-in
+
+The login screen sends a one-time email link to an existing account. Password sign-in remains available. Requests use `shouldCreateUser: false`, so this does not add public registration.
+
+In Supabase **Authentication → URL Configuration**, set **Site URL** to your production app URL and add `https://your-app.example/auth/callback` to **Redirect URLs**. Add `http://localhost:3000/auth/callback` separately for local development. Keep the default Magic Link template using `{{ .ConfirmationURL }}`. The app exchanges the PKCE code at `/auth/callback` and sets the session cookies before redirecting home.
+
+Open the email link in the same browser that requested it. Expired, reused or wrong-browser links return to login with a message to request a new link. A project that redirects to the app root is also handled, but its Site URL must point to this app. Supabase email delivery and rate limits still apply.
+
 ### Layout
 
 ```

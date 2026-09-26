@@ -31,6 +31,11 @@ function withExtension(url) {
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    // Dependencies (including Next's CommonJS internals) use Node's own
+    // resolution. Rewriting their relative requires to file URLs breaks CJS.
+    if (context.parentURL?.includes("/node_modules/")) {
+      return nextResolve(specifier, context);
+    }
     if (specifier.startsWith("@/")) {
       const resolved = withExtension(new URL(specifier.slice(2), SRC));
       return nextResolve(resolved.href, context);

@@ -18,6 +18,19 @@ export async function middleware(request: NextRequest) {
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseKey) return NextResponse.next();
 
+  // A callback must reach the exchange before a session exists. Some Supabase
+  // projects use the site's root as their allowed email redirect URL.
+  const pathname = request.nextUrl.pathname;
+  if (pathname === "/auth/callback") return NextResponse.next();
+  if ((pathname === "/" || pathname === "/login") && request.nextUrl.searchParams.has("code")) {
+    const callback = new URL("/auth/callback", request.url);
+    callback.searchParams.set("code", request.nextUrl.searchParams.get("code")!);
+    const redirect = NextResponse.redirect(callback);
+    redirect.headers.set("Cache-Control", "private, no-store");
+    redirect.headers.set("Referrer-Policy", "no-referrer");
+    return redirect;
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
@@ -41,18 +54,23 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isLoginPage = request.nextUrl.pathname.startsWith("/login");
+  const isLoginPage = pathname === "/login";
 
   if (!user && !isLoginPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    return NextResponse.redirect(url);
+    const redirect = NextResponse.redirect(url);
+    for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie);
+    return redirect;
   }
 
   if (user && isLoginPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
-    return NextResponse.redirect(url);
+    url.search = "";
+    const redirect = NextResponse.redirect(url);
+    for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie);
+    return redirect;
   }
 
   return response;
