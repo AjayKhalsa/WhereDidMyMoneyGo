@@ -61,7 +61,8 @@ function toRow(item: Record<string, unknown>): Record<string, unknown> {
 }
 
 function fromRow<T>(row: Record<string, unknown>): T {
-  return toCamelCase(row) as T;
+  const { user_id: _userId, ...domain } = row;
+  return toCamelCase(domain) as T;
 }
 
 function groupContexts(

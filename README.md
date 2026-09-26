@@ -225,3 +225,18 @@ The engine and domain layers are pure functions with no I/O, which is why they'r
 ### A note on money
 
 All amounts are stored as **integer paise**. Floating-point rupees drift the moment you average three months of spending and divide by remaining days, and drift in a money app is indistinguishable from a bug. Every displayed figure is rounded exactly once, at the point of display.
+# Reconciled statement batches
+
+Settings → Your data → **Review reconciliation** accepts a prepared
+`budget-reconciliation-v1` JSON file. This is an account-specific merge,
+not a full-database restore. Prepare it from a fresh export: stable row IDs,
+each row's `before` value (or `null` for new rows), the complete `after` value,
+and closing balance checkpoints in paise for every affected bank/card account.
+The supported collections are accounts, creditCards, investments and
+transactions. Refunds and repayments use the normal transaction model.
+
+The preview rejects stale edits, invalid references and balances that do not
+tally. Saving downloads a backup, keeps unrelated rows and verifies the saved
+dataset. Writes are sequential and resumable, not a database-wide transaction:
+if interrupted, reload and retry the same file; matching saved IDs are skipped.
+Never commit a user's statements, exports or prepared reconciliation files.

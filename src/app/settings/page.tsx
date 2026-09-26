@@ -17,6 +17,7 @@ import { useFinance } from "@/lib/hooks/use-finance";
 import { usePrivacy } from "@/lib/hooks/use-privacy";
 import { PageHeader } from "@/components/layout/month-switcher";
 import { ImportStatementSheet } from "@/components/settings/import-statement-sheet";
+import { ReconciliationImport } from "@/components/settings/reconciliation-import";
 import { RulesPanel } from "@/components/settings/rules-panel";
 import { TextField } from "@/components/ui/fields";
 import { Button, Card, Chip, Section, Skeleton } from "@/components/ui/primitives";
@@ -100,6 +101,7 @@ export default function SettingsPage() {
 
       <Section title="Your data">
         <DataPanel />
+        <ReconciliationImport />
       </Section>
     </div>
   );

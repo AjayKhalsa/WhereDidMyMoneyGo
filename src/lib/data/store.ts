@@ -123,6 +123,13 @@ export function resetStoreBoot(): void {
   loadPromise = null;
 }
 
+/** Reload after a resumable import, including any writes completed before an error. */
+export async function refreshDatabase(): Promise<void> {
+  const data = await getRepository().load();
+  if (!data) throw new Error("Could not reload your data.");
+  emit({ status: "ready", data, error: null });
+}
+
 function requireData(): Database {
   if (!state.data) {
     throw new Error("Store accessed before it finished loading");
