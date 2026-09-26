@@ -45,6 +45,7 @@ export default function LoginPage() {
     try {
       const supabase = getSupabaseBrowserClient();
       if (method === "email") {
+        setSentTo(null);
         const address = email.trim();
         const { error: signInError } = await supabase.auth.signInWithOtp({
           email: address,
@@ -55,7 +56,7 @@ export default function LoginPage() {
         });
         if (signInError) {
           setError(signInError.status === 429
-            ? "Please wait a minute before requesting another link."
+            ? "The email service is limiting sign-in requests. Try again later, or use your existing password."
             : "Couldn't send a sign-in link. Check your email address and try again.");
           return;
         }
