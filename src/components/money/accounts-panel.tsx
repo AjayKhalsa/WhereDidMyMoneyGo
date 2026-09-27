@@ -40,6 +40,7 @@ const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "BANK", label: "Bank account" },
   { value: "CASH", label: "Cash" },
   { value: "CREDIT_CARD", label: "Credit card" },
+  { value: "INVESTMENT", label: "Investment account" },
 ];
 
 export function AccountsPanel() {
@@ -61,6 +62,7 @@ export function AccountsPanel() {
       <div className="-mx-3">
         {accounts.map((account) => {
           const isCard = account.type === "CREDIT_CARD";
+          const isInvestment = account.type === "INVESTMENT";
           const creditBalance = isCard
             ? creditCardCreditBalance(transactions, account.id)
             : 0;
@@ -75,7 +77,9 @@ export function AccountsPanel() {
               key={account.id}
               label={account.name}
               sublabel={
-                isCard
+                isInvestment
+                  ? "Investment transfers"
+                  : isCard
                   ? creditBalance > 0
                     ? "Credit"
                     : "Outstanding"
@@ -88,7 +92,9 @@ export function AccountsPanel() {
                 isCard ? <Chip tone="warning">Card</Chip> : undefined
               }
               value={
-                <Amount
+                isInvestment ? (
+                  <span className="text-[12px] text-ink-tertiary">Value tracked separately</span>
+                ) : <Amount
                   value={value}
                   size="sm"
                   signed
@@ -235,10 +241,10 @@ function AccountSheet({
       id,
       name: name.trim(),
       type,
-      openingBalance: parseAmountInput(balance) ?? 0,
+      openingBalance: type === "INVESTMENT" ? 0 : parseAmountInput(balance) ?? 0,
       isActive: account?.isActive ?? true,
       hint: hint.trim() || undefined,
-      isDefault,
+      isDefault: type === "INVESTMENT" ? false : isDefault,
       createdAt: account?.createdAt ?? new Date().toISOString(),
     });
 
@@ -306,7 +312,7 @@ function AccountSheet({
           ))}
         </SelectField>
 
-        {type !== "CREDIT_CARD" && (
+        {(type === "BANK" || type === "CASH") && (
           <MoneyField
             label="Opening balance"
             hint="Where this account started. Transactions adjust it from there."
@@ -323,7 +329,15 @@ function AccountSheet({
           maxLength={4}
         />
 
-        <div className="space-y-1.5">
+        {type === "INVESTMENT" && (
+          <p className="text-[12.5px] leading-relaxed text-ink-tertiary">
+            Use this account for transfers to and from your investments.
+            Withdrawals are transfers, so they do not inflate income.
+            Track the current value of your holdings under Investments.
+          </p>
+        )}
+
+        {type !== "INVESTMENT" && <div className="space-y-1.5">
           <p className="text-[13px] font-medium text-ink-secondary">
             Default for new expenses
           </p>
@@ -334,7 +348,7 @@ function AccountSheet({
             Only one account can be the default — setting this one clears it
             from any other account.
           </p>
-        </div>
+        </div>}
 
         {type === "CREDIT_CARD" && (
           <>
