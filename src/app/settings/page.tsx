@@ -18,6 +18,7 @@ import { usePrivacy } from "@/lib/hooks/use-privacy";
 import { PageHeader } from "@/components/layout/month-switcher";
 import { ImportStatementSheet } from "@/components/settings/import-statement-sheet";
 import { ReconciliationImport } from "@/components/settings/reconciliation-import";
+import { GmailPanel } from "@/components/settings/gmail-panel";
 import { RulesPanel } from "@/components/settings/rules-panel";
 import { TextField } from "@/components/ui/fields";
 import { Button, Card, Chip, Section, Skeleton } from "@/components/ui/primitives";
@@ -98,6 +99,7 @@ export default function SettingsPage() {
       </Section>
 
       {isSupabaseConfigured && <CloudMigrationPanel />}
+      {isSupabaseConfigured && <GmailPanel />}
 
       <Section title="Your data">
         <DataPanel />

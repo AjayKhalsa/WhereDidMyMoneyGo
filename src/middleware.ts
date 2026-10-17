@@ -21,6 +21,9 @@ export async function middleware(request: NextRequest) {
   // A callback must reach the exchange before a session exists. Some Supabase
   // projects use the site's root as their allowed email redirect URL.
   const pathname = request.nextUrl.pathname;
+  // These handlers validate their own session or cron secret. Returning JSON
+  // errors matters here: redirecting a background sync to /login hides failures.
+  if (pathname === "/api/gmail" || pathname.startsWith("/api/gmail/") || pathname === "/api/cron/gmail") return NextResponse.next();
   if (pathname === "/auth/callback") return NextResponse.next();
   if ((pathname === "/" || pathname === "/login") && request.nextUrl.searchParams.has("code")) {
     const callback = new URL("/auth/callback", request.url);
