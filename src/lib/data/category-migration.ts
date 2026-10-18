@@ -88,7 +88,10 @@ const CURRENT_CATEGORY_IDS = new Set(buildCategorySeed().map((c) => c.id));
 
 function isLegacyId(id: string): boolean {
   if (CURRENT_CATEGORY_IDS.has(id)) return false;
-  return id.includes(".") || id === "misc" || id === "dating" || id === "social";
+  // Dotted IDs are also valid for user-created categories. Only migrate IDs
+  // whose old meaning is known; otherwise boot can hide custom categories
+  // and needlessly rewrite their transactions on every page refresh.
+  return Object.hasOwn(LEGACY_CATEGORY_MAP, id);
 }
 
 /**
@@ -294,7 +297,10 @@ export function remapLegacyCategories(db: Database): LegacyRemapResult {
   let categories = db.categories;
   if (needsFullReseed) {
     changed = true;
-    categories = buildCategorySeed();
+    categories = [
+      ...buildCategorySeed(),
+      ...db.categories.filter((c) => !CURRENT_CATEGORY_IDS.has(c.id) && !isLegacyId(c.id)),
+    ];
   }
 
   return {
