@@ -104,9 +104,9 @@ export default function MoneyPage() {
           }
         />
         <StatBlock
-          label="Net worth"
+          label="Estimated net worth"
           value={netWorth}
-          detail="Cash + portfolio + owed to you, minus cards"
+          detail="Includes card credit; investments use last recorded values"
         />
       </div>
 
