@@ -25,6 +25,7 @@ export interface Alert extends Partial<AlertTime> {
   vpa?: string;
   paymentRail?: "UPI" | "NEFT" | "IMPS";
   creditKind?: "refund" | "income" | "unknown";
+  classification?: import("./classification").CategorySuggestion;
 }
 export interface MailPart {
   mimeType?: string; filename?: string;
@@ -107,7 +108,7 @@ export function parseAlert(from: string, subject: string, text: string, received
   const transactionDay = time.timeSource === "bank" || time.timeSource === "payment" ? time.occurredAt!.slice(0, 10) : day;
   const creditKind = direction !== "credit" ? undefined : /refund|reversal|cashback/i.test(merchant) ? "refund" : /\bSAL(?:ARY)?\b|Int\.Pd|interest paid/i.test(merchant) ? "income" : "unknown";
   merchant = merchant.replace(/^UPI-\d+-/i, "").replace(/^VPA\s+\S+\s+\((.+)\)$/i, "$1").trim().slice(0, 180);
-  const special = /refund|reversal|cashback|billpay|card payment|neft|imps|zerodha|mutual fund|mandate/i.test(merchant);
+  const special = /refund|reversal|cashback|billpay|card payment|\bcred\b|dreamplug|neft|imps|zerodha|mutual fund|mandate/i.test(merchant);
   const words = merchant.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/);
   const matches = MERCHANTS.filter(m => m.aliases.some(a => words.includes(a)));
   const categoryId = new Set(matches.map(m => m.categoryId)).size === 1 ? matches[0]?.categoryId : undefined;

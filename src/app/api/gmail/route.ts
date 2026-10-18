@@ -9,8 +9,8 @@ export async function GET(request: NextRequest) {
     const db = admin();
     const [connection, messages, count] = await Promise.all([
       db.from("gmail_connections").select("email,start_date,last_synced_at,last_error,page_token").eq("user_id", user.id).maybeSingle(),
-      db.from("gmail_messages").select("message_id,subject,candidate,reason,status").eq("user_id", user.id).eq("status", "review").order("created_at").limit(50),
-      db.from("gmail_messages").select("message_id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "review"),
+      db.from("gmail_messages").select("message_id,subject,candidate,reason,status,category_review,transaction_id").eq("user_id", user.id).or("status.eq.review,category_review.eq.true").order("created_at").limit(50),
+      db.from("gmail_messages").select("message_id", { count: "exact", head: true }).eq("user_id", user.id).or("status.eq.review,category_review.eq.true"),
     ]);
     for (const result of [connection, messages, count]) if (result.error) throw result.error;
     const response = json({ configured: true, connection: connection.data ? { ...connection.data, page_token: undefined, more: !!connection.data.page_token } : null, messages: messages.data, reviewCount: count.count });

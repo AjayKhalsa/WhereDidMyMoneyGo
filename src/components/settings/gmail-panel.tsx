@@ -9,7 +9,7 @@ import { Button, Card, Section } from "@/components/ui/primitives";
 import { possibleExistingTransactions } from "@/lib/import/identity";
 import { alertTimeLabel } from "@/lib/gmail/alert-time";
 
-interface ReviewMail { message_id: string; subject: string; reason?: string; candidate?: Alert }
+interface ReviewMail { message_id: string; subject: string; reason?: string; candidate?: Alert; category_review?: boolean }
 interface Status {
   configured: boolean;
   connection: { email: string; start_date: string; last_synced_at?: string; last_error?: string; more: boolean } | null;
@@ -43,7 +43,7 @@ export function GmailPanel() {
   }
   return <Section title="Gmail transaction alerts" description="Let bank emails keep your ledger up to date.">
     <Card className="space-y-4 p-4 sm:p-5">
-      <p className="text-sm text-ink-secondary">Checks HDFC, ICICI, Axis and HSBC alerts daily. Recognized purchases are categorized automatically; incoming credits, uncertain transactions and possible duplicates wait here for review. Review shows bank transaction time when available and labels email-time fallbacks. Statements are still needed to verify balances.</p>
+      <p className="text-sm text-ink-secondary">Uses your saved category rules and consistent past corrections. Food orders can use bank time in IST; email-time suggestions are labelled. Confirmed debits with uncertain categories still affect balances and appear here for category review. Credits, transfers and possible duplicates need their financial details confirmed. Statements are still needed to verify balances.</p>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {notice && <p role="status" className="text-sm text-ink-secondary">{notice}</p>}
       {!status && !error && <p className="text-sm">Checking connection…</p>}
@@ -79,12 +79,13 @@ export function GmailPanel() {
 function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email?: string; disabled: boolean; onSaved: () => Promise<void> }) {
   const { db } = useFinance(); const a = mail.candidate;
   const [accountId, setAccountId] = useState(a?.accountId ?? "");
-  const [categoryId, setCategoryId] = useState(a?.categoryId ?? "");
+  const [categoryId, setCategoryId] = useState(a?.classification?.categoryId ?? a?.categoryId ?? "");
   const [kind, setKind] = useState(a?.direction === "credit" ? "" : "EXPENSE");
   const [toAccountId, setToAccountId] = useState("");
   const [allowDuplicate, setAllowDuplicate] = useState(false);
   const [existingTransactionId, setExistingTransactionId] = useState("");
   const [remember, setRemember] = useState(false);
+  const [learnCategory, setLearnCategory] = useState(true);
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
   const inputClass = "rounded-lg border border-line bg-surface p-2 text-sm";
   const matchingAccountId = a?.accountId || (a?.direction === "credit" && kind === "TRANSFER" ? toAccountId : accountId);
@@ -93,7 +94,7 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
     setBusy(true); setError("");
     try {
       if (action === "log" && remember) await api("/mapping", "POST", { messageId: mail.message_id, accountId });
-      await api("/review", "POST", { action, messageId: mail.message_id, accountId: action === "match" ? matchingAccountId : accountId, categoryId, type: kind === "REFUND" ? "INCOME" : kind, isRefund: kind === "REFUND", toAccountId, allowDuplicate, existingTransactionId });
+      await api("/review", "POST", { action, messageId: mail.message_id, accountId: action === "match" ? matchingAccountId : accountId, categoryId, type: kind === "REFUND" ? "INCOME" : kind, isRefund: kind === "REFUND", toAccountId, allowDuplicate, existingTransactionId,learnCategory });
       await onSaved();
     } catch (e) { setError(e instanceof Error ? e.message : "Could not save."); }
     finally { setBusy(false); }
@@ -102,16 +103,19 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
     <p className="text-sm font-medium">{a ? `${a.merchant} · ${formatMoney(a.amount)} · ${a.date}` : mail.subject}</p>
     {a && <p className="text-xs text-ink-tertiary">{a.bank} {a.instrument.replace("_", " ")} ending {a.tail} · {alertTimeLabel({timeSource: a.timeSource ?? "unknown", timeConfidence: a.timeConfidence ?? "unknown", occurredAt: a.occurredAt})}</p>}
     <p className="text-sm text-ink-secondary">{mail.reason || "Check these details before adding."}</p>
+    {mail.category_review&&<p className="text-xs text-ink-secondary">Already in your ledger and included in balances. Saving a category will not add another transaction.</p>}
+    {a?.classification&&<p className="text-xs text-ink-tertiary">{a.classification.reason}</p>}
     <a className="text-sm underline" target="_blank" rel="noreferrer" href={`https://mail.google.com/mail/u/?authuser=${encodeURIComponent(email ?? "")}#all/${mail.message_id}`}>View original email</a>
     {a && <>
       <div className="flex flex-wrap gap-2">
-        <select aria-label="Transaction type" className={inputClass} value={kind} onChange={e => setKind(e.target.value)}><option value="">Choose type</option><option value="EXPENSE">Expense</option><option value="INCOME">Income</option><option value="REFUND">Refund</option><option value="TRANSFER">Transfer / card repayment</option></select>
-        <select aria-label="Account" className={inputClass} value={accountId} onChange={e => setAccountId(e.target.value)}><option value="">{kind === "TRANSFER" ? "From account" : "Choose account"}</option>{db?.accounts.filter(a => a.isActive).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+        {!mail.category_review&&<select aria-label="Transaction type" className={inputClass} value={kind} onChange={e => setKind(e.target.value)}><option value="">Choose type</option><option value="EXPENSE">Expense</option><option value="INCOME">Income</option><option value="REFUND">Refund</option><option value="TRANSFER">Transfer / card repayment</option></select>}
+        {!mail.category_review&&<select aria-label="Account" className={inputClass} value={accountId} onChange={e => setAccountId(e.target.value)}><option value="">{kind === "TRANSFER" ? "From account" : "Choose account"}</option>{db?.accounts.filter(a => a.isActive).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>}
         {kind === "TRANSFER" ? <select aria-label="Destination account" className={inputClass} value={toAccountId} onChange={e => setToAccountId(e.target.value)}><option value="">To account</option>{db?.accounts.filter(a => a.isActive && a.id !== accountId).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select> : (kind === "EXPENSE" || kind === "REFUND") && <select aria-label="Category" className={inputClass} value={categoryId} onChange={e => setCategoryId(e.target.value)}><option value="">Choose category</option>{db?.categories.map(c => <option key={c.id} value={c.id}>{c.parentId ? `${db.categories.find(p => p.id === c.parentId)?.name} / ` : ""}{c.name}</option>)}</select>}
       </div>
-      {kind !== "TRANSFER" && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />Remember this card/account match for future alerts</label>}
-      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={allowDuplicate} onChange={e => setAllowDuplicate(e.target.checked)} />I checked the ledger: this is a separate transaction even if the amount and date match.</label>
-      {!!candidates.length && <div className="flex flex-wrap gap-2">
+      {kind === "EXPENSE"&&<label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={learnCategory} onChange={e=>setLearnCategory(e.target.checked)}/>Learn my chosen category for this payee</label>}
+      {!mail.category_review&&kind !== "TRANSFER" && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />Remember this card/account match for future alerts</label>}
+      {!mail.category_review&&<label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={allowDuplicate} onChange={e => setAllowDuplicate(e.target.checked)} />I checked the ledger: this is a separate transaction even if the amount and date match.</label>}
+      {!mail.category_review&&!!candidates.length && <div className="flex flex-wrap gap-2">
         <select aria-label="Existing ledger entry" className={inputClass} value={existingTransactionId} onChange={e => setExistingTransactionId(e.target.value)}>
           <option value="">Choose an existing entry to link</option>
           {candidates.map(t => <option key={t.id} value={t.id}>{t.description} · {t.date.slice(0, 10)} · {formatMoney(t.amount)}</option>)}
@@ -121,6 +125,6 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
       </div>}
     </>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    <div className="flex gap-2">{a && <Button size="sm" disabled={disabled || busy || !accountId || !kind} onClick={() => void submit("log")}>Add to ledger</Button>}<Button size="sm" variant="quiet" disabled={disabled || busy} onClick={() => void submit("ignore")}>Already recorded / dismiss</Button></div>
+    <div className="flex gap-2">{a && <Button size="sm" disabled={disabled || busy || !accountId || !kind} onClick={() => void submit("log")}>{mail.category_review?'Save category':'Add to ledger'}</Button>}<Button size="sm" variant="quiet" disabled={disabled || busy} onClick={() => void submit("ignore")}>{mail.category_review?'Keep current entry':'Already recorded / dismiss'}</Button></div>
   </div>;
 }

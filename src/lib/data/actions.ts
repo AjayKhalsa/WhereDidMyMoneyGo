@@ -615,7 +615,7 @@ export async function deleteRecurring(id: string): Promise<void> {
 }
 
 export async function saveRule(rule: ClassificationRule): Promise<void> {
-  await putRow("rules", rule);
+  await putRow("rules", rule.learningEvidence ? {...rule,confidence:0.95,learningEvidence:{...rule.learningEvidence,source:"manual-correction",support:1}} : rule);
 }
 
 export async function deleteRule(id: string): Promise<void> {

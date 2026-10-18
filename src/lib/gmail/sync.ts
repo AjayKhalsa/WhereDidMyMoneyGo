@@ -2,6 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Account } from "@/lib/domain/types";
 import { accountForAlert, authenticatedSender, automaticReason, BANK_SENDERS, header, mailText, parseAlert, type MailPart } from "./alerts";
 import { admin, GmailError, google, tokenRequest, unseal } from "./server";
+import { historicalRules, suggestCategory } from "./classification";
+import { learningData, ruleRow } from "./learning-data";
+import { merchantKey } from "@/lib/engine/merchant-identity";
 
 export async function syncMailbox(userId: string) {
   const db = admin(), lease = randomUUID();
@@ -41,6 +44,14 @@ export async function syncMailbox(userId: string) {
     ]);
     for (const result of [accountResult, categoryResult, inboxResult]) if (result.error) throw result.error;
     const accounts = (accountResult.data ?? []).map(a => ({ ...a, isActive: a.is_active })) as Pick<Account, "id" | "name" | "type" | "hint" | "isActive">[];
+    let learned = await learningData(db,userId,true);
+    const trained=historicalRules(learned.transactions,learned.rules);
+    if(trained.rules.length){
+      const seeded=await db.rpc('gmail_seed_rules',{p_user:userId,p_rules:trained.rules.map(r=>ruleRow({...r,id:`${userId}_${r.id}`}))});if(seeded.error)throw seeded.error;
+      learned=await learningData(db,userId);
+    }
+    learned.rules=learned.rules.filter(r=>r.learningEvidence?.source!=='history'||!trained.conflicts.includes(r.learningEvidence.merchantKey));
+    const profile=await db.from('profiles').select('name').eq('id',userId).maybeSingle();if(profile.error)throw profile.error;
     for (const item of inboxResult.data ?? []) {
       if (Date.now() - started > 40000) break;
       const mail = await google<{ payload: MailPart; internalDate?: string }>(`${base}/messages/${encodeURIComponent(item.message_id)}?format=full`, { headers });
@@ -49,6 +60,10 @@ export async function syncMailbox(userId: string) {
       const candidate = parseAlert(header(mail.payload, "From"), subject, mailText(mail.payload), receivedAt);
       if (candidate) {
         candidate.accountId = accountForAlert(candidate, accounts, connection.aliases ?? {});
+        const selfName=profile.data?.name;
+        if(selfName&&merchantKey(selfName).length>=3&&merchantKey(candidate.merchant).includes(merchantKey(selfName)))candidate.special=true;
+        candidate.classification=suggestCategory(candidate,learned.rules,learned.categories,selfName?[selfName]:[],trained.conflicts);
+        candidate.categoryId=candidate.classification.needsReview?'other':candidate.classification.categoryId;
         if (!categoryResult.data?.some(c => c.id === candidate.categoryId)) candidate.categoryId = undefined;
       }
       const reason = candidate ? automaticReason(candidate, authenticatedSender(mail.payload), connection.start_date) : "Unrecognized alert format. Check the email before entering it manually.";
@@ -72,7 +87,7 @@ export async function syncMailbox(userId: string) {
       }
       if (saved.error && saved.error.code !== "23505") throw saved.error;
       if (candidate && !reason) {
-        const result = await db.rpc("gmail_commit", { p_user: userId, p_message: item.message_id, p_type: "EXPENSE", p_account: candidate.accountId, p_destination: null, p_category: candidate.categoryId, p_refund: false });
+        const result = await db.rpc("gmail_commit_classified", { p_user: userId, p_message: item.message_id });
         if (result.error) throw result.error;
         if (result.data === "logged") logged++; else if (result.data === "matched") matched++; else reviewed++;
       } else reviewed++;

@@ -3,6 +3,8 @@ import { after, before, test } from "node:test";
 import { readFile, readdir } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { parseAlert } from "@/lib/gmail/alerts";
+import {correctedRule} from "@/lib/gmail/classification";
+import {ruleRow} from "@/lib/gmail/learning-data";
 
 let db: PGlite;
 const user = "11111111-1111-4111-8111-111111111111";
@@ -110,4 +112,42 @@ test("parsed HDFC credit affects cash once after explicit review; delayed mail n
   assert.equal(await balance(),before+234567);await commit("credit-time",true,false,"bank","INCOME");assert.equal(await balance(),before+234567);
   const t=(await db.query<{date:string;notes:string}>("select date::text,notes from transactions where amount=234567")).rows[0]!;
   assert.equal(t.date,"2026-10-15 00:00:00");assert.match(t.notes,/transaction time unknown.*fallback only; bank date retained/);
+});
+
+test('uncertain category debits affect cash once and category approval is atomic with future learning',async()=>{
+ await db.query("insert into categories(id,user_id,name) values('other',$1,'Other'),('gifts',$1,'Gifts')",[user]);
+ await message('category-review',90321,'bank');
+ await db.query("update gmail_messages set candidate=candidate||$1 where message_id='category-review'",[{merchant:'Example Person',categoryId:'other',classification:{categoryId:'dining',needsReview:true,reason:'Weak rule',contexts:[]}}]);
+ assert.equal((await db.query<{r:string}>("select gmail_commit_classified($1,'category-review') r",[user])).rows[0]!.r,'logged');
+ const id=(await db.query<{transaction_id:string}>("select transaction_id from gmail_messages where message_id='category-review' and category_review")).rows[0]!.transaction_id;
+ assert.equal((await db.query<{category_id:string}>("select category_id from transactions where id=$1",[id])).rows[0]!.category_id,'other');
+ const change=correctedRule({bank:'HDFC',instrument:'bank',tail:'1234',date:'2026-10-15',amount:90321,merchant:'Example Person',direction:'debit'},'gifts',[])!;
+ const p={before:null,after:ruleRow({...change.after,id:'category-correction'})};
+ assert.equal((await db.query<{r:string}>("select gmail_review_save($1,'category-review','EXPENSE','bank',null,'gifts',false,false,$2) r",[user,p])).rows[0]!.r,'categorized');
+ assert.equal((await db.query<{category_id:string;amount:number}>("select category_id,amount from transactions where id=$1",[id])).rows[0]!.category_id,'gifts');
+ await db.query("select gmail_review_save($1,'category-review','EXPENSE','bank',null,'gifts',false,false,$2)",[user,p]);
+ assert.equal((await db.query<{n:number}>("select count(*)::int n from transactions where amount=90321")).rows[0]!.n,1);
+ assert.equal((await db.query<{n:number}>("select count(*)::int n from rules where id='category-correction'")).rows[0]!.n,1);
+ assert.equal((await db.query<{category_review:boolean}>("select category_review from gmail_messages where message_id='category-review'")).rows[0]!.category_review,false);
+});
+
+test('category review cannot overwrite later manual changes or modify a matched existing entry',async()=>{
+ await message('category-stale',90421,'bank');
+ await db.query("update gmail_messages set candidate=candidate||$1 where message_id='category-stale'",[{categoryId:'other',reference:'661234567890',classification:{categoryId:'dining',needsReview:true,reason:'Unknown',contexts:[]}}]);
+ await db.query("select gmail_commit_classified($1,'category-stale')",[user]);
+ await db.query("update transactions set description='My manual correction',category_id='gifts' where amount=90421");
+ await assert.rejects(db.query("select gmail_review_save($1,'category-stale','EXPENSE','bank',null,'dining',false)",[user]),/saved entry changed/);
+ await message('category-match',90421,'bank');
+ await db.query("update gmail_messages set candidate=candidate||$1 where message_id='category-match'",[{categoryId:'other',reference:'661234567890',classification:{categoryId:'dining',needsReview:true,reason:'Unknown',contexts:[{type:'PEOPLE',value:'work'}]}}]);
+ assert.equal((await db.query<{r:string}>("select gmail_commit_classified($1,'category-match') r",[user])).rows[0]!.r,'matched');
+ const m=(await db.query<{category_review:boolean}>("select category_review from gmail_messages where message_id='category-match'")).rows[0]!;assert.equal(m.category_review,false);
+ assert.equal((await db.query<{description:string}>("select description from transactions where amount=90421")).rows[0]!.description,'My manual correction');
+});
+
+test('learning failure rolls category approval back and new RPCs remain server-only',async()=>{
+ await message('category-atomic',90521,'bank');await db.query("update gmail_messages set candidate=candidate||$1 where message_id='category-atomic'",[{categoryId:'other',classification:{needsReview:true,reason:'Unknown',contexts:[]}}]);
+ await db.query("select gmail_commit_classified($1,'category-atomic')",[user]);
+ await assert.rejects(db.query("select gmail_review_save($1,'category-atomic','EXPENSE','bank',null,'dining',false,false,$2)",[user,{before:null,after:{id:'broken',category_id:'gifts',learning_evidence:{source:'gmail-correction',merchantKey:'person'}}}]),/Invalid learned correction/);
+ assert.equal((await db.query<{category_id:string}>("select category_id from transactions where amount=90521")).rows[0]!.category_id,'other');
+ await db.exec('set role authenticated');try{await assert.rejects(db.query("select gmail_commit_classified($1,'category-atomic')",[user]),/permission denied/);await assert.rejects(db.query("select gmail_seed_rules($1,'[]')",[user]),/permission denied/);}finally{await db.exec('reset role');}
 });

@@ -286,6 +286,12 @@ export interface ClassificationRule {
   timesApplied: number;
   createdAt: string;
   updatedAt: string;
+  learningEvidence?: {
+    source: "history" | "gmail-correction" | "manual-correction";
+    merchantKey: string;
+    exampleIds: string[];
+    support: number;
+  };
 }
 
 /** Everything the app owns, as one serialisable snapshot. */

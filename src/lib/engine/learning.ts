@@ -127,6 +127,7 @@ export function learnFromEntry(
     {
       ...match,
       categoryId: input.categoryId,
+      ...(match.learningEvidence && input.wasCorrected ? {learningEvidence:{...match.learningEvidence,source:"manual-correction" as const,support:1}} : {}),
       contexts,
       merchant: input.merchant ?? match.merchant,
       accountId: input.accountId ?? match.accountId,

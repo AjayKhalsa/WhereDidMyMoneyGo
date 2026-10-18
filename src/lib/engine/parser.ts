@@ -13,6 +13,7 @@ import { matchAccountMentions, type AccountHit } from "./account-match";
 import { levenshteinDistance } from "./fuzzy-match";
 import { ACTIVITIES, CONTEXT_KEYWORDS, MERCHANTS, STOP_WORDS } from "./lexicon";
 import { parseBankSms, type BankSmsRead } from "./sms";
+import { merchantKey } from "./merchant-identity";
 
 /**
  * Deterministic natural-language expense parser.
@@ -215,6 +216,7 @@ function findRule(
   const words = normalised.split(" ");
   let best: ClassificationRule | null = null;
   for (const rule of rules) {
+    if (rule.learningEvidence && rule.learningEvidence.merchantKey !== merchantKey(normalised)) continue;
     if (!words.includes(rule.pattern)) continue;
     if (
       !best ||
