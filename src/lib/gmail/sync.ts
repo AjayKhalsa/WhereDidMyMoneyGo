@@ -43,9 +43,10 @@ export async function syncMailbox(userId: string) {
     const accounts = (accountResult.data ?? []).map(a => ({ ...a, isActive: a.is_active })) as Pick<Account, "id" | "name" | "type" | "hint" | "isActive">[];
     for (const item of inboxResult.data ?? []) {
       if (Date.now() - started > 40000) break;
-      const mail = await google<{ payload: MailPart }>(`${base}/messages/${encodeURIComponent(item.message_id)}?format=full`, { headers });
+      const mail = await google<{ payload: MailPart; internalDate?: string }>(`${base}/messages/${encodeURIComponent(item.message_id)}?format=full`, { headers });
       const subject = header(mail.payload, "Subject").slice(0, 250);
-      const candidate = parseAlert(header(mail.payload, "From"), subject, mailText(mail.payload));
+      const receivedAt = mail.internalDate && /^\d+$/.test(mail.internalDate) ? Number(mail.internalDate) : undefined;
+      const candidate = parseAlert(header(mail.payload, "From"), subject, mailText(mail.payload), receivedAt);
       if (candidate) {
         candidate.accountId = accountForAlert(candidate, accounts, connection.aliases ?? {});
         if (!categoryResult.data?.some(c => c.id === candidate.categoryId)) candidate.categoryId = undefined;

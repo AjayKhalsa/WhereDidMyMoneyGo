@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { readFile, readdir } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
+import { parseAlert } from "@/lib/gmail/alerts";
 
 let db: PGlite;
 const user = "11111111-1111-4111-8111-111111111111";
@@ -85,4 +86,28 @@ test("only one sync lease can run; browser roles cannot read tokens or call impo
       await assert.rejects(commit("a1"), /permission denied/);
     } finally { await db.exec("reset role"); }
   }
+});
+
+test("new Gmail events retain real IST time; matching preserves the canonical manual date", async () => {
+  await message("timed",79123,"bank");
+  await db.query("update gmail_messages set candidate=candidate||$1 where message_id='timed'",[{occurredAt:"2026-10-15T22:03:04",timeSource:"bank",timeConfidence:"exact",reference:"991234567890"}]);
+  assert.equal(await commit("timed",true,false,"bank"),"logged");
+  const saved=(await db.query<{id:string;date:string;notes:string}>("select id,date::text,notes from transactions where amount=79123")).rows[0]!;
+  assert.equal(saved.date,"2026-10-15 22:03:04");assert.match(saved.notes,/Asia\/Kolkata; source bank/);
+  await db.query("update transactions set date='2026-10-15T21:01:00',description='My correction' where id=$1",[saved.id]);
+  await message("timed-match",79123,"bank");
+  await db.query("update gmail_messages set candidate=candidate||$1 where message_id='timed-match'",[{occurredAt:"2026-10-15T22:03:04",timeSource:"bank",timeConfidence:"exact",reference:"991234567890"}]);
+  assert.equal(await commit("timed-match",true,false,"bank"),"matched");
+  assert.equal((await db.query<{date:string}>("select date::text from transactions where id=$1",[saved.id])).rows[0]!.date,"2026-10-15 21:01:00");
+});
+
+test("parsed HDFC credit affects cash once after explicit review; delayed mail never shifts bank date", async () => {
+  const a=parseAlert("alerts@hdfcbank.bank.in","View: Account update for your HDFC Bank A/c","Rs.2345.67 has been successfully credited to your HDFC Bank account ending in 1234. Transaction Details: a. Date: 15-10-26 b. Sender: EXAMPLE PERSON (VPA: person@bank) c. UPI Reference No.: 881234567890",Date.parse("2026-10-16T01:00:00Z"))!;
+  await db.query("insert into gmail_messages(user_id,message_id,status,candidate) values($1,'credit-time','review',$2)",[user,{...a,accountId:"bank"}]);
+  await assert.rejects(commit("credit-time",false,false,"bank","INCOME"),/Review required/);
+  const balance=async()=>Number((await db.query<{n:string}>("select coalesce(sum(case when account_id='bank' then case when type='INCOME' then amount else -amount end else 0 end+case when type='TRANSFER' and to_account_id='bank' then amount else 0 end),0)::text n from transactions")).rows[0]!.n);
+  const before=await balance();assert.equal(await commit("credit-time",true,false,"bank","INCOME"),"logged");
+  assert.equal(await balance(),before+234567);await commit("credit-time",true,false,"bank","INCOME");assert.equal(await balance(),before+234567);
+  const t=(await db.query<{date:string;notes:string}>("select date::text,notes from transactions where amount=234567")).rows[0]!;
+  assert.equal(t.date,"2026-10-15 00:00:00");assert.match(t.notes,/transaction time unknown.*fallback only; bank date retained/);
 });

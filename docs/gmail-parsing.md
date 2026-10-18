@@ -1,0 +1,11 @@
+# Gmail alert parsing
+
+The deterministic parser supports existing HDFC, ICICI, Axis and HSBC layouts, including HDFC incoming-UPI account updates and deposit alerts. Sender allowlisting and Google-aligned DMARC checks remain unchanged. A shared subject is not evidence of a financial event: mandate registration, security notices and unsupported layouts do not become payments.
+
+Credit notifications retain credit direction and available UPI reference/VPA or payment rail. Salary/interest and explicit refund hints are advisory; a credit requires review to establish whether it is income, a refund or a transfer. A payment rail alone never establishes earned income. Masked/zero-only references are not deduplication identities. Static categories remain in place until the separate learning integration phase.
+
+`Alert.occurredAt` is an Asia/Kolkata wall-clock timestamp with `timeSource` (`bank`, `payment`, `gmail`, `unknown`) and `timeConfidence` (`exact`, `fallback`, `unknown`). Recognized bank transaction clocks take priority over labelled payment clocks, then Gmail's internal received timestamp. Absent clocks stay unknown. Explicit UTC/offset clocks normalize to IST. With a known bank date and only a delayed email timestamp, the bank date remains authoritative; the received timestamp is retained as fallback evidence, not spliced into an invented transaction time.
+
+Migration `0017_gmail_transaction_time.sql` updates only the server-only Gmail commit function. New events preserve supported bank/payment timestamps in the existing ledger date column and describe time provenance in notes. Email fallback evidence remains in the receipt and notes; date-only ledger placeholders are explicitly described as unknown. Shared-source matches preserve the canonical ledger date and all manual metadata. No historical rows or dismissed receipts are rewritten.
+
+Deploy the migration before the application. Back up finance/receipt/source tables and compare their fingerprints before and after. Parser tests use synthetic, anonymized examples retaining observed bank layouts. Database tests cover reviewed-credit cash effects, repeat-save idempotency, timestamp persistence and manual-date preservation. Historical recovery, meal-time classification and learned categorization remain separate phases.

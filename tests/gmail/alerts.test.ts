@@ -9,6 +9,7 @@ test("ICICI reads the purchase, not the much larger available limit", () => {
   const a = parseAlert("credit_cards@icici.bank.in", "Transaction alert for your ICICI Bank Credit Card", card)!;
   assert.equal(a.amount, 34000); assert.equal(a.tail, "1234"); assert.equal(a.date, "2026-10-15");
   assert.equal(a.merchant, "ZOMATO"); assert.equal(a.reference, "123456789012"); assert.equal(a.categoryId, "dining");
+  assert.equal(a.occurredAt, "2026-10-15T07:26:54"); assert.equal(a.timeSource, "bank");
 });
 test("HDFC UPI, credit card and debit card identities stay distinct", () => {
   for (const [instrument, text] of [
@@ -22,6 +23,7 @@ test("HSBC and Axis extract transaction amounts rather than card balances", () =
   assert.equal(hsbc.amount, 31993); assert.equal(hsbc.categoryId, "transport.cab");
   const axis = parseAlert("alerts@axis.bank.in", "INR 50 spent on credit card no. XX6031", "Transaction Amount: INR 50 Merchant Name: Eternal Lim Axis Bank Credit Card No. XX6031 Date &amp; Time: 05-10-2026, 22:57:38 IST Available Limit*: INR 174000")!;
   assert.equal(axis.amount, 5000); assert.equal(axis.date, "2026-10-05"); assert.equal(axis.categoryId, undefined);
+  assert.equal(axis.occurredAt, "2026-10-05T22:57:38");
 });
 test("unknown senders, OTPs, statements and declined purchases never parse", () => {
   for (const subject of ["OTP for transaction", "Card statement", "Transaction declined", "Transaction failed", "Payment scheduled"]) assert.equal(parseAlert("credit_cards@icici.bank.in", subject, card), null);

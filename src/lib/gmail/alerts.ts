@@ -1,5 +1,7 @@
 import type { Account } from "@/lib/domain/types";
 import { MERCHANTS } from "@/lib/engine/lexicon";
+import { alertTime, type AlertTime } from "./alert-time";
+import { normalizeBankReference } from "@/lib/import/identity";
 
 export const BANK_SENDERS: Record<string, string> = {
   "alerts@hdfcbank.bank.in": "HDFC", "alerts@hdfcbank.net": "HDFC",
@@ -8,7 +10,7 @@ export const BANK_SENDERS: Record<string, string> = {
   "alerts@axis.bank.in": "Axis", "alerts@axisbank.com": "Axis",
   "hsbc@mail.hsbc.co.in": "HSBC",
 };
-export interface Alert {
+export interface Alert extends Partial<AlertTime> {
   bank: string;
   instrument: "bank" | "credit_card" | "debit_card";
   tail: string;
@@ -20,6 +22,9 @@ export interface Alert {
   categoryId?: string;
   accountId?: string;
   special?: boolean;
+  vpa?: string;
+  paymentRail?: "UPI" | "NEFT" | "IMPS";
+  creditKind?: "refund" | "income" | "unknown";
 }
 export interface MailPart {
   mimeType?: string; filename?: string;
@@ -66,7 +71,7 @@ export function alertDate(raw: string): string | undefined {
 }
 
 /** Exact known alert layouts only. No language model sees mailbox contents. */
-export function parseAlert(from: string, subject: string, text: string): Alert | null {
+export function parseAlert(from: string, subject: string, text: string, receivedAt?: string | number): Alert | null {
   const bank = BANK_SENDERS[senderAddress(from)];
   if (!bank || /otp|one.time|statement|failed|declined|unsuccessful|scheduled|reminder|limit|ready for/i.test(subject)) return null;
   const body = plainText(text);
@@ -82,6 +87,11 @@ export function parseAlert(from: string, subject: string, text: string): Alert |
   } else if (bank === "HDFC") {
     const hdfc = /Rs\.?\s*([\d,.]+)\s+(?:is|has been)\s+(debited|credited)\s+(?:from|to)\s+your\s+(?:HDFC Bank\s+)?(Credit Card|Debit Card|account)\s+ending\s+(\d{4})\s+(?:at|towards|by)\s+(.+?)\s+on\s+(\d{1,2}(?:-[\d]{1,2}-\d{2,4}| [A-Za-z]{3}, \d{4}))/i.exec(body);
     if (hdfc) { [, amount, , , tail, merchant, date] = hdfc; direction = hdfc[2]!.toLowerCase() === "credited" ? "credit" : "debit"; instrument = hdfc[3]!.toLowerCase() === "account" ? "bank" : hdfc[3]!.toLowerCase() === "debit card" ? "debit_card" : "credit_card"; }
+    else {
+      const credit = /Rs\.?\s*([\d,.]+)\s+has been successfully credited to your HDFC Bank account ending in\s+(\d{4})\.\s*Transaction Details:\s*a\.\s*Date:\s*(\d{1,2}-\d{1,2}-\d{2,4})\s*b\.\s*Sender:\s*(.+?)\s*c\.\s*UPI Reference No\.?\s*:\s*\d+/i.exec(body);
+      const deposit = /You have received a credit in your HDFC Bank account\.\s*Details of the transaction:\s*Amount received:\s*INR\s*([\d,.]+)\s*Account:\s*X+(\d{4})\s*Date:\s*(\d{1,2}-[A-Za-z]{3}-\d{4})\s*Reference Details:\s*(.+?)\s*Available Balance:/i.exec(body);
+      if (credit || deposit) { [, amount, tail, date, merchant] = (credit ?? deposit)!; direction = "credit"; instrument = "bank"; }
+    }
   } else if (bank === "Axis" && /spent on credit card/i.test(subject)) {
     const axis = /Transaction Amount:\s*INR\s*([\d,.]+)\s+Merchant Name:\s*(.+?)\s+Axis Bank Credit Card No\.\s*X+(\d{4})\s+Date\s*&\s*Time:\s*(\d{2}-\d{2}-\d{4})/i.exec(body);
     if (axis) [, amount, merchant, tail, date] = axis;
@@ -90,13 +100,18 @@ export function parseAlert(from: string, subject: string, text: string): Alert |
   if (!amount || !/^\d+(?:,\d+)*(?:\.\d{1,2})?$/.test(amount) || !tail || !day || !merchant) return null;
   const paise = Math.round(Number(amount.replace(/,/g, "")) * 100);
   if (!Number.isSafeInteger(paise) || paise <= 0) return null;
-  const reference = merchant.match(/^UPI-(\d{10,})-/i)?.[1] ?? body.match(/UPI transaction reference no\.?\s*:\s*(\d{10,})/i)?.[1];
+  const reference = normalizeBankReference(merchant.match(/^UPI-(\d{10,})-/i)?.[1] ?? body.match(/UPI (?:transaction )?reference no\.?\s*:\s*(\d{10,})/i)?.[1]);
+  const vpa = merchant.match(/\bVPA:?\s+(\S+@[^\s)]+)/i)?.[1];
+  const paymentRail = /\bUPI\b/i.test(body) ? "UPI" : /\bNEFT\b/i.test(merchant) ? "NEFT" : /\bIMPS\b/i.test(merchant) ? "IMPS" : undefined;
+  const time = alertTime(body, date!, day, receivedAt);
+  const transactionDay = time.timeSource === "bank" || time.timeSource === "payment" ? time.occurredAt!.slice(0, 10) : day;
+  const creditKind = direction !== "credit" ? undefined : /refund|reversal|cashback/i.test(merchant) ? "refund" : /\bSAL(?:ARY)?\b|Int\.Pd|interest paid/i.test(merchant) ? "income" : "unknown";
   merchant = merchant.replace(/^UPI-\d+-/i, "").replace(/^VPA\s+\S+\s+\((.+)\)$/i, "$1").trim().slice(0, 180);
   const special = /refund|reversal|cashback|billpay|card payment|neft|imps|zerodha|mutual fund|mandate/i.test(merchant);
   const words = merchant.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/);
   const matches = MERCHANTS.filter(m => m.aliases.some(a => words.includes(a)));
   const categoryId = new Set(matches.map(m => m.categoryId)).size === 1 ? matches[0]?.categoryId : undefined;
-  return { bank, instrument, tail, amount: paise, date: day, merchant, direction, reference, categoryId, special };
+  return { bank, instrument, tail, amount: paise, date: transactionDay, merchant, direction, reference, categoryId, special, vpa, paymentRail, creditKind, ...time };
 }
 
 export function accountForAlert(alert: Alert, accounts: Pick<Account, "id" | "name" | "type" | "hint" | "isActive">[], aliases: Record<string, string>): string | undefined {

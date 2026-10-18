@@ -7,6 +7,7 @@ import { refreshDatabase } from "@/lib/data/store";
 import { formatMoney } from "@/lib/domain/money";
 import { Button, Card, Section } from "@/components/ui/primitives";
 import { possibleExistingTransactions } from "@/lib/import/identity";
+import { alertTimeLabel } from "@/lib/gmail/alert-time";
 
 interface ReviewMail { message_id: string; subject: string; reason?: string; candidate?: Alert }
 interface Status {
@@ -42,7 +43,7 @@ export function GmailPanel() {
   }
   return <Section title="Gmail transaction alerts" description="Let bank emails keep your ledger up to date.">
     <Card className="space-y-4 p-4 sm:p-5">
-      <p className="text-sm text-ink-secondary">Checks HDFC, ICICI, Axis and HSBC alerts daily. Recognized purchases are categorized automatically; uncertain transactions and possible duplicates wait here for review. Statements are still needed to verify balances.</p>
+      <p className="text-sm text-ink-secondary">Checks HDFC, ICICI, Axis and HSBC alerts daily. Recognized purchases are categorized automatically; incoming credits, uncertain transactions and possible duplicates wait here for review. Review shows bank transaction time when available and labels email-time fallbacks. Statements are still needed to verify balances.</p>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {notice && <p role="status" className="text-sm text-ink-secondary">{notice}</p>}
       {!status && !error && <p className="text-sm">Checking connection…</p>}
@@ -99,7 +100,7 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
   }
   return <div className="space-y-3 border-t border-line pt-4">
     <p className="text-sm font-medium">{a ? `${a.merchant} · ${formatMoney(a.amount)} · ${a.date}` : mail.subject}</p>
-    {a && <p className="text-xs text-ink-tertiary">{a.bank} {a.instrument.replace("_", " ")} ending {a.tail}</p>}
+    {a && <p className="text-xs text-ink-tertiary">{a.bank} {a.instrument.replace("_", " ")} ending {a.tail} · {alertTimeLabel({timeSource: a.timeSource ?? "unknown", timeConfidence: a.timeConfidence ?? "unknown", occurredAt: a.occurredAt})}</p>}
     <p className="text-sm text-ink-secondary">{mail.reason || "Check these details before adding."}</p>
     <a className="text-sm underline" target="_blank" rel="noreferrer" href={`https://mail.google.com/mail/u/?authuser=${encodeURIComponent(email ?? "")}#all/${mail.message_id}`}>View original email</a>
     {a && <>
