@@ -12,6 +12,8 @@ export interface StatementRow {
   narration: string;
   withdrawal: Paise;
   deposit: Paise;
+  /** Bank-issued UTR/RRN/reference, when explicitly present in its own column. */
+  reference?: string;
 }
 
 export class UnreadableStatementError extends Error {

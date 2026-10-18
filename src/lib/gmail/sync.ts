@@ -9,7 +9,7 @@ export async function syncMailbox(userId: string) {
   if (acquired.error) throw acquired.error;
   if (!acquired.data) throw new GmailError("A sync is already running, or Gmail is not connected.", 409);
   const started = Date.now();
-  let logged = 0, reviewed = 0;
+  let logged = 0, reviewed = 0, matched = 0;
   try {
     const connectionResult = await db.from("gmail_connections").select("*").eq("user_id", userId).single();
     if (connectionResult.error) throw connectionResult.error;
@@ -56,22 +56,31 @@ export async function syncMailbox(userId: string) {
       const eventKey = candidate?.reference ? createHash("sha256").update([candidate.bank, candidate.instrument, candidate.tail, candidate.direction, candidate.reference, candidate.amount].join("|")).digest("hex") : null;
       const saved = await db.from("gmail_messages").update({ subject, candidate, status: "review", reason, event_key: eventKey }).eq("user_id", userId).eq("message_id", item.message_id).eq("status", "pending");
       if (saved.error?.code === "23505") {
-        const duplicate = await db.from("gmail_messages").update({ subject, status: "duplicate", reason: "Another email has the same bank payment reference." }).eq("user_id", userId).eq("message_id", item.message_id);
-        if (duplicate.error) throw duplicate.error;
-        continue;
+        const original = await db.from("gmail_messages").select("status,transaction_id").eq("user_id", userId).eq("event_key", eventKey).maybeSingle();
+        if (original.error) throw original.error;
+        const originalTransaction = original.data?.transaction_id
+          ? await db.from("transactions").select("id").eq("user_id", userId).eq("id", original.data.transaction_id).maybeSingle() : null;
+        if (originalTransaction?.error) throw originalTransaction.error;
+        if (original.data?.status !== "logged" || !originalTransaction?.data) {
+          const duplicate = await db.from("gmail_messages").update({ subject, status: "duplicate", reason: "Another alert for this reference is already dismissed or awaiting review." }).eq("user_id", userId).eq("message_id", item.message_id);
+          if (duplicate.error) throw duplicate.error;
+          continue;
+        }
+        const pendingMatch = await db.from("gmail_messages").update({ subject, candidate, status: "review", reason, event_key: null }).eq("user_id", userId).eq("message_id", item.message_id).eq("status", "pending");
+        if (pendingMatch.error) throw pendingMatch.error;
       }
-      if (saved.error) throw saved.error;
+      if (saved.error && saved.error.code !== "23505") throw saved.error;
       if (candidate && !reason) {
         const result = await db.rpc("gmail_commit", { p_user: userId, p_message: item.message_id, p_type: "EXPENSE", p_account: candidate.accountId, p_destination: null, p_category: candidate.categoryId, p_refund: false });
         if (result.error) throw result.error;
-        if (result.data === "logged") logged++; else reviewed++;
+        if (result.data === "logged") logged++; else if (result.data === "matched") matched++; else reviewed++;
       } else reviewed++;
     }
     const pending = await db.from("gmail_messages").select("message_id", { count: "exact", head: true }).eq("user_id", userId).eq("status", "pending");
     if (pending.error) throw pending.error;
     const cleared = await db.from("gmail_connections").update({ last_error: null }).eq("user_id", userId).eq("lease_id", lease);
     if (cleared.error) throw cleared.error;
-    return { logged, reviewed, more: !!page.nextPageToken || (pending.count ?? 0) > 0 };
+    return { logged, reviewed, matched, more: !!page.nextPageToken || (pending.count ?? 0) > 0 };
   } catch (error) {
     await db.from("gmail_connections").update({ last_error: error instanceof GmailError ? error.message : "Sync interrupted. Retry to continue safely." }).eq("user_id", userId).eq("lease_id", lease);
     throw error;

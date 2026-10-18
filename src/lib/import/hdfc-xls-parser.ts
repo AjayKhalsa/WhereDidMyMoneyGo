@@ -39,6 +39,7 @@ export function tryParseHdfcXls(sheets: ExtractedSheet[]): StatementRow[] | null
     const narrationIdx = cells.indexOf("narration");
     const withdrawalIdx = cells.findIndex((c) => c.includes("withdrawal"));
     const depositIdx = cells.findIndex((c) => c.includes("deposit"));
+    const referenceIdx = cells.findIndex((c) => /chq.*ref|reference|utr|rrn/.test(c));
 
     const out: StatementRow[] = [];
     for (let i = header.index + 1; i < sheet.rows.length; i++) {
@@ -50,7 +51,8 @@ export function tryParseHdfcXls(sheets: ExtractedSheet[]): StatementRow[] | null
       const hasExactlyOneAmount = (withdrawal > 0) !== (deposit > 0);
 
       if (date && narration && hasExactlyOneAmount) {
-        out.push({ date, narration, withdrawal, deposit });
+        out.push({ date, narration, withdrawal, deposit,
+          ...(referenceIdx >= 0 && row[referenceIdx]?.trim() ? { reference: row[referenceIdx]!.trim() } : {}) });
       }
     }
 

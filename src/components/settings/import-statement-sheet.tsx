@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2, Upload } from "lucide-react";
 import { formatDayMonth } from "@/lib/domain/dates";
 import { formatMoney } from "@/lib/domain/money";
 import { deleteTransactions, importTransactions } from "@/lib/data/actions";
+import { sourceDigest } from "@/lib/import/identity";
 import {
   buildImportDrafts,
   type ImportDraft,
@@ -40,7 +41,7 @@ import { AccountPicker, CategoryPicker } from "@/components/pickers/pickers";
  * polish.
  */
 
-type ReviewRow = ImportDraft & { included: boolean; wasCorrected: boolean };
+type ReviewRow = ImportDraft & { included: boolean; wasCorrected: boolean; sourceKey: string; existingTransactionId?: string; allowSeparate?: boolean };
 type Step = "account" | "upload" | "parsing" | "review";
 
 function isoDateToLocalDate(iso: string): Date {
@@ -65,6 +66,7 @@ export function ImportStatementSheet({
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [routingRow, setRoutingRow] = useState<number | null>(null);
   const [committing, setCommitting] = useState(false);
+  const [sourceHash, setSourceHash] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [passwordPrompt, setPasswordPrompt] = useState<{ isRetry: boolean } | null>(null);
@@ -81,6 +83,7 @@ export function ImportStatementSheet({
     setAccountId(undefined);
     setError(null);
     setRows([]);
+    setSourceHash("");
     setEditingRow(null);
     setRoutingRow(null);
     setPasswordPrompt(null);
@@ -111,6 +114,8 @@ export function ImportStatementSheet({
     setError(null);
     const isXls = /\.xlsx?$/i.test(file.name);
     try {
+      const fileHash = await sourceDigest(await file.arrayBuffer());
+      setSourceHash(fileHash);
       const statementRows = isXls
         ? parseStatementXls(await extractXlsRows(file))
         : parseHdfcStatement(await extractPdfRows(file, requestPassword));
@@ -121,7 +126,8 @@ export function ImportStatementSheet({
         db?.rules ?? [],
       );
       setRows(
-        drafts.map((d) => ({ ...d, included: !d.isLikelyDuplicate, wasCorrected: false })),
+        drafts.map((d, index) => ({ ...d, included: !d.isLikelyDuplicate && d.possibleMatchIds.length === 0,
+          sourceKey: `${accountId}:${fileHash}:${index}`, wasCorrected: false })),
       );
       setStep("review");
     } catch (err) {
@@ -157,7 +163,7 @@ export function ImportStatementSheet({
     setCommitting(true);
     try {
       const included = rows.filter((r) => r.included);
-      const created = await importTransactions(
+      const result = await importTransactions(
         included.map((r) => ({
           draft: {
             type: r.type,
@@ -173,17 +179,21 @@ export function ImportStatementSheet({
           },
           wasCorrected: r.wasCorrected,
           matchedRuleId: r.matchedRuleId,
+          observation: { kind: "statement", key: r.sourceKey, accountId, direction: r.direction,
+            date: r.date, reference: r.reference, payloadHash: sourceHash,
+            existingTransactionId: r.existingTransactionId, allowSeparate: r.allowSeparate },
         })),
       );
       toast.show({
         tone: "success",
-        title: `${included.length} transaction${included.length === 1 ? "" : "s"} imported`,
-        action: {
+        title: `${result.created.length} new transaction${result.created.length === 1 ? "" : "s"} imported`,
+        detail: `${result.matched} existing entries kept${result.removed ? `; ${result.removed} previously removed entries left for review` : ""}.`,
+        action: result.created.length ? {
           label: "Undo",
           onClick: () => {
-            void deleteTransactions(created.map((t) => t.id));
+            void deleteTransactions(result.created.map((t) => t.id));
           },
-        },
+        } : undefined,
       });
       reset();
       onClose();
@@ -293,8 +303,8 @@ export function ImportStatementSheet({
         {step === "review" && (
           <div className="space-y-1 py-1">
             <p className="mb-2 text-[12.5px] text-ink-tertiary">
-              {rows.length} rows found. Duplicates of transactions already in this account are
-              unchecked — everything else is ready to go. Tap a category to change it, or to
+              {rows.length} rows found. Possible existing entries are unchecked. Link a saved entry,
+              or confirm a separate payment when appropriate. Tap a category to change it, or to
               turn a transfer back into ordinary spending.
               {unresolvedTransfers > 0 &&
                 " Transfers need to say where the money landed before you can import."}
@@ -344,6 +354,22 @@ export function ImportStatementSheet({
                     {row.isLikelyDuplicate && (
                       <Chip tone="warning">Looks like a duplicate</Chip>
                     )}
+                    {!!row.possibleMatchIds.length && <select
+                      aria-label={`Match existing entry for row ${index + 1}`}
+                      className="max-w-full rounded-lg border border-line bg-surface p-1 text-xs"
+                      value={row.existingTransactionId ?? ""}
+                      onChange={(e) => setRows((current) => current.map((r, i) => i === index
+                        ? { ...r, existingTransactionId: e.target.value || undefined, included: !!e.target.value, allowSeparate: false } : r))}>
+                      <option value="">Possible existing entry — choose a match</option>
+                      {row.possibleMatchIds.map((id) => { const t = db?.transactions.find((t) => t.id === id);
+                        return t ? <option key={id} value={id}>{t.description} · {t.date.slice(0, 10)} · {formatMoney(t.amount)}</option> : null; })}
+                    </select>}
+                    {!!row.possibleMatchIds.length && <label className="flex items-center gap-1 text-xs text-ink-tertiary">
+                      <input type="checkbox" checked={row.allowSeparate ?? false}
+                        onChange={(e) => setRows((current) => current.map((r, i) => i === index
+                          ? { ...r, allowSeparate: e.target.checked, existingTransactionId: undefined, included: e.target.checked } : r))} />
+                      I checked: this is a separate payment
+                    </label>}
                   </span>
                 </span>
                 <span className="shrink-0 text-[13.5px] font-medium tnum text-ink">

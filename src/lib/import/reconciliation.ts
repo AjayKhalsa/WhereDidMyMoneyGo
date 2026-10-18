@@ -4,7 +4,7 @@ import { accountBalance, creditCardOutstanding, creditCardCreditBalance } from "
 
 const COLLECTIONS = ["accounts", "creditCards", "investments", "transactions"] as const;
 type Collection = typeof COLLECTIONS[number];
-type Edit<K extends Collection> = { before: CollectionMap[K] | null; after: CollectionMap[K] };
+type Edit<K extends Collection> = { before: CollectionMap[K] | null; after: CollectionMap[K]; allowSeparate?: boolean };
 export interface ReconciliationBundle {
   format: "budget-reconciliation-v1";
   profileId: string;
@@ -96,7 +96,8 @@ export function parseReconciliation(input: unknown): ReconciliationBundle {
     const ids = new Set<string>();
     for (const input of edits) {
       const edit = record(input);
-      keys(edit, ["before", "after"]);
+      keys(edit, ["before", "after", "allowSeparate"]);
+      if (edit.allowSeparate !== undefined && typeof edit.allowSeparate !== "boolean") fail("Invalid separate-payment confirmation.");
       validateRow(collection, edit.after);
       const id = record(edit.after).id as string;
       if (ids.has(id)) fail("Duplicate row IDs in reconciliation.");
@@ -122,7 +123,7 @@ function canonical(value: unknown, field?: string): string {
     return JSON.stringify(new Date(value).toISOString());
   }
   if (Array.isArray(value)) return `[${value.map((v) => canonical(v)).sort().join(",")}]`;
-  if (value && typeof value === "object") return `{${Object.entries(value).filter(([k, v]) => k !== "userId" && v !== null && v !== undefined && !(v === false && ["isRefund", "isDefault"].includes(k))).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${JSON.stringify(k)}:${canonical(v, k)}`).join(",")}}`;
+  if (value && typeof value === "object") return `{${Object.entries(value).filter(([k, v]) => k !== "userId" && !(field === "reconciliation" && k === "status") && v !== null && v !== undefined && !(v === false && ["isRefund", "isDefault"].includes(k))).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${JSON.stringify(k)}:${canonical(v, k)}`).join(",")}}`;
   return JSON.stringify(value);
 }
 function equal(a: unknown, b: unknown) { return canonical(a) === canonical(b); }
@@ -198,7 +199,10 @@ export async function saveReconciliation(repo: Repository, bundle: Reconciliatio
   const total = COLLECTIONS.reduce((sum, c) => sum + (bundle.changes[c]?.length ?? 0), 0);
   let done = 0;
   // Refund links must follow their referenced expenses.
-  for (const collection of COLLECTIONS) {
+  if (repo.commitReconciliation) {
+    await repo.commitReconciliation(bundle);
+    progress(total, total);
+  } else for (const collection of COLLECTIONS) {
     const edits = [...(bundle.changes[collection] ?? [])].sort((a, b) => Number(Boolean((a.after as Transaction).reversesTransactionId)) - Number(Boolean((b.after as Transaction).reversesTransactionId)));
     for (const edit of edits) {
       const existing = fresh[collection].find((row) => row.id === edit.after.id);

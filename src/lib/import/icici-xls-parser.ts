@@ -34,6 +34,7 @@ export function tryParseIciciXls(sheets: ExtractedSheet[]): StatementRow[] | nul
     const narrationIdx = cells.indexOf("transaction remarks");
     const withdrawalIdx = cells.findIndex((c) => c.includes("withdrawal"));
     const depositIdx = cells.findIndex((c) => c.includes("deposit"));
+    const referenceIdx = cells.findIndex((c) => /reference|utr|rrn/.test(c));
 
     const out: StatementRow[] = [];
     for (let i = header.index + 1; i < sheet.rows.length; i++) {
@@ -45,7 +46,8 @@ export function tryParseIciciXls(sheets: ExtractedSheet[]): StatementRow[] | nul
       const hasExactlyOneAmount = (withdrawal > 0) !== (deposit > 0);
 
       if (date && narration && hasExactlyOneAmount) {
-        out.push({ date, narration, withdrawal, deposit });
+        out.push({ date, narration, withdrawal, deposit,
+          ...(referenceIdx >= 0 && row[referenceIdx]?.trim() ? { reference: row[referenceIdx]!.trim() } : {}) });
       }
     }
 

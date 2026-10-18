@@ -13,6 +13,8 @@ import type {
   Transaction,
   UserProfile,
 } from "@/lib/domain/types";
+import type { ReconciliationBundle } from "@/lib/import/reconciliation";
+import type { StatementImportEntry, StatementImportResult } from "@/lib/import/identity";
 
 /**
  * The storage boundary.
@@ -57,6 +59,9 @@ export const COLLECTION_NAMES: CollectionName[] = [
 ];
 
 export interface Repository {
+  /** Cloud financial writes compare/match and commit atomically. */
+  commitStatementImport?(rows: StatementImportEntry[]): Promise<StatementImportResult>;
+  commitReconciliation?(bundle: ReconciliationBundle): Promise<void>;
   /** Returns the full dataset, or null if this device has never been seeded. */
   load(): Promise<Database | null>;
 

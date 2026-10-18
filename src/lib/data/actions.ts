@@ -17,6 +17,8 @@ import type {
   UserProfile,
 } from "@/lib/domain/types";
 import { learnFromEntry } from "@/lib/engine/learning";
+import { getRepository } from "./local-adapter";
+import { bankReference, possibleExistingTransactions, sourceDigest, type SourceObservation, type StatementImportResult } from "@/lib/import/identity";
 import { createId } from "@/lib/utils";
 import {
   applyBatch,
@@ -25,6 +27,7 @@ import {
   putRows,
   removeRow,
   saveProfile,
+  refreshDatabase,
 } from "./store";
 
 /**
@@ -156,6 +159,7 @@ export interface ImportRowInput {
   /** True when the user edited what the parser guessed for this row. */
   wasCorrected: boolean;
   matchedRuleId?: string;
+  observation?: SourceObservation;
 }
 
 /**
@@ -169,7 +173,7 @@ export interface ImportRowInput {
  */
 export async function importTransactions(
   rows: ImportRowInput[],
-): Promise<Transaction[]> {
+): Promise<StatementImportResult & { created: Transaction[] }> {
   const baseRules = getSnapshot().data?.rules ?? [];
   let learnedRules: ClassificationRule[] = [];
   const transactions: Transaction[] = [];
@@ -179,6 +183,11 @@ export async function importTransactions(
       ...row.draft,
       source: row.draft.source ?? "imported",
     });
+    if (row.observation) {
+      transaction.id = `stmt_${await sourceDigest(`${getSnapshot().data!.profile.id}|${row.observation.accountId}|${row.observation.key}`)}`;
+      transaction.notes = `Statement source: ${row.observation.payloadHash ?? "reviewed"}; row key: ${row.observation.key}` +
+        (row.observation.reference ? `; reference: ${row.observation.reference}` : "");
+    }
     transactions.push(transaction);
 
     if (row.wasCorrected && transaction.type === "EXPENSE" && transaction.categoryId) {
@@ -200,13 +209,53 @@ export async function importTransactions(
     }
   }
 
-  await applyBatch({
-    puts: {
-      transactions,
-      ...(learnedRules.length ? { rules: learnedRules } : {}),
-    },
-  });
-  return transactions;
+  const repo = getRepository();
+  if (repo.commitStatementImport) {
+    if (rows.some((r) => !r.observation)) throw new Error("Reopen the statement to prepare its source identities before importing.");
+    const result = await repo.commitStatementImport(transactions.map((transaction, i) => ({ transaction, observation: rows[i]!.observation! })));
+    await refreshDatabase();
+    // Matching an existing transaction must not train a different category or
+    // rewrite its user-owned fields. Learn only from newly saved corrections.
+    let currentRules = getSnapshot().data?.rules ?? [];
+    const newRules: ClassificationRule[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]!, t = transactions[i]!;
+      if (result.createdIds.includes(t.id) && row.wasCorrected && t.type === "EXPENSE" && t.categoryId) {
+        const learned = learnFromEntry({ description: t.description, categoryId: t.categoryId,
+          contexts: t.contexts, merchant: t.merchant, accountId: t.accountId,
+          matchedRuleId: row.matchedRuleId, wasCorrected: true }, currentRules);
+        newRules.push(...learned); currentRules = [...currentRules.filter((r) => !learned.some((l) => l.id === r.id)), ...learned];
+      }
+    }
+    if (newRules.length) {
+      try { await putRows("rules", newRules); }
+      catch { throw new Error("Transactions were saved safely, but learning the category corrections failed. Reopen the same file to retry; saved payments will not be added twice."); }
+    }
+    return { ...result, created: transactions.filter((t) => result.createdIds.includes(t.id)) };
+  }
+  // Offline/demo fallback keeps stable source IDs and never overwrites an
+  // existing manual entry. Cross-device locking is provided by the cloud RPC.
+  const fresh = await repo.load();
+  const existing = [...(fresh?.transactions ?? [])];
+  const created: Transaction[] = [];
+  let matched = 0;
+  for (let i = 0; i < transactions.length; i++) {
+    const t = transactions[i]!, observation = rows[i]!.observation;
+    if (existing.some((e) => e.id === t.id)) { matched++; continue; }
+    if (observation) {
+      const candidates = possibleExistingTransactions(existing, observation.accountId, t.amount, observation.date, observation.direction, observation.reference);
+      const strong = observation.reference && candidates.filter((c) => bankReference(`${c.notes ?? ""} ${c.description}`) === observation.reference);
+      if (observation.existingTransactionId) {
+        if (!candidates.some((c) => c.id === observation.existingTransactionId)) throw new Error("The chosen entry changed. Review this statement again.");
+        matched++; continue;
+      }
+      if (strong && strong.length === 1) { matched++; continue; }
+      if (candidates.length && !observation.allowSeparate) throw new Error("Possible existing transaction: link it or confirm a separate payment.");
+    }
+    created.push(t); existing.push(t);
+  }
+  await applyBatch({ puts: { transactions: created, ...(learnedRules.length && matched === 0 ? { rules: learnedRules } : {}) } });
+  return { created, createdIds: created.map((t) => t.id), matched, removed: 0 };
 }
 
 export async function updateTransaction(

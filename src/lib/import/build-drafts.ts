@@ -8,6 +8,7 @@ import type {
   TransactionType,
 } from "@/lib/domain/types";
 import type { StatementRow } from "./statement-row";
+import { bankReference, eventDirection, normalizeBankReference, possibleExistingTransactions, type EventDirection } from "./identity";
 
 /**
  * Statement rows -> reviewable drafts.
@@ -19,6 +20,9 @@ import type { StatementRow } from "./statement-row";
  */
 
 export interface ImportDraft {
+  reference?: string;
+  direction: EventDirection;
+  possibleMatchIds: string[];
   date: string;
   amount: Paise;
   type: TransactionType;
@@ -43,9 +47,9 @@ export interface ImportDraft {
   rawNarration: string;
 }
 
-function fingerprint(dateIso: string, amount: Paise, description: string): string {
+function fingerprint(dateIso: string, amount: Paise, description: string, direction: EventDirection): string {
   const normalised = description.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 40);
-  return `${dateIso.slice(0, 10)}|${amount}|${normalised}`;
+  return `${dateIso.slice(0, 10)}|${amount}|${direction}|${normalised}`;
 }
 
 export function buildImportDrafts(
@@ -59,14 +63,18 @@ export function buildImportDrafts(
   // each other just because one of them matches something already saved.
   const existingCounts = new Map<string, number>();
   for (const t of existingTransactions) {
-    if (t.accountId !== accountId) continue;
-    const key = fingerprint(t.date, t.amount, t.description);
+    const direction = eventDirection(t, accountId);
+    if (!direction) continue;
+    const key = fingerprint(t.date, t.amount, t.description, direction);
     existingCounts.set(key, (existingCounts.get(key) ?? 0) + 1);
   }
 
   return rows.map((row) => {
     const amount = row.withdrawal > 0 ? row.withdrawal : row.deposit;
     const columnType: TransactionType = row.withdrawal > 0 ? "EXPENSE" : "INCOME";
+    const direction = row.withdrawal > 0 ? "debit" as const : "credit" as const;
+    const reference = normalizeBankReference(row.reference) ?? bankReference(row.narration);
+    const possibleMatches = possibleExistingTransactions(existingTransactions, accountId, amount, row.date, direction, reference);
     const { cleaned, typeHint } = cleanBankNarration(row.narration);
     const type = typeHint ?? columnType;
 
@@ -76,12 +84,13 @@ export function buildImportDrafts(
     });
     const description = parsed.description || cleaned;
 
-    const key = fingerprint(row.date, amount, description);
+    const key = fingerprint(row.date, amount, description, direction);
     const remaining = existingCounts.get(key) ?? 0;
-    const isLikelyDuplicate = remaining > 0;
+    const isLikelyDuplicate = remaining > 0 && possibleMatches.length > 0;
     if (isLikelyDuplicate) existingCounts.set(key, remaining - 1);
 
     return {
+      reference, direction, possibleMatchIds: possibleMatches.map((t) => t.id),
       date: row.date,
       amount,
       type,

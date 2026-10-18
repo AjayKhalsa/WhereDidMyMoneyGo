@@ -42,8 +42,8 @@ test("dated evidence survives labels/future activity and becomes stale on histor
   assert.equal(await status(), "stale");
   await db.query("update accounts set opening_balance=0,reconciliation=null where id='bank'");
 });
-async function message(id: string, amount = 12300) {
-  await db.query("insert into gmail_messages(user_id,message_id,status,candidate) values ($1,$2,'review',$3)", [user, id, { amount, date: "2026-10-15", merchant: "Cafe", accountId: "card", categoryId: "dining" }]);
+async function message(id: string, amount = 12300, accountId = "card") {
+  await db.query("insert into gmail_messages(user_id,message_id,status,candidate) values ($1,$2,'review',$3)", [user, id, { amount, date: "2026-10-15", merchant: "Cafe", accountId, direction: "debit", categoryId: "dining" }]);
 }
 async function commit(id: string, reviewed = false, override = false, account = "card", type = "EXPENSE", destination: string | null = null) {
   const result = await db.query<{ status: string }>("select gmail_commit($1,$2,$3,$4,$5,'dining',false,$6,$7) as status", [user, id, type, account, destination, reviewed, override]);
@@ -60,7 +60,7 @@ test("real migrations apply; duplicate deliveries and repeated approval insert o
   assert.equal(await commit("a2", true, true), "logged");
 });
 test("account ownership and transfer destination are validated before any write", async () => {
-  await message("b1", 45600);
+  await message("b1", 45600, "bank");
   await assert.rejects(commit("b1", true, true, "foreign"), /Account not found/);
   await assert.rejects(commit("b1", true, true, "bank", "TRANSFER", "foreign"), /destination/);
   await assert.rejects(commit("b1", true, true, "bank", "TRANSFER", "bank"), /destination/);

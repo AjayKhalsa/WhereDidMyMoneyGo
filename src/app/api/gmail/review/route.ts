@@ -11,6 +11,12 @@ export async function POST(request: NextRequest) {
       if (result.error) throw result.error;
       return json({ status: "ignored" });
     }
+    if (body.action === "match" && typeof body.existingTransactionId === "string" && typeof body.accountId === "string") {
+      const result = await db.rpc("gmail_match_existing", { p_user: user.id, p_message: body.messageId,
+        p_account: body.accountId, p_transaction: body.existingTransactionId });
+      if (result.error || result.data === "review") throw new GmailError("The chosen entry does not match this alert. Check the account, direction, date and amount.", 409);
+      return json({ status: result.data });
+    }
     if (body.action !== "log" || !["EXPENSE", "INCOME", "TRANSFER"].includes(body.type) || typeof body.accountId !== "string") throw new GmailError("Choose the transaction type and account.");
     const result = await db.rpc("gmail_commit", {
       p_user: user.id, p_message: body.messageId, p_type: body.type, p_account: body.accountId,

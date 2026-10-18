@@ -6,6 +6,7 @@ import { useFinance } from "@/lib/hooks/use-finance";
 import { refreshDatabase } from "@/lib/data/store";
 import { formatMoney } from "@/lib/domain/money";
 import { Button, Card, Section } from "@/components/ui/primitives";
+import { possibleExistingTransactions } from "@/lib/import/identity";
 
 interface ReviewMail { message_id: string; subject: string; reason?: string; candidate?: Alert }
 interface Status {
@@ -58,10 +59,10 @@ export function GmailPanel() {
         {status.connection.last_error && <p className="text-sm text-danger">{status.connection.last_error}</p>}
         <div className="flex flex-wrap gap-2">
           <Button disabled={busy} onClick={() => void run(async () => {
-            let logged = 0, more = true;
-            for (let i = 0; i < 6 && more; i++) { const result = await api("/sync", "POST"); logged += result.logged; more = result.more; setNotice(`Imported ${logged} transactions. ${more ? "Checking more alerts…" : "Sync complete."}`); }
+            let logged = 0, matched = 0, more = true;
+            for (let i = 0; i < 6 && more; i++) { const result = await api("/sync", "POST"); logged += result.logged; matched += result.matched ?? 0; more = result.more; setNotice(`Imported ${logged} transactions; matched ${matched} existing entries. ${more ? "Checking more alerts…" : "Sync complete."}`); }
             await refreshDatabase();
-            setNotice(`Imported ${logged} transactions. ${more ? "More alerts remain. Press Sync now to continue." : "Sync complete."}`);
+            setNotice(`Imported ${logged} transactions; matched ${matched} existing entries. ${more ? "More alerts remain. Press Sync now to continue." : "Sync complete."}`);
           })}>{busy ? "Working…" : "Sync now"}</Button>
           <Button variant="quiet" disabled={busy} onClick={() => setDisconnecting(!disconnecting)}>Disconnect</Button>
           {status.connection.last_error?.includes("Reconnect") && <Button disabled={busy} onClick={() => void run(async () => { const result = await api("/connect", "POST", { startDate: status.connection!.start_date }); window.location.assign(result.url); })}>Reconnect Gmail</Button>}
@@ -81,14 +82,17 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
   const [kind, setKind] = useState(a?.direction === "credit" ? "" : "EXPENSE");
   const [toAccountId, setToAccountId] = useState("");
   const [allowDuplicate, setAllowDuplicate] = useState(false);
+  const [existingTransactionId, setExistingTransactionId] = useState("");
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
   const inputClass = "rounded-lg border border-line bg-surface p-2 text-sm";
-  async function submit(action: "log" | "ignore") {
+  const matchingAccountId = a?.accountId || (a?.direction === "credit" && kind === "TRANSFER" ? toAccountId : accountId);
+  const candidates = a && matchingAccountId ? possibleExistingTransactions(db?.transactions ?? [], matchingAccountId, a.amount, a.date, a.direction, a.reference) : [];
+  async function submit(action: "log" | "ignore" | "match") {
     setBusy(true); setError("");
     try {
       if (action === "log" && remember) await api("/mapping", "POST", { messageId: mail.message_id, accountId });
-      await api("/review", "POST", { action, messageId: mail.message_id, accountId, categoryId, type: kind === "REFUND" ? "INCOME" : kind, isRefund: kind === "REFUND", toAccountId, allowDuplicate });
+      await api("/review", "POST", { action, messageId: mail.message_id, accountId: action === "match" ? matchingAccountId : accountId, categoryId, type: kind === "REFUND" ? "INCOME" : kind, isRefund: kind === "REFUND", toAccountId, allowDuplicate, existingTransactionId });
       await onSaved();
     } catch (e) { setError(e instanceof Error ? e.message : "Could not save."); }
     finally { setBusy(false); }
@@ -106,6 +110,14 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
       </div>
       {kind !== "TRANSFER" && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />Remember this card/account match for future alerts</label>}
       <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={allowDuplicate} onChange={e => setAllowDuplicate(e.target.checked)} />I checked the ledger: this is a separate transaction even if the amount and date match.</label>
+      {!!candidates.length && <div className="flex flex-wrap gap-2">
+        <select aria-label="Existing ledger entry" className={inputClass} value={existingTransactionId} onChange={e => setExistingTransactionId(e.target.value)}>
+          <option value="">Choose an existing entry to link</option>
+          {candidates.map(t => <option key={t.id} value={t.id}>{t.description} · {t.date.slice(0, 10)} · {formatMoney(t.amount)}</option>)}
+        </select>
+        <Button size="sm" disabled={disabled || busy || !existingTransactionId} onClick={() => void submit("match")}>Link existing entry</Button>
+        <p className="text-xs text-ink-tertiary">Keeps its category, merchant, notes and tags.</p>
+      </div>}
     </>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     <div className="flex gap-2">{a && <Button size="sm" disabled={disabled || busy || !accountId || !kind} onClick={() => void submit("log")}>Add to ledger</Button>}<Button size="sm" variant="quiet" disabled={disabled || busy} onClick={() => void submit("ignore")}>Already recorded / dismiss</Button></div>

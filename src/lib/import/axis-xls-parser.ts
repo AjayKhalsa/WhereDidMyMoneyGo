@@ -37,6 +37,7 @@ export function tryParseAxisXls(sheets: ExtractedSheet[]): StatementRow[] | null
     const narrationIdx = cells.indexOf("particulars");
     const withdrawalIdx = cells.indexOf("dr");
     const depositIdx = cells.indexOf("cr");
+    const referenceIdx = cells.findIndex((c) => /reference|utr|rrn|chq.*no/.test(c));
 
     const out: StatementRow[] = [];
     for (let i = header.index + 1; i < sheet.rows.length; i++) {
@@ -48,7 +49,8 @@ export function tryParseAxisXls(sheets: ExtractedSheet[]): StatementRow[] | null
       const hasExactlyOneAmount = (withdrawal > 0) !== (deposit > 0);
 
       if (date && narration && hasExactlyOneAmount) {
-        out.push({ date, narration, withdrawal, deposit });
+        out.push({ date, narration, withdrawal, deposit,
+          ...(referenceIdx >= 0 && row[referenceIdx]?.trim() ? { reference: row[referenceIdx]!.trim() } : {}) });
       }
     }
 

@@ -1,5 +1,7 @@
 import type { Database, TransactionContext, UserProfile } from "@/lib/domain/types";
 import { getSupabaseBrowserClient } from "./supabase-client";
+import type { ReconciliationBundle } from "@/lib/import/reconciliation";
+import type { StatementImportEntry, StatementImportResult } from "@/lib/import/identity";
 import {
   RepositoryError,
   type CollectionMap,
@@ -100,6 +102,33 @@ function assertNoError(operation: string, error: { message: string } | null): vo
 
 export class SupabaseRepository implements Repository {
   private client = getSupabaseBrowserClient();
+
+  async commitStatementImport(rows: StatementImportEntry[]): Promise<StatementImportResult> {
+    await this.requireUserId();
+    const { data, error } = await this.client.rpc("commit_statement_import", {
+      p_rows: rows.map(({ transaction, observation }) => ({
+        transaction: toRow(transaction as unknown as Record<string, unknown>),
+        contexts: transaction.contexts, observation,
+      })),
+    });
+    assertNoError("statementImport", error);
+    return data as StatementImportResult;
+  }
+
+  async commitReconciliation(bundle: ReconciliationBundle): Promise<void> {
+    await this.requireUserId();
+    const changes = Object.fromEntries(Object.entries(bundle.changes).map(([collection, edits]) => [
+      TABLE_NAMES[collection as CollectionName], edits.map((edit) => ({
+        before: edit.before ? toRow(edit.before as unknown as Record<string, unknown>) : null,
+        after: toRow(edit.after as unknown as Record<string, unknown>),
+        beforeContexts: (edit.before as Database["transactions"][number] | null)?.contexts ?? [],
+        afterContexts: (edit.after as Database["transactions"][number]).contexts ?? [],
+        allowSeparate: edit.allowSeparate === true,
+      })),
+    ]));
+    const { error } = await this.client.rpc("commit_reconciliation", { p_changes: changes, p_checks: bundle.checkpoints });
+    assertNoError("reconciliation", error);
+  }
 
   private async requireUserId(): Promise<string> {
     const { data, error } = await this.client.auth.getUser();
