@@ -25,6 +25,26 @@ before(async () => {
 });
 after(async () => { await db?.close(); });
 
+test('historical preview queue is isolated, replay-safe and owner-readable only',async()=>{
+ const run='33333333-3333-4333-8333-333333333333';
+ const before=(await db.query('select count(*) n from transactions')).rows[0];
+ await db.query("insert into gmail_backfill_runs(id,user_id,start_date,end_date,query) values($1,$2,'2026-07-18','2026-10-18','fixed query')",[run,user]);
+ await db.query("insert into gmail_backfill_items(run_id,user_id,message_id) values($1,$2,'history1') on conflict do nothing",[run,user]);
+ await db.query("insert into gmail_backfill_items(run_id,user_id,message_id) values($1,$2,'history1') on conflict do nothing",[run,user]);
+ assert.equal((await db.query('select * from gmail_backfill_items')).rows.length,1);
+ assert.deepEqual((await db.query('select count(*) n from transactions')).rows[0],before);
+ assert.equal((await db.query("select * from gmail_messages where message_id='history1'")).rows.length,0);
+ await assert.rejects(db.query("insert into gmail_backfill_items(run_id,user_id,message_id) values($1,$2,'foreign')",[run,other]),/foreign key/);
+ await db.exec("create or replace function auth.uid() returns uuid language sql as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;");
+ try{
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);await db.exec('set role authenticated');
+  assert.equal((await db.query('select * from gmail_backfill_runs')).rows.length,1);
+  await assert.rejects(db.query("update gmail_backfill_items set status='proposed'"),/permission denied/);
+  await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[other]);await db.exec('set role authenticated');
+  assert.equal((await db.query('select * from gmail_backfill_items')).rows.length,0);
+ }finally{await db.exec("reset role;create or replace function auth.uid() returns uuid language sql as 'select null::uuid';");}
+});
+
 test("dated evidence survives labels/future activity and becomes stale on historical accounting changes", async () => {
   const evidence = { balance: 0, asOf: "2026-10-18", source: "Test statement",
     recordedAt: "2026-10-18T00:00:00Z", fingerprint: "test", status: "verified" };
