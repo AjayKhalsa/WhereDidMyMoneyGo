@@ -21,6 +21,27 @@ before(async () => {
   await db.query("insert into gmail_connections(user_id,email,refresh_token,start_date) values ($1,'person@example.com','encrypted','2026-10-01')", [user]);
 });
 after(async () => { await db?.close(); });
+
+test("dated evidence survives labels/future activity and becomes stale on historical accounting changes", async () => {
+  const evidence = { balance: 0, asOf: "2026-10-18", source: "Test statement",
+    recordedAt: "2026-10-18T00:00:00Z", fingerprint: "test", status: "verified" };
+  const stamp = () => db.query("update accounts set reconciliation=$1 where id='bank'", [evidence]);
+  const status = async () => (await db.query<{ status: string }>("select reconciliation->>'status' status from accounts where id='bank'")).rows[0]!.status;
+  await stamp();
+  await db.query("insert into transactions(id,user_id,type,amount,description,date,account_id,source) values ('evidence-future',$1,'EXPENSE',100,'Future','2026-10-19','bank','manual')", [user]);
+  assert.equal(await status(), "verified");
+  await db.query("update transactions set date='2026-10-17' where id='evidence-future'");
+  assert.equal(await status(), "stale");
+  await stamp();
+  await db.query("update transactions set description='My manual label' where id='evidence-future'");
+  assert.equal(await status(), "verified");
+  await db.query("delete from transactions where id='evidence-future'");
+  assert.equal(await status(), "stale");
+  await stamp();
+  await db.query("update accounts set opening_balance=1 where id='bank'");
+  assert.equal(await status(), "stale");
+  await db.query("update accounts set opening_balance=0,reconciliation=null where id='bank'");
+});
 async function message(id: string, amount = 12300) {
   await db.query("insert into gmail_messages(user_id,message_id,status,candidate) values ($1,$2,'review',$3)", [user, id, { amount, date: "2026-10-15", merchant: "Cafe", accountId: "card", categoryId: "dining" }]);
 }

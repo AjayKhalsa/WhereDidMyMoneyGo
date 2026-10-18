@@ -96,7 +96,8 @@ function materialise(
     toAccountId: draft.type === "TRANSFER" ? draft.toAccountId : undefined,
     categoryId,
     contexts,
-    investmentId: draft.type === "INVESTMENT" ? draft.investmentId : undefined,
+    investmentId: draft.type === "INVESTMENT" || draft.type === "TRANSFER"
+      ? draft.investmentId ?? existing?.investmentId : undefined,
     goalId: draft.type === "TRANSFER" ? draft.goalId : undefined,
     isRefund: draft.type === "INCOME" ? draft.isRefund || undefined : undefined,
     reversesTransactionId:

@@ -16,3 +16,9 @@ next-env.d.ts.bak
 public/sw.js
 public/sw.js.map
 public/swe-worker-*.js
+
+# Private financial audit/handoff artifacts remain available in this workspace.
+docs/finance-automation-state.md
+docs/finance-balance-diagnostic.md
+docs/reconciliation-2026-10-18-dry-run.md
+docs/finance-implementation-plan.md

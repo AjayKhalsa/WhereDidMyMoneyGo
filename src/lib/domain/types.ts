@@ -47,6 +47,17 @@ export interface Account {
   createdAt: string;
   /** When the balance was last confirmed to match the real account (BANK/CASH only). */
   lastReconciledAt?: string;
+  /** Balance immediately before this calendar date's activity begins. */
+  openingBalanceAsOf?: string;
+  /** Immutable evidence snapshot; live validity is checked against the ledger. */
+  reconciliation?: {
+    balance: Paise;
+    asOf: string;
+    source: string;
+    recordedAt: string;
+    fingerprint: string;
+    status: "verified" | "stale";
+  };
 }
 
 export interface CreditCardDetail {

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { formatFullDate } from "@/lib/domain/dates";
 import { useMoneyText } from "@/lib/hooks/use-privacy";
 import { parseAmountInput } from "@/lib/domain/money";
 import type { Account, AccountType } from "@/lib/domain/types";
@@ -25,6 +24,8 @@ import { Button, Chip, SelectableChip } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
 import { createId } from "@/lib/utils";
+import { balanceVerification, ledgerFingerprint } from "@/lib/engine/reconciliation";
+import { toLocalISO } from "@/lib/domain/dates";
 import { MoneyRow } from "./disclosure-panel";
 
 /**
@@ -63,6 +64,7 @@ export function AccountsPanel() {
         {accounts.map((account) => {
           const isCard = account.type === "CREDIT_CARD";
           const isInvestment = account.type === "INVESTMENT";
+          const verification = balanceVerification(account, transactions);
           const creditBalance = isCard
             ? creditCardCreditBalance(transactions, account.id)
             : 0;
@@ -89,7 +91,10 @@ export function AccountsPanel() {
               }
               onClick={() => setEditing(account)}
               meta={
-                isCard ? <Chip tone="warning">Card</Chip> : undefined
+                !isInvestment ? <Chip tone={verification.status === "verified" ? "positive" : "warning"}>
+                  {verification.status === "verified" ? `Verified ${verification.checkpoint!.asOf}` :
+                    verification.status === "stale" ? "Check history" : "Unverified"}
+                </Chip> : undefined
               }
               value={
                 isInvestment ? (
@@ -194,7 +199,8 @@ function AccountSheet({
   // payments correctly; see its own doc comment).
   const expectedBalance = liveAccount
     ? isCardAccount
-      ? creditCardOutstanding(db?.transactions ?? [], liveAccount.id)
+      ? creditCardOutstanding(db?.transactions ?? [], liveAccount.id) -
+        creditCardCreditBalance(db?.transactions ?? [], liveAccount.id)
       : accountBalance(liveAccount, db?.transactions ?? [])
     : 0;
   const actualBalance = parseAmountInput(actualBalanceText);
@@ -203,9 +209,16 @@ function AccountSheet({
 
   async function handleMarkReconciled() {
     if (!liveAccount) return;
+    const recordedAt = new Date().toISOString();
+    const asOf = toLocalISO(new Date()).slice(0, 10);
     await saveAccount({
       ...liveAccount,
-      lastReconciledAt: new Date().toISOString(),
+      lastReconciledAt: recordedAt,
+      reconciliation: {
+        balance: expectedBalance,
+        asOf, source: "Manual balance check", recordedAt,
+        fingerprint: ledgerFingerprint(liveAccount, db?.transactions ?? [], asOf), status: "verified",
+      },
     });
     toast.show({ tone: "success", title: "Account reconciled" });
     setReconciling(false);
@@ -246,6 +259,9 @@ function AccountSheet({
       hint: hint.trim() || undefined,
       isDefault: type === "INVESTMENT" ? false : isDefault,
       createdAt: account?.createdAt ?? new Date().toISOString(),
+      lastReconciledAt: liveAccount?.lastReconciledAt,
+      openingBalanceAsOf: liveAccount?.openingBalanceAsOf,
+      reconciliation: liveAccount?.reconciliation,
     });
 
     if (type === "CREDIT_CARD") {
@@ -390,19 +406,21 @@ function AccountSheet({
           <div className="space-y-3 rounded-xl bg-surface-sunken p-3.5">
             <div className="flex items-baseline justify-between gap-3">
               <p className="text-[12.5px] text-ink-secondary">
-                {isCardAccount ? "Current outstanding" : "Current balance"}
+                {isCardAccount ? "Card balance (credit is negative)" : "Current balance"}
               </p>
               <span className="font-medium text-ink-secondary tnum text-[13px]">
                 {money(expectedBalance)}
               </span>
             </div>
             <p className="text-[12px] text-ink-tertiary">
-              {liveAccount.lastReconciledAt
-                ? `Last reconciled ${formatFullDate(liveAccount.lastReconciledAt)}`
-                : isCardAccount
-                  ? "Never reconciled against the real card"
-                  : "Never reconciled against the real account"}
+              {liveAccount.reconciliation
+                ? `${balanceVerification(liveAccount, db?.transactions ?? []).status === "verified" ? "Verified" : "History changed — recheck"} as of ${liveAccount.reconciliation.asOf}: ${money(liveAccount.reconciliation.balance)}. Source: ${liveAccount.reconciliation.source}`
+                : "Balance is unverified against a dated statement."}
             </p>
+            {liveAccount.openingBalanceAsOf && <p className="text-[12px] text-ink-tertiary">
+              Opening balance applies before {liveAccount.openingBalanceAsOf} activity.
+              {balanceVerification(liveAccount, db?.transactions ?? []).predatesOpening && " Earlier transactions need review; the opening balance may overlap them."}
+            </p>}
 
             {!reconciling ? (
               <Button size="sm" onClick={() => setReconciling(true)}>

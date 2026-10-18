@@ -27,7 +27,7 @@ function date(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}(T.*)?$/.test(value) && !Number.isNaN(Date.parse(value));
 }
 const FIELDS: Record<Collection, string[]> = {
-  accounts: ["id", "name", "type", "openingBalance", "isActive", "hint", "isDefault", "createdAt", "lastReconciledAt"],
+  accounts: ["id", "name", "type", "openingBalance", "isActive", "hint", "isDefault", "createdAt", "lastReconciledAt", "openingBalanceAsOf", "reconciliation"],
   creditCards: ["id", "accountId", "statementDay", "dueDay", "creditLimit"],
   investments: ["id", "name", "kind", "monthlyContribution", "isActive", "createdAt", "currentValue", "valuedAt"],
   transactions: ["id", "type", "amount", "description", "date", "merchant", "accountId", "toAccountId", "categoryId", "contexts", "investmentId", "goalId", "isRefund", "reversesTransactionId", "notes", "recurringId", "source", "createdAt", "updatedAt"],
@@ -41,6 +41,14 @@ function validateRow(collection: Collection, input: unknown) {
     if (!string(row.name) || !["BANK", "CASH", "CREDIT_CARD", "INVESTMENT"].includes(String(row.type)) ||
         !money(row.openingBalance) || typeof row.isActive !== "boolean" || !date(row.createdAt)) fail("Invalid account.");
     if (row.type === "CREDIT_CARD" && row.openingBalance !== 0) fail("Card opening debt must be recorded as a transaction.");
+    if (row.openingBalanceAsOf != null && !date(row.openingBalanceAsOf)) fail("Invalid opening balance date.");
+    if (row.reconciliation != null) {
+      const check = record(row.reconciliation);
+      keys(check, ["balance", "asOf", "source", "recordedAt", "fingerprint", "status"]);
+      if (!money(check.balance) || !date(check.asOf) || !date(check.recordedAt) ||
+        !string(check.source) || !string(check.fingerprint) ||
+        !["verified", "stale"].includes(String(check.status))) fail("Invalid balance evidence.");
+    }
   } else if (collection === "creditCards") {
     if (!string(row.accountId) || !money(row.creditLimit) || row.creditLimit < 0 ||
         ![row.statementDay, row.dueDay].every((day) => money(day) && day >= 1 && day <= 31)) fail("Invalid card details.");

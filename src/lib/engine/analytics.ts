@@ -844,8 +844,10 @@ export function netWorth(
   const cash = liquidBalance(accounts, transactions);
   const portfolio = portfolioValue(investments, transactions, now);
   const cardDebt = totalCommitted(accounts, transactions);
+  const cardCredit = accounts.filter((a) => a.isActive && a.type === "CREDIT_CARD")
+    .reduce((sum, a) => sum + creditCardCreditBalance(transactions, a.id), 0);
   const netOwed = peopleBalances.reduce((acc, b) => acc + b.netAmount, 0);
-  return cash + portfolio + netOwed - cardDebt;
+  return cash + portfolio + netOwed + cardCredit - cardDebt;
 }
 
 // ---------------------------------------------------------------------------
@@ -900,7 +902,7 @@ export interface InvestmentValuation {
   contributed: Paise;
   /** What it's worth: the last stamped value, plus anything added since. */
   value: Paise;
-  /** value − contributed. Negative is a loss. */
+  /** Remaining value + linked distributions − contributions. */
   gain: Paise;
   /** Null when the value has never been stamped. */
   valuedAt: Date | null;
@@ -933,19 +935,25 @@ export function valueInvestments(
   return investments.map((investment) => {
     const mine = contributions.filter((t) => t.investmentId === investment.id);
     const contributed = total(mine);
+    // Only explicitly linked redemptions reduce this holding. An arbitrary
+    // transfer from an investment account is not evidence of which asset sold.
+    const withdrawals = transactions.filter((t) => t.type === "TRANSFER" &&
+      t.investmentId === investment.id && t.accountId && t.toAccountId &&
+      t.accountId !== t.toAccountId);
     const valuedAt = investment.valuedAt ? new Date(investment.valuedAt) : null;
 
     const value =
       investment.currentValue === undefined || valuedAt === null
-        ? contributed
+        ? contributed - total(withdrawals)
         : investment.currentValue +
-          total(mine.filter((t) => new Date(t.date) > valuedAt));
+          total(mine.filter((t) => new Date(t.date) > valuedAt)) -
+          total(withdrawals.filter((t) => new Date(t.date) > valuedAt));
 
     return {
       investment,
       contributed,
       value,
-      gain: value - contributed,
+      gain: value + total(withdrawals) - contributed,
       valuedAt,
       daysSinceValued: valuedAt ? daysBetween(valuedAt, now) : null,
     };
