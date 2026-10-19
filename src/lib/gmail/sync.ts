@@ -6,7 +6,7 @@ import { historicalRules, classifiedAlert } from "./classification";
 import { learningData, ruleRow } from "./learning-data";
 import { merchantKey } from "@/lib/engine/merchant-identity";
 
-export async function syncMailbox(userId: string) {
+export async function syncMailbox(userId: string, deadline = Date.now() + 45000) {
   const db = admin(), lease = randomUUID();
   const acquired = await db.rpc("gmail_acquire_lease", { p_user: userId, p_lease: lease });
   if (acquired.error) throw acquired.error;
@@ -24,7 +24,7 @@ export async function syncMailbox(userId: string) {
     // Fixed query for the lifetime of a paginated scan. Overlap handles delayed alerts.
     const scanStarted = connection.scan_started_at ?? new Date().toISOString();
     const after = connection.scan_after ?? Math.floor(Math.max(start - 86400000, connection.last_synced_at ? new Date(connection.last_synced_at).getTime() - 7 * 86400000 : 0) / 1000);
-    const q = `after:${after} before:${Math.ceil(new Date(scanStarted).getTime()/1000)} -in:spam -in:trash -subject:OTP -subject:statement -category:promotions {${Object.keys(BANK_SENDERS).map(s => `from:${s}`).join(" ")}}`;
+    const q = `after:${after} before:${Math.ceil(new Date(scanStarted).getTime()/1000)} -in:spam -in:trash -subject:OTP -subject:statement {${Object.keys(BANK_SENDERS).map(s => `from:${s}`).join(" ")}}`;
     const params = new URLSearchParams({ q, maxResults: "25" });
     if (connection.page_token) params.set("pageToken", connection.page_token);
     const page = await google<{ messages?: { id: string }[]; nextPageToken?: string }>(`${base}/messages?${params}`, { headers });
@@ -53,7 +53,7 @@ export async function syncMailbox(userId: string) {
     learned.rules=learned.rules.filter(r=>r.learningEvidence?.source!=='history'||!trained.conflicts.includes(r.learningEvidence.merchantKey));
     const profile=await db.from('profiles').select('name').eq('id',userId).maybeSingle();if(profile.error)throw profile.error;
     for (const item of inboxResult.data ?? []) {
-      if (Date.now() - started > 40000) break;
+      if (Date.now() - started > 40000 || deadline - Date.now() < 12000) break;
       const mail = await google<{ payload: MailPart; internalDate?: string }>(`${base}/messages/${encodeURIComponent(item.message_id)}?format=full`, { headers });
       const subject = header(mail.payload, "Subject").slice(0, 250);
       const receivedAt = mail.internalDate && /^\d+$/.test(mail.internalDate) ? Number(mail.internalDate) : undefined;

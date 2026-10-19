@@ -1,19 +1,23 @@
 import type { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import { admin, checkOrigin, configured, failure, GmailError, json, unseal, userFor } from "@/lib/gmail/server";
+import { gmailHealth } from "@/lib/gmail/health";
 
 export async function GET(request: NextRequest) {
   try {
     const session = json({}); const user = await userFor(request, session);
     if (!configured()) return json({ configured: false, connection: null, messages: [] });
     const db = admin();
-    const [connection, messages, count] = await Promise.all([
+    const [connection, messages, count, pending, historical] = await Promise.all([
       db.from("gmail_connections").select("email,start_date,last_synced_at,last_error,page_token").eq("user_id", user.id).maybeSingle(),
       db.from("gmail_messages").select("message_id,subject,candidate,reason,status,category_review,transaction_id").eq("user_id", user.id).or("status.eq.review,category_review.eq.true").order("created_at").limit(50),
       db.from("gmail_messages").select("message_id", { count: "exact", head: true }).eq("user_id", user.id).or("status.eq.review,category_review.eq.true"),
+      db.from("gmail_messages").select("message_id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending"),
+      db.from("gmail_backfill_runs").select("query,status,discovery_complete").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     ]);
-    for (const result of [connection, messages, count]) if (result.error) throw result.error;
-    const response = json({ configured: true, connection: connection.data ? { ...connection.data, page_token: undefined, more: !!connection.data.page_token } : null, messages: messages.data, reviewCount: count.count });
+    for (const result of [connection, messages, count, pending, historical]) if (result.error) throw result.error;
+    const health = gmailHealth({ lastSyncedAt: connection.data?.last_synced_at, error: connection.data?.last_error, hasNextPage: !!connection.data?.page_token, pending: pending.count ?? 0, review: count.count ?? 0, historical: historical.data });
+    const response = json({ configured: true, connection: connection.data ? { ...connection.data, page_token: undefined, more: !!connection.data.page_token } : null, messages: messages.data, reviewCount: count.count, health });
     for (const cookie of session.cookies.getAll()) response.cookies.set(cookie);
     return response;
   } catch (e) { return failure(e); }
