@@ -1,5 +1,6 @@
 import { groupIdOf, UNCATEGORISED_ID } from "@/lib/domain/categories";
 import { CONTEXT_DEFINITIONS } from "@/lib/domain/contexts";
+import { extractTags } from "@/lib/domain/tags";
 import {
   addMonths,
   endOfMonth,
@@ -187,7 +188,12 @@ export function parseSearchQuery(
 ): ParsedQuery {
   const filter: TransactionFilter = {};
   const terms: ParsedTerm[] = [];
-  let rest = ` ${raw.toLowerCase().trim()} `.replace(/\s+/g, " ");
+  const tagged = extractTags(raw);
+  if (tagged.contexts.length) {
+    filter.contexts = tagged.contexts.map(c => c.value);
+    terms.push(...tagged.contexts.map(c => ({ kind: "context" as const, label: `#${c.value}` })));
+  }
+  let rest = ` ${tagged.text.toLowerCase().trim()} `.replace(/\s+/g, " ");
 
   if (!raw.trim()) return { filter, terms };
 

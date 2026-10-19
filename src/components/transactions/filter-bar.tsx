@@ -1,7 +1,8 @@
 "use client";
 
 import { Search, X } from "lucide-react";
-import { CONTEXT_DEFINITIONS } from "@/lib/domain/contexts";
+import { CONTEXT_DEFINITIONS, contextLabel } from "@/lib/domain/contexts";
+import { savedTags } from "@/lib/domain/tags";
 import { endOfMonth, monthKey, monthKeyToDate, toDateInputValue } from "@/lib/domain/dates";
 import type { TransactionType } from "@/lib/domain/types";
 import type { ParsedTerm, TransactionFilter } from "@/lib/engine/search";
@@ -88,6 +89,7 @@ export function FilterBar({
   hasFilters,
 }: FilterBarProps) {
   const { db, categories } = useFinance();
+  const customTags = [...new Set(savedTags(db?.transactions ?? []).map(c => c.value))].filter(value => !CONTEXT_DEFINITIONS.some(c => c.value === value));
 
   // A query term overrides the matching dropdown, so the dropdown is disabled
   // rather than left showing a value that isn't being applied.
@@ -184,6 +186,7 @@ export function FilterBar({
               {definition.label}
             </option>
           ))}
+          {customTags.map(value => <option key={value} value={value}>{contextLabel(value)}</option>)}
         </SelectField>
 
         <SelectField

@@ -1,5 +1,5 @@
-import { UNCATEGORISED_ID } from "@/lib/domain/categories";
-import { makeContext, normaliseContexts } from "@/lib/domain/contexts";
+import { groupIdOf, UNCATEGORISED_ID } from "@/lib/domain/categories";
+import { DERIVED_CONTEXT_VALUES, makeContext, normaliseContexts } from "@/lib/domain/contexts";
 import { parseAmountInput } from "@/lib/domain/money";
 import type {
   Account,
@@ -14,6 +14,7 @@ import { levenshteinDistance } from "./fuzzy-match";
 import { ACTIVITIES, CONTEXT_KEYWORDS, MERCHANTS, STOP_WORDS } from "./lexicon";
 import { parseBankSms, type BankSmsRead } from "./sms";
 import { merchantKey } from "./merchant-identity";
+import { extractTags } from "@/lib/domain/tags";
 
 /**
  * Deterministic natural-language expense parser.
@@ -210,14 +211,16 @@ function findRule(
   normalised: string,
   rules: ClassificationRule[],
 ): ClassificationRule | null {
-  // Word-boundary match, not raw substring — a rule pattern is always a
-  // single token (see `deriveRulePattern`), so "tea" must not match inside
-  // "steak".
-  const words = normalised.split(" ");
+  // Match complete tokens/phrases: "tea" must not match inside "steak".
+  const candidates = rules.filter(rule => {
+    if (rule.learningEvidence && rule.learningEvidence.merchantKey !== merchantKey(normalised)) return false;
+    const pattern = tokenize(rule.pattern).map(t => t.clean).join(" ");
+    return Boolean(pattern) && ` ${normalised} `.includes(` ${pattern} `);
+  });
+  const scoped = candidates.filter(r => r.learningEvidence);
+  const applicable = scoped.length ? scoped : candidates;
   let best: ClassificationRule | null = null;
-  for (const rule of rules) {
-    if (rule.learningEvidence && rule.learningEvidence.merchantKey !== merchantKey(normalised)) continue;
-    if (!words.includes(rule.pattern)) continue;
+  for (const rule of applicable) {
     if (
       !best ||
       rule.pattern.length > best.pattern.length ||
@@ -463,7 +466,8 @@ export function parseExpenseInput(
   if (sms) return fromBankSms(sms, options);
 
   const rules = options.rules ?? [];
-  const tokens = tokenize(input);
+  const tagged = extractTags(input);
+  const tokens = tokenize(tagged.text);
   const amountMatch = extractAmount(tokens);
   const normalised = tokens.map((t) => t.clean).join(" ");
 
@@ -499,6 +503,15 @@ export function parseExpenseInput(
     if (rule.merchant) merchant = rule.merchant;
     for (const c of rule.contexts) contextValues.push(c.value);
     reasons.push(`You've classified "${rule.pattern}" this way before`);
+    // Explicit wording distinguishes today's lunch from yesterday's dinner
+    // without undoing a user's mapping to a different financial category.
+    const specific = activityHits.find(
+      hit => groupIdOf(hit.categoryId) === groupIdOf(categoryId) && hit.categoryId.includes("."),
+    );
+    if (specific && specific.categoryId !== categoryId) {
+      categoryId = specific.categoryId;
+      reasons.push(`"${specific.matchedWord}" specifies the expense type`);
+    }
   } else if (activityHits.length > 0 && merchantHit) {
     // Both fired. The more specific activity wins unless the merchant is
     // unambiguous about what it sells (Netflix is never "dinner").
@@ -592,7 +605,7 @@ export function parseExpenseInput(
     toAccountId: typeDetection.toAccountId,
     isRefund: isRefund || undefined,
     suggestedReversalId,
-    contexts: normaliseContexts(contextValues.map((value) => makeContext(value))),
+    contexts: normaliseContexts([...contextValues.map((value) => makeContext(value)), ...tagged.contexts.filter(c => !DERIVED_CONTEXT_VALUES.has(c.value))]),
     merchant,
     type,
     confidence,
