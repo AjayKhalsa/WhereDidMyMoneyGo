@@ -9,6 +9,7 @@ export const BANK_SENDERS: Record<string, string> = {
   "customernotification@icici.bank.in": "ICICI", "customernotification@icicibank.com": "ICICI",
   "alerts@axis.bank.in": "Axis", "alerts@axisbank.com": "Axis",
   "hsbc@mail.hsbc.co.in": "HSBC",
+  "hsbc@hsbc.bank.in": "HSBC",
 };
 export interface Alert extends Partial<AlertTime> {
   bank: string;
@@ -80,6 +81,10 @@ export function parseAlert(from: string, subject: string, text: string, received
   let instrument: Alert["instrument"] = "credit_card", direction: Alert["direction"] = "debit";
   const match = bank === "HSBC" ? /credit card\s+x+(\d{4})\s+was used for a transaction of INR\s+([\d,.]+)\s+at\s+(.+?)\s+on\s+(\d{2}\/\d{2}\/\d{2,4})/i.exec(body) : null;
   if (match) [, tail, amount, merchant, date] = match;
+  else if (bank === "HSBC") {
+    const purchase = /credit card no ending with\s+(\d{4}),?\s*has been used for INR\s*([\d,.]+)\s+for payment to\s+(.+?)\s+on\s+(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\s+at\s+\d{1,2}:\d{2}/i.exec(body);
+    if (purchase) [, tail, amount, merchant, date] = purchase;
+  }
   else if (bank === "ICICI") {
     const card = /credit card\s+x+(\d{4})\s+has been used for a transaction of INR\s+([\d,.]+)\s+on\s+([A-Za-z]+ \d{1,2}, \d{4})\s+at\s+[\d:]+\.\s+Info:\s+(.+?)\.\s+The Available/i.exec(body);
     const acct = /bank account\s+x+(\d{3,4})\s+has been (credited|debited) with INR\s+([\d,.]+)\s+on\s+(\d{1,2}-[A-Za-z]{3}-\d{2,4})\.\s+Info:\s+(.+?)\.\s+(?:NEVER|The|In case)/i.exec(body);
