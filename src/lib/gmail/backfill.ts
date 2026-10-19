@@ -3,7 +3,7 @@ import type { Account, RecurringTransaction, Transaction } from '@/lib/domain/ty
 import { accountForAlert,authenticatedSender,BANK_SENDERS,header,mailText,parseAlert,type MailPart } from './alerts';
 import { admin,GmailError,google,tokenRequest,unseal } from './server';
 import { domainRow,learningData } from './learning-data';
-import { suggestCategory } from './classification';
+import { classifiedAlert } from './classification';
 import { merchantKey } from '@/lib/engine/merchant-identity';
 import { backfillDisposition,backfillRange,backfillSummary,subscriptionSuggestion,subscriptionPatterns } from './backfill-plan';
 
@@ -76,7 +76,7 @@ export async function scanBackfill(user:string,input?:{start:string;end:string})
     else{
      const mail=await google<{payload:MailPart;internalDate?:string}>(`${base}/messages/${encodeURIComponent(item.message_id)}?format=full`,{headers});
      const subject=header(mail.payload,'Subject').slice(0,250),a=parseAlert(header(mail.payload,'From'),subject,mailText(mail.payload),mail.internalDate?Number(mail.internalDate):undefined);
-     if(a){a.accountId=accountForAlert(a,accounts.map(r=>domainRow<Account>(r)),c.data.aliases??{});const self=merchantKey(profile.data.name);if(self.length>=3&&merchantKey(a.merchant).includes(self))a.special=true;a.classification=suggestCategory(a,learned.rules,learned.categories,[profile.data.name]);a.categoryId=a.classification.needsReview?'other':a.classification.categoryId;}
+     if(a){a.accountId=accountForAlert(a,accounts.map(r=>domainRow<Account>(r)),c.data.aliases??{});const self=merchantKey(profile.data.name);if(self.length>=3&&merchantKey(a.merchant).includes(self))a.special=true;Object.assign(a,classifiedAlert(a,learned.rules,learned.categories,[profile.data.name]));}
      const disposition=backfillDisposition(a,authenticatedSender(mail.payload),existing as any,tx,sources as any,item.message_id,run.start_date,run.end_date);
      const canonical=tx.find(t=>t.id===disposition.matched_transaction_id);
      const proposed=a&&a.direction==='debit'&&!a.special&&a.accountId?({id:item.message_id,type:'EXPENSE',amount:a.amount,accountId:a.accountId,merchant:a.merchant,description:a.merchant,date:a.date} as Transaction):undefined;

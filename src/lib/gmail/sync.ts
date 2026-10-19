@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Account } from "@/lib/domain/types";
 import { accountForAlert, authenticatedSender, automaticReason, BANK_SENDERS, header, mailText, parseAlert, type MailPart } from "./alerts";
 import { admin, GmailError, google, tokenRequest, unseal } from "./server";
-import { historicalRules, suggestCategory } from "./classification";
+import { historicalRules, classifiedAlert } from "./classification";
 import { learningData, ruleRow } from "./learning-data";
 import { merchantKey } from "@/lib/engine/merchant-identity";
 
@@ -62,8 +62,7 @@ export async function syncMailbox(userId: string) {
         candidate.accountId = accountForAlert(candidate, accounts, connection.aliases ?? {});
         const selfName=profile.data?.name;
         if(selfName&&merchantKey(selfName).length>=3&&merchantKey(candidate.merchant).includes(merchantKey(selfName)))candidate.special=true;
-        candidate.classification=suggestCategory(candidate,learned.rules,learned.categories,selfName?[selfName]:[],trained.conflicts);
-        candidate.categoryId=candidate.classification.needsReview?'other':candidate.classification.categoryId;
+        Object.assign(candidate,classifiedAlert(candidate,learned.rules,learned.categories,selfName?[selfName]:[],trained.conflicts));
         if (!categoryResult.data?.some(c => c.id === candidate.categoryId)) candidate.categoryId = undefined;
       }
       const reason = candidate ? automaticReason(candidate, authenticatedSender(mail.payload), connection.start_date) : "Unrecognized alert format. Check the email before entering it manually.";

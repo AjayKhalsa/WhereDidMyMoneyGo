@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {suggestCategory,historicalRules,correctedRule} from "@/lib/gmail/classification";
+import {suggestCategory,historicalRules,correctedRule,classifiedAlert} from "@/lib/gmail/classification";
 import {parseExpenseInput} from "@/lib/engine/parser";
 import type {Alert} from "@/lib/gmail/alerts";
 import type {ClassificationRule} from "@/lib/domain/types";
@@ -8,6 +8,18 @@ import {expense} from "../helpers/factories";
 const categories=['other','dining','dining.breakfast','dining.lunch','dining.snacks','dining.dinner','transport','transport.cab','gifts','essentials'].map(id=>({id}));
 const alert=(over:Partial<Alert>={}):Alert=>({bank:'HDFC',instrument:'bank',tail:'1234',amount:15000,date:'2026-10-18',merchant:'Zomato',direction:'debit',...over});
 const rule=(over:Partial<ClassificationRule>={}):ClassificationRule=>({id:'saved',pattern:'zomato',categoryId:'gifts',contexts:[],confidence:0.95,timesApplied:5,createdAt:'2026-10-01',updatedAt:'2026-10-01',...over});
+test('confident saved aliases normalize new Gmail observations without changing financial identity',()=>{
+ const a=alert({merchant:'ETERNAL LIM',reference:'123456789012',occurredAt:'2026-10-18T13:00:00',timeSource:'bank'});
+ const rules=[rule({pattern:'eternal',categoryId:'dining',merchant:'Zomato',confidence:1})];
+ const result=classifiedAlert(a,rules,categories);
+ assert.equal(result.merchant,'Zomato');assert.equal(result.categoryId,'dining');
+ for(const k of ['amount','direction','bank','instrument','tail','date','reference','occurredAt','timeSource'] as const)assert.equal(result[k],a[k]);
+ assert.equal(a.merchant,'ETERNAL LIM');
+ assert.equal(classifiedAlert(a,[{...rules[0]!,confidence:0.6}],categories).merchant,'ETERNAL LIM');
+ assert.equal(classifiedAlert({...a,direction:'credit'},rules,categories).merchant,'ETERNAL LIM');
+ assert.equal(classifiedAlert({...a,merchant:'SWIGGY INSTAMART PRIVATE LIMITED'},[rule({pattern:'swiggy',categoryId:'dining',merchant:'Swiggy',confidence:1})],categories).merchant,'SWIGGY INSTAMART PRIVATE LIMITED');
+ assert.equal(parseExpenseInput('eternal 250',{rules}).merchant,'Zomato');
+});
 test('explicit saved mapping outranks food clocks and personal-UPI heuristics',()=>{
  assert.equal(suggestCategory(alert({occurredAt:'2026-10-18T13:00:00',timeSource:'bank'}),[rule()],categories).categoryId,'gifts');
  assert.equal(suggestCategory(alert({merchant:'Example Driver',paymentRail:'UPI',vpa:'driver@bank'}),[rule({pattern:'driver',categoryId:'gifts'})],categories).categoryId,'gifts');

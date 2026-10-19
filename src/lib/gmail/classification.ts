@@ -14,6 +14,16 @@ export interface CategorySuggestion {
   ruleId?: string;
   contexts: TransactionContext[];
 }
+/** Reuse the parser's saved merchant alias after a confident category match. */
+export function classifiedAlert(a:Alert,rules:ClassificationRule[],categories:Pick<Category,'id'>[],selfNames:string[]=[],conflictingPayees:string[]=[]):Alert {
+  const classification=suggestCategory(a,rules,categories,selfNames,conflictingPayees);
+  const rule=!classification.needsReview&&classification.ruleId?rules.find(r=>r.id===classification.ruleId):undefined;
+  const categoryId=classification.needsReview?'other':classification.categoryId;
+  // A broad brand rule must not erase a distinct sub-brand such as Instamart.
+  const alias=rule?.merchant;
+  const useAlias=alias&&(merchantKey(alias)===merchantKey(a.merchant)||merchantKey(alias)!==rule?.pattern);
+  return {...a,classification,categoryId:categories.some(c=>c.id===categoryId)?categoryId:undefined,merchant:useAlias?alias:a.merchant};
+}
 export function suggestCategory(a: Alert, rules: ClassificationRule[], categories: Pick<Category,"id">[], selfNames: string[] = [], conflictingPayees:string[]=[]): CategorySuggestion {
   const valid = new Set(categories.map(c=>c.id)), key=merchantKey(a.merchant);
   const unknown=(reason:string):CategorySuggestion=>({categoryId:"other",confidence:0,source:"unknown",reason,needsReview:true,contexts:[]});
