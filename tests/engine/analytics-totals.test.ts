@@ -159,8 +159,8 @@ describe("patterns", () => {
 
   test("shareAfterHour measures late-night spending", () => {
     const rows = [
-      expense({ amount: rs(3000), date: at("2026-08-01", 23) }),
-      expense({ amount: rs(1000), date: at("2026-08-02", 13) }),
+      expense({ amount: rs(3000), date: at("2026-08-01", 23), timing: { source: "user", precision: "exact", timezone: "Asia/Kolkata" } }),
+      expense({ amount: rs(1000), date: at("2026-08-02", 13), timing: { source: "user", precision: "exact", timezone: "Asia/Kolkata" } }),
     ];
     assert.equal(shareAfterHour(rows, 22), 75);
   });

@@ -3,6 +3,8 @@ import { deriveRulePattern, learnFromEntry } from "@/lib/engine/learning";
 import { parseExpenseInput } from "@/lib/engine/parser";
 import { merchantKey } from "@/lib/engine/merchant-identity";
 import { MERCHANTS } from "@/lib/engine/lexicon";
+import { ruleConditionsMatch, timedMealCategory } from "@/lib/engine/time-rules";
+import { validWallTime } from "@/lib/domain/transaction-time";
 import type { Alert } from "./alerts";
 
 export interface CategorySuggestion {
@@ -26,34 +28,32 @@ export function classifiedAlert(a:Alert,rules:ClassificationRule[],categories:Pi
 }
 export function suggestCategory(a: Alert, rules: ClassificationRule[], categories: Pick<Category,"id">[], selfNames: string[] = [], conflictingPayees:string[]=[]): CategorySuggestion {
   const valid = new Set(categories.map(c=>c.id)), key=merchantKey(a.merchant);
+  const actualTime = a.timeConfidence === "exact" && ["bank", "payment"].includes(a.timeSource ?? "") && a.occurredAt && validWallTime(a.occurredAt) && a.occurredAt.slice(0,10) === a.date ? a.occurredAt : undefined;
+  const mealSuggestion = (categoryId: string): CategorySuggestion | undefined => {
+    const meal = timedMealCategory(categoryId, actualTime);
+    if (meal && valid.has(meal)) return { categoryId: meal, confidence: 0.95, source: "meal", reason: `Actual transaction time ${actualTime!.slice(11,16)} IST: breakfast before noon, lunch until 17:00, snacks until 20:00, then dinner.`, needsReview: false, contexts: [] };
+  };
   const unknown=(reason:string):CategorySuggestion=>({categoryId:"other",confidence:0,source:"unknown",reason,needsReview:true,contexts:[]});
   if(a.direction!=="debit"||a.special)return unknown("Confirm the financial purpose before categorizing.");
   const words=a.merchant.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim().split(/\s+/);
-  const applicable=rules.filter(r=>valid.has(r.categoryId)&&words.includes(r.pattern.toLowerCase())&&(!r.learningEvidence||r.learningEvidence.merchantKey===key));
+  const applicable=rules.filter(r=>valid.has(r.categoryId)&&` ${words.join(" ")} `.includes(` ${r.pattern.toLowerCase()} `)&&ruleConditionsMatch(r,a.merchant,actualTime)&&(!r.learningEvidence||r.learningEvidence.merchantKey===key));
   const scoped=applicable.filter(r=>['gmail-correction','manual-correction'].includes(r.learningEvidence?.source??''));
-  const candidates=scoped.length?scoped:applicable;
+  const conditional=applicable.filter(r=>r.conditions);
+  const candidates=conditional.length?conditional:scoped.length?scoped:applicable;
   if(candidates.length){
     // Conflicts are evidence, never resolved by array order or last write.
     if(new Set(candidates.map(r=>r.categoryId)).size>1)return unknown("Conflicting saved categories for this payee.");
-    const parsed=parseExpenseInput(a.merchant,{rules:candidates});
+    const parsed=parseExpenseInput(a.merchant,{rules:candidates,actualTime});
     const r=candidates.find(r=>r.id===parsed.matchedRuleId)??candidates[0]!;
     const high=['gmail-correction','manual-correction'].includes(r.learningEvidence?.source??'')||r.confidence>=0.85;
-    // A user's leaf-level mapping wins over contextual meal rules.
-    if(r.categoryId!=="dining"||!/^zomato$/.test(key))return {categoryId:r.categoryId,confidence:r.confidence,source:r.learningEvidence?.source==='history'?"history":"rule",reason:`Saved category for “${r.pattern}” (${r.learningEvidence?.support??r.timesApplied} examples).`,needsReview:!high,ruleId:r.id,contexts:r.contexts};
+    const timed = mealSuggestion(r.categoryId);
+    const explicitLeaf = r.categoryId !== "dining" && ['gmail-correction','manual-correction'].includes(r.learningEvidence?.source ?? '');
+    if (timed && !explicitLeaf) return { ...timed, contexts: r.contexts, ruleId: r.id, needsReview: !high };
+    return {categoryId:r.categoryId,confidence:r.confidence,source:r.learningEvidence?.source==='history'?"history":"rule",reason:`Saved category for “${r.pattern}” (${r.learningEvidence?.support??r.timesApplied} examples).`,needsReview:!high,ruleId:r.id,contexts:r.contexts};
   }
   if(conflictingPayees.includes(key))return unknown('Conflicting historical categories for this payee.');
-  if(key==='zomato'&&valid.has('dining')){
-    if(a.occurredAt&&['bank','payment','gmail'].includes(a.timeSource??'')){
-      const hour=Number(a.occurredAt.slice(11,13));
-      if(Number.isInteger(hour)&&hour>=0&&hour<24){
-        const leaf=hour<12?'breakfast':hour<16?'lunch':hour<20?'snacks':'dinner';
-        if(valid.has(`dining.${leaf}`))return {categoryId:`dining.${leaf}`,confidence:a.timeSource==='gmail'?0.7:0.95,source:'meal',reason:a.timeSource==='gmail'?'Meal suggestion uses email received time; please confirm.':'Food order classified by its transaction time in IST.',needsReview:a.timeSource==='gmail',contexts:[]};
-      }
-    }
-    return {categoryId:'dining',confidence:0.9,source:'vocabulary',reason:'Known food merchant; transaction time is unknown.',needsReview:false,contexts:[]};
-  }
   const known=MERCHANTS.filter(m=>m.aliases.some(alias=>words.includes(alias)));
-  if(known.length===1&&valid.has(known[0]!.categoryId))return {categoryId:known[0]!.categoryId,confidence:0.9,source:'vocabulary',reason:'Recognized merchant vocabulary.',needsReview:false,contexts:[]};
+  if(known.length===1&&valid.has(known[0]!.categoryId))return mealSuggestion(known[0]!.categoryId) ?? {categoryId:known[0]!.categoryId,confidence:0.9,source:'vocabulary',reason:'Recognized merchant vocabulary; no meal time is assumed without an actual transaction timestamp.',needsReview:false,contexts:[]};
   const personal=a.paymentRail==='UPI'&&a.vpa&&!a.vpa.includes('*')&&/^[\p{L} .'-]+$/u.test(a.merchant)&&words.length>=2&&words.length<=7;
   const excluded=/\b(?:store|shop|services|traders|enterprise|bank|club|cred|dreamplug|fund|investment|mandate|recharge|restaurant|cafe|hotel|mart|merchant)\b/i.test(a.merchant)||selfNames.some(n=>n&&key.includes(merchantKey(n)));
   if(personal&&!excluded&&a.amount<20000&&valid.has('transport'))return {categoryId:'transport',confidence:0.86,source:'small-upi',reason:'Your preference: outgoing UPI below ₹200 to an identifiable individual. Auto/Cab is not assumed.',needsReview:false,contexts:[]};
@@ -65,7 +65,7 @@ export function historicalRules(transactions: Transaction[], existing: Classific
   for(const t of transactions){if(t.type!=='EXPENSE'||!t.categoryId||['other','adjustment'].includes(t.categoryId))continue;const key=merchantKey(t.merchant||t.description);if(!key||key.length<4||['home','office','work','expense','payment','shopping','dinner','lunch','breakfast','snacks','auto','cab','transport','food','groceries'].includes(key))continue;groups.set(key,[...(groups.get(key)??[]),t]);}
   const rules:ClassificationRule[]=[], conflicts:string[]=[];
   for(const [key,rows] of groups){
-    if(new Set(rows.map(t=>t.categoryId)).size!==1){if(!(key==='zomato'&&rows.every(t=>t.categoryId==='dining'||t.categoryId?.startsWith('dining.'))))conflicts.push(key);continue;}
+    if(new Set(rows.map(t=>t.categoryId)).size!==1){if(!(rows.every(t=>['dining','dining.breakfast','dining.lunch','dining.snacks','dining.dinner'].includes(t.categoryId??''))))conflicts.push(key);continue;}
     if(rows.length<3)continue;
     const pattern=deriveRulePattern(key);if(!pattern||['home','office','work','expense','payment','shopping','dinner','lunch','breakfast','snacks','auto','cab','transport','food','groceries'].includes(pattern)||existing.some(r=>r.pattern===pattern)||rules.some(r=>r.pattern===pattern))continue;
     const first=rows[0]!;

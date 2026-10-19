@@ -74,7 +74,7 @@ describe("categorisation", () => {
 
   test("weekend and late-night contexts come from the date, not the words", () => {
     const saturdayNight = parseExpenseInput("dinner 2400", {
-      date: new Date(2026, 7, 8, 23, 0),
+      date: new Date(2026, 7, 8, 23, 0), actualTime: "2026-08-08T23:00:00",
     });
     const values = saturdayNight.contexts.map((c) => c.value);
     assert.ok(values.includes("weekend"));

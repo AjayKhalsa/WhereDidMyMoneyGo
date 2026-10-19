@@ -15,6 +15,8 @@ import { ACTIVITIES, CONTEXT_KEYWORDS, MERCHANTS, STOP_WORDS } from "./lexicon";
 import { parseBankSms, type BankSmsRead } from "./sms";
 import { merchantKey } from "./merchant-identity";
 import { extractTags } from "@/lib/domain/tags";
+import { factualTimeContexts } from "@/lib/domain/transaction-time";
+import { ruleConditionsMatch, timedMealCategory } from "./time-rules";
 
 /**
  * Deterministic natural-language expense parser.
@@ -31,6 +33,8 @@ import { extractTags } from "@/lib/domain/tags";
  */
 
 export interface ParseResult {
+  occurredAt?: string;
+  timing?: Transaction["timing"];
   amount: Paise | null;
   /** Cleaned-up human description, e.g. "Dinner with friends". */
   description: string;
@@ -210,14 +214,18 @@ function buildDescription(tokens: Token[], amountIndex: number | null): string {
 function findRule(
   normalised: string,
   rules: ClassificationRule[],
+  actualTime?: string,
 ): ClassificationRule | null {
   // Match complete tokens/phrases: "tea" must not match inside "steak".
   const candidates = rules.filter(rule => {
+    if (!ruleConditionsMatch(rule, normalised, actualTime)) return false;
     if (rule.learningEvidence && rule.learningEvidence.merchantKey !== merchantKey(normalised)) return false;
     const pattern = tokenize(rule.pattern).map(t => t.clean).join(" ");
     return Boolean(pattern) && ` ${normalised} `.includes(` ${pattern} `);
   });
-  const scoped = candidates.filter(r => r.learningEvidence);
+  const conditional = candidates.filter(r => r.conditions);
+  if (new Set(conditional.map(r => r.categoryId)).size > 1) return null;
+  const scoped = conditional.length ? conditional : candidates.filter(r => r.learningEvidence);
   const applicable = scoped.length ? scoped : candidates;
   let best: ClassificationRule | null = null;
   for (const rule of applicable) {
@@ -412,6 +420,8 @@ export function suggestReversal(
 }
 
 export interface ParseOptions {
+  /** Verified/user-confirmed India wall-clock, never the time of logging. */
+  actualTime?: string;
   rules?: ClassificationRule[];
   /** Used to derive weekend / late-night contexts. Defaults to now. */
   date?: Date;
@@ -434,6 +444,7 @@ function fromBankSms(sms: BankSmsRead, options: ParseOptions): ParseResult {
   const inner = parseExpenseInput(sms.merchant ?? "", {
     rules: options.rules,
     date: sms.date ? new Date(sms.date) : options.date,
+    actualTime: sms.occurredAt,
   });
 
   const categorised = inner.categoryId !== UNCATEGORISED_ID;
@@ -449,6 +460,8 @@ function fromBankSms(sms: BankSmsRead, options: ParseOptions): ParseResult {
     toAccountId: undefined,
     isRefund: sms.isRefund,
     date: sms.date,
+    occurredAt: sms.occurredAt,
+    timing: sms.timing,
     // The figure and direction are certain; only the category is a guess.
     confidence: categorised ? 0.9 : 0.55,
     reasons: [...sms.reasons, ...inner.reasons],
@@ -479,7 +492,7 @@ export function parseExpenseInput(
   const { type } = typeDetection;
 
   // ---- 1. A learned rule beats everything the lexicon knows. -------------
-  const rule = findRule(normalised, rules);
+  const rule = findRule(normalised, rules, options.actualTime);
 
   // ---- 2. Lexicon signals ------------------------------------------------
   const merchantHit = findMerchant(tokens) ?? findMerchantFuzzy(tokens);
@@ -501,7 +514,6 @@ export function parseExpenseInput(
     categoryId = rule.categoryId;
     baseScore = 0.55 + Math.min(0.35, rule.confidence * 0.35);
     if (rule.merchant) merchant = rule.merchant;
-    for (const c of rule.contexts) contextValues.push(c.value);
     reasons.push(`You've classified "${rule.pattern}" this way before`);
     // Explicit wording distinguishes today's lunch from yesterday's dinner
     // without undoing a user's mapping to a different financial category.
@@ -556,6 +568,14 @@ export function parseExpenseInput(
     reasons.push("Nothing in the description was recognisable");
   }
 
+  if (type === "EXPENSE") {
+    const meal = timedMealCategory(categoryId, options.actualTime, normalised);
+    if (meal && meal !== categoryId) {
+      categoryId = meal;
+      reasons.push(`Actual transaction time ${options.actualTime!.slice(11,16)} IST suggests ${meal.split(".")[1]}`);
+    }
+  }
+
   // ---- 3b. A resolved transfer/card-payment shape is as strong a signal as
   // an exact merchant match — the category guess above is irrelevant for a
   // TRANSFER (materialise strips it), so it never gets to override this.
@@ -580,8 +600,7 @@ export function parseExpenseInput(
   const when = options.date ?? new Date();
   const day = when.getDay();
   if (day === 0 || day === 6) contextValues.push("weekend");
-  const hour = when.getHours();
-  if (hour >= 22 || hour < 4) contextValues.push("late-night");
+  if (options.actualTime) contextValues.push(...factualTimeContexts({ date: options.actualTime, timing: { source: "user", precision: "exact", timezone: "Asia/Kolkata" } }).map(c => c.value));
 
   // ---- 5. Confidence -----------------------------------------------------
   let confidence = baseScore;
@@ -605,7 +624,7 @@ export function parseExpenseInput(
     toAccountId: typeDetection.toAccountId,
     isRefund: isRefund || undefined,
     suggestedReversalId,
-    contexts: normaliseContexts([...contextValues.map((value) => makeContext(value)), ...tagged.contexts.filter(c => !DERIVED_CONTEXT_VALUES.has(c.value))]),
+    contexts: normaliseContexts([...contextValues.map((value) => makeContext(value)), ...(rule?.contexts ?? []).filter(c => !DERIVED_CONTEXT_VALUES.has(c.value)), ...tagged.contexts.filter(c => !DERIVED_CONTEXT_VALUES.has(c.value))]),
     merchant,
     type,
     confidence,

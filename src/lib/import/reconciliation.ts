@@ -30,7 +30,7 @@ const FIELDS: Record<Collection, string[]> = {
   accounts: ["id", "name", "type", "openingBalance", "isActive", "hint", "isDefault", "createdAt", "lastReconciledAt", "openingBalanceAsOf", "reconciliation"],
   creditCards: ["id", "accountId", "statementDay", "dueDay", "creditLimit"],
   investments: ["id", "name", "kind", "monthlyContribution", "isActive", "createdAt", "currentValue", "valuedAt"],
-  transactions: ["id", "type", "amount", "description", "date", "merchant", "accountId", "toAccountId", "categoryId", "contexts", "investmentId", "goalId", "isRefund", "reversesTransactionId", "notes", "recurringId", "source", "createdAt", "updatedAt"],
+  transactions: ["id", "type", "amount", "description", "date", "merchant", "accountId", "toAccountId", "categoryId", "contexts", "investmentId", "goalId", "isRefund", "reversesTransactionId", "notes", "recurringId", "source", "createdAt", "updatedAt", "timing", "enrichment"],
 };
 
 function validateRow(collection: Collection, input: unknown) {
@@ -65,6 +65,16 @@ function validateRow(collection: Collection, input: unknown) {
       const context = record(value);
       keys(context, ["type", "value"]);
       if (!["PEOPLE", "PURPOSE", "OCCASION", "ATTRIBUTE"].includes(String(context.type)) || !string(context.value)) fail("Invalid transaction tag.");
+    }
+    if (row.timing != null) {
+      const timing = record(row.timing);
+      keys(timing, ["source", "precision", "timezone"]);
+      if (!["user", "bank", "payment", "statement", "unknown"].includes(String(timing.source)) || !["exact", "date"].includes(String(timing.precision)) || timing.timezone !== "Asia/Kolkata") fail("Invalid transaction timing.");
+    }
+    if (row.enrichment != null) {
+      const enrichment = record(row.enrichment);
+      keys(enrichment, ["version", "ruleIds"]);
+      if (enrichment.version !== 1 || !Array.isArray(enrichment.ruleIds) || !enrichment.ruleIds.every(string)) fail("Invalid enrichment evidence.");
     }
     if (row.isRefund !== undefined && typeof row.isRefund !== "boolean") fail("Invalid refund flag.");
     if (row.isRefund && row.type !== "INCOME") fail("Only a credit can be a refund.");

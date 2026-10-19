@@ -9,6 +9,7 @@ import {
 } from "./repository";
 import { SupabaseRepository } from "./supabase-adapter";
 import { isSupabaseConfigured } from "./supabase-client";
+import { validateEnrichmentChange, type EnrichmentChange } from "@/lib/engine/history-enrichment";
 
 /**
  * IndexedDB-backed repository.
@@ -60,6 +61,24 @@ function wrap<T>(operation: string, work: () => Promise<T>): Promise<T> {
 }
 
 export class LocalRepository implements Repository {
+  async commitEnrichment(changes: EnrichmentChange[]): Promise<void> {
+    const db = await connect();
+    const tx = db.transaction(["transactions", "categories"], "readwrite");
+    try {
+      if (new Set(changes.map(c => c.after.id)).size !== changes.length) throw new Error("Duplicate transaction ID.");
+      for (const change of changes) {
+        const current = await tx.objectStore("transactions").get(change.before.id);
+        validateEnrichmentChange(change, current);
+        if (change.after.categoryId && !await tx.objectStore("categories").get(change.after.categoryId)) throw new Error("Category no longer exists.");
+        await tx.objectStore("transactions").put(change.after);
+      }
+      await tx.done;
+    } catch (error) {
+      try { tx.abort(); } catch { /* already aborted */ }
+      await tx.done.catch(() => undefined);
+      throw error;
+    }
+  }
   async load(): Promise<Database | null> {
     return wrap("load", async () => {
       const db = await connect();
@@ -227,6 +246,18 @@ export class MemoryRepository implements Repository {
   }
   async replaceAll(db: Database) {
     this.data = structuredClone(db);
+  }
+  async commitEnrichment(changes: EnrichmentChange[]): Promise<void> {
+    if (!this.data) throw new Error("Your data could not be loaded.");
+    if (new Set(changes.map(c => c.after.id)).size !== changes.length) throw new Error("Duplicate transaction ID.");
+    const next = structuredClone(this.data);
+    for (const change of changes) {
+      const index = next.transactions.findIndex(t => t.id === change.before.id);
+      validateEnrichmentChange(change, next.transactions[index]);
+      if (!next.categories.some(c => c.id === change.after.categoryId)) throw new Error("Category is missing.");
+      next.transactions[index] = structuredClone(change.after);
+    }
+    this.data = next;
   }
   async clear() {
     this.data = null;

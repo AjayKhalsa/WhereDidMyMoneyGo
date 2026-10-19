@@ -4,6 +4,7 @@ import type {
   Account,
   ClassificationRule,
   CreditCardDetail,
+  Database,
   Goal,
   IncomeSource,
   Investment,
@@ -17,6 +18,8 @@ import type {
   UserProfile,
 } from "@/lib/domain/types";
 import { learnFromEntry } from "@/lib/engine/learning";
+import { factualTimeContexts, timingFor, UNKNOWN_TIMING } from "@/lib/domain/transaction-time";
+import { validateEnrichmentChange, type EnrichmentChange } from "@/lib/engine/history-enrichment";
 import { getRepository } from "./local-adapter";
 import { bankReference, possibleExistingTransactions, sourceDigest, type SourceObservation, type StatementImportResult } from "@/lib/import/identity";
 import { createId } from "@/lib/utils";
@@ -55,6 +58,7 @@ export interface TransactionDraft {
   reversesTransactionId?: string;
   notes?: string;
   source?: Transaction["source"];
+  timing?: Transaction["timing"];
 }
 
 /**
@@ -74,12 +78,9 @@ function materialise(
   const authored = draft.contexts.filter(
     (c) => c.value !== "weekend" && c.value !== "late-night",
   );
-  // Bank statements give a date, never a real time — an imported row's
-  // timestamp defaults to local midnight, which would otherwise derive a
-  // spurious "late night" on every single import. Weekend is at least
-  // derived from a real calendar date, but without a real time backing it
-  // up either, imports skip both rather than guess.
-  const derived = source === "imported" ? [] : derivedContexts(iso);
+  // A date-only import or logging clock cannot establish transaction time.
+  const timing = draft.timing ?? (existing ? timingFor(existing) : UNKNOWN_TIMING);
+  const derived = factualTimeContexts({ date: iso, timing, notes: draft.notes });
   const contexts = normaliseContexts([...authored, ...derived]);
 
   // Only expenses carry a category; a card payment has no "category". INCOME
@@ -94,6 +95,8 @@ function materialise(
     amount: Math.max(0, Math.round(draft.amount)),
     description: draft.description.trim(),
     date: iso,
+    timing,
+    enrichment: existing?.enrichment,
     merchant: draft.merchant?.trim() || undefined,
     accountId: draft.accountId,
     toAccountId: draft.type === "TRANSFER" ? draft.toAccountId : undefined,
@@ -127,6 +130,9 @@ export async function addTransaction(
   options: SaveOptions = {},
 ): Promise<Transaction> {
   const transaction = materialise(draft);
+  if (options.matchedRuleId && !options.wasCorrected) {
+    transaction.enrichment = { version: 1, ruleIds: [options.matchedRuleId] };
+  }
   const rules: ClassificationRule[] = [];
 
   // Only expenses teach the classifier anything useful.
@@ -615,7 +621,17 @@ export async function deleteRecurring(id: string): Promise<void> {
 }
 
 export async function saveRule(rule: ClassificationRule): Promise<void> {
-  await putRow("rules", rule.learningEvidence ? {...rule,confidence:0.95,learningEvidence:{...rule.learningEvidence,source:"manual-correction",support:1}} : rule);
+  await putRow("rules", rule.learningEvidence ? {...rule,confidence:0.95,learningEvidence:{...rule.learningEvidence,source:"manual-correction",support:rule.conditions ? rule.learningEvidence.support : 1}} : rule);
+}
+
+export async function applyHistoryEnrichment(changes: EnrichmentChange[], backup: (db: Database) => void): Promise<void> {
+  const repo = getRepository();
+  const fresh = await repo.load();
+  if (!fresh) throw new Error("Load your transactions first.");
+  for (const change of changes) validateEnrichmentChange(change, fresh.transactions.find(t => t.id === change.before.id));
+  backup(fresh);
+  await repo.commitEnrichment(changes);
+  await refreshDatabase();
 }
 
 export async function deleteRule(id: string): Promise<void> {

@@ -63,6 +63,7 @@ export function RulesPanel() {
                   {categories.pathOf(rule.categoryId)}
                 </span>
                 <span className="mt-0.5 block truncate text-[12.5px] text-ink-tertiary">
+                  {rule.conditions && `${String(rule.conditions.startHour).padStart(2,"0")}:00–${String(rule.conditions.endHour).padStart(2,"0")}:00 IST · ${rule.conditions.weekdays.map(d => ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d]).join(", ")} · `}
                   Applied {rule.timesApplied}{" "}
                   {pluralise(rule.timesApplied, "time")}
                   {rule.contexts.length > 0 &&
