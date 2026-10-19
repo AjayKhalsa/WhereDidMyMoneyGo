@@ -33,11 +33,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-[100dvh] bg-canvas">
       <DesktopSidebar />
-      <div className="lg:pl-[236px]">
+      <div className="min-w-0 lg:pl-[236px]">
         <main
           id="main"
           className={cn(
-            "mx-auto w-full max-w-[1120px] px-5 sm:px-8",
+            "mx-auto min-w-0 w-full max-w-[1120px] px-5 sm:px-8",
             "pt-6 sm:pt-8",
             // Clears the mobile tab bar *and* the quick-log bar above it.
             "pb-[calc(9.5rem+env(safe-area-inset-bottom,0px))] lg:pb-16",

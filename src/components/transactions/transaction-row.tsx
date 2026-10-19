@@ -79,7 +79,7 @@ export function TransactionRow({
         ? { type: "button" as const, onClick: () => onSelect?.(transaction) }
         : {})}
       className={cn(
-        "flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left",
+        "flex min-w-0 w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left",
         "transition-colors duration-150",
         interactive && "hover:bg-surface-hover active:bg-surface-sunken",
         className,

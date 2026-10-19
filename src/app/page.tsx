@@ -88,9 +88,9 @@ export default function HomePage() {
 
       <MoneySnapshot />
 
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:gap-12">
+      <div className="grid min-w-0 grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:gap-12">
         {/* ---------- Left: where the money went ---------- */}
-        <div className="space-y-10">
+        <div className="min-w-0 space-y-10">
           <Section
             title="Where your money went"
             action={
@@ -159,7 +159,7 @@ export default function HomePage() {
         </div>
 
         {/* ---------- Right: commitments and prompts ---------- */}
-        <div className="space-y-10">
+        <div className="min-w-0 space-y-10">
           {headline && (
             <Section title="Something I noticed">
               <InsightCard

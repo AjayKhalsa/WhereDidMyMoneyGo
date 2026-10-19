@@ -64,7 +64,7 @@ export function TransactionList({
   }
 
   return (
-    <div className={cn("space-y-5", className)}>
+    <div className={cn("min-w-0 space-y-5", className)}>
       {groups.map(([key, rows]) => {
         // Only expenses contribute to the day's spend — a salary landing on
         // the 1st must not read as a ₹1,52,660 day.

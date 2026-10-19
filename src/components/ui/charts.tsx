@@ -54,7 +54,7 @@ export function BarList({
   const max = Math.max(...visible.map((s) => s.amount), 1);
 
   return (
-    <ul className={cn("space-y-0.5", className)}>
+    <ul className={cn("min-w-0 space-y-0.5", className)}>
       {visible.map((slice, index) => {
         const width = Math.max(2, (slice.amount / max) * 100);
         const interactive = Boolean(onSelect);
@@ -77,7 +77,7 @@ export function BarList({
               )}
             >
               <div className="relative z-10 flex items-baseline justify-between gap-3">
-                <span className="truncate text-sm font-medium text-ink">
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
                   {slice.label}
                 </span>
                 <span className="flex shrink-0 items-baseline gap-2">

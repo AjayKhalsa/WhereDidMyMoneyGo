@@ -44,7 +44,9 @@ export function RulesPanel() {
         corrections. Rules always outrank the built-in vocabulary.
       </p>
 
-      <ul className="divide-y divide-line rounded-[var(--radius-card)] border border-line bg-surface">
+      <details className="min-w-0">
+      <summary className="cursor-pointer py-2 text-sm font-medium text-ink-secondary">View and edit learned rules</summary>
+      <ul className="min-w-0 divide-y divide-line rounded-[var(--radius-card)] border border-line bg-surface">
         {rules.map((rule) => (
           <li key={rule.id}>
             <button
@@ -82,6 +84,7 @@ export function RulesPanel() {
           </li>
         ))}
       </ul>
+      </details>
 
       <RuleSheet rule={editing} onClose={() => setEditing(null)} />
     </>
