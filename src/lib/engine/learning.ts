@@ -1,5 +1,5 @@
 import { createId } from "@/lib/utils";
-import { DERIVED_CONTEXT_VALUES } from "@/lib/domain/contexts";
+import { merchantKey } from "./merchant-identity";
 import type {
   ClassificationRule,
   TransactionContext,
@@ -53,13 +53,6 @@ export function deriveRulePattern(description: string): string | null {
   return candidates.reduce((best, t) => (t.length > best.length ? t : best));
 }
 
-/** Contexts worth storing on a rule — timestamp-derived ones are not. */
-function persistableContexts(
-  contexts: TransactionContext[],
-): TransactionContext[] {
-  return contexts.filter((c) => !DERIVED_CONTEXT_VALUES.has(c.value));
-}
-
 export interface LearningInput {
   description: string;
   categoryId: string;
@@ -85,10 +78,16 @@ export function learnFromEntry(
   if (!pattern) return [];
 
   const now = new Date().toISOString();
-  const contexts = persistableContexts(input.contexts);
+  // Who/why and custom labels belong to this purchase. Automatically learning
+  // them would make every later Uber a work trip or every dinner a birthday.
+  // Explicit rule contexts can still be configured in Settings.
+  const contexts: TransactionContext[] = [];
+  const key = merchantKey(input.merchant || input.description);
+  const applicable = existing.filter(r => !r.learningEvidence || r.learningEvidence.merchantKey === key);
   const match =
-    existing.find((r) => r.id === input.matchedRuleId) ??
-    existing.find((r) => r.pattern === pattern);
+    applicable.find((r) => r.id === input.matchedRuleId) ??
+    applicable.find((r) => r.pattern === pattern && r.learningEvidence) ??
+    applicable.find((r) => r.pattern === pattern);
 
   // Nothing learned yet for this word — start a rule only once the user has
   // actually told us something, i.e. on a correction or an explicit save.

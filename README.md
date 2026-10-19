@@ -174,6 +174,20 @@ When it isn't sure it says "Best guess — check this" instead of quietly filing
 
 Context words like "birthday", "work" and "solo" are deliberately never learned as rules — they describe *who and why*, not *what*, and would collide across unrelated purchases.
 
+Automatic learning saves the category, merchant and account, **not personal tags**. One dinner with friends should not make every future dinner a social expense. You can still configure persistent contexts explicitly in Settings → Rules. Existing configured rules are preserved. When a description explicitly names a type in the same category (for example, "Swiggy dinner" after a previous lunch), that wording refines the saved category. A correction to a different category still wins.
+
+### Your own labels
+
+Add labels in the context picker or type them while logging, for example `450 lunch #goa-trip`. Labels are reusable across categories: tag the flight, hotel, meals and cabs with `goa-trip` to see the whole trip. Spaces in picker labels become hyphens; labels support non-Latin names. Search Transactions with `#goa-trip`, or combine labels such as `#goa-trip #friends` to require both. Built-in tags keep their usual meaning; Weekend and Late night still come from the transaction date.
+
+### Exploring spending
+
+Insights → **Explore your spending** breaks the selected pay cycle down by category, expense type, merchant, people, purpose, occasion or labels. Narrow to a category and combine tags to ask questions such as "what did meals with friends cost on this trip?" Every total and breakdown opens its source transactions for review and editing.
+
+The explorer shows purchases, refunds, net spending, purchase count and average purchase size separately. Linked refunds use the original purchase's category, merchant and tags while reducing spending in the cycle the refund arrived. Transfers, investments and balance adjustments are excluded. Tag rows may overlap, but the selection total counts each transaction once. Missing merchants and tags are shown explicitly, with shortcuts to expenses needing categorisation or personal context.
+
+Changes compare with the previous pay cycle. During the live cycle, both periods stop at the same elapsed day (or the previous cycle's end if it was shorter); closed cycles use their full duration. Future-dated entries are excluded from the live view. Counts and average purchase amounts help distinguish buying more often from buying more expensive things. Comparisons describe recorded history, so gaps in imported statements also affect them.
+
 ---
 
 ## Running it

@@ -12,6 +12,7 @@ import {
   makeContext,
 } from "@/lib/domain/contexts";
 import type { Account, ContextType, Person, TransactionContext } from "@/lib/domain/types";
+import { normaliseTag, savedTags } from "@/lib/domain/tags";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { cn } from "@/lib/utils";
 import { SelectableChip } from "@/components/ui/primitives";
@@ -148,6 +149,16 @@ export function ContextPicker({
   categoryId?: string;
   className?: string;
 }) {
+  const { db } = useFinance();
+  const [label, setLabel] = useState("");
+  const reusable = savedTags(db?.transactions ?? []).filter(c => c.type === "ATTRIBUTE" && !contextDefinition(c.value));
+  const customValue = normaliseTag(label);
+  const addLabel = () => {
+    if (!customValue || DERIVED_CONTEXT_VALUES.has(customValue)) return;
+    const context = makeContext(customValue);
+    if (!value.some(c => c.type === context.type && c.value === context.value)) onChange([...value, context]);
+    setLabel("");
+  };
   // Keyed by (type, value): the same value can be selected under two
   // different dimensions at once (e.g. "work" as both Purpose and Who with)
   // and toggling one must never clear the other.
@@ -207,6 +218,19 @@ export function ContextPicker({
           </div>
         </div>
       ))}
+
+      <div className="space-y-2">
+        <p className="text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">Your labels</p>
+        <p className="text-[12px] text-ink-secondary">Track a trip, project or habit, such as goa-trip or home-renovation.</p>
+        <div className="flex gap-2">
+          <TextField aria-label="New expense label" placeholder="Add a label" value={label} maxLength={80} onChange={e => setLabel(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addLabel(); } }} />
+          <button type="button" className="rounded-lg border border-line px-3 text-sm disabled:opacity-40" disabled={!customValue || DERIVED_CONTEXT_VALUES.has(customValue)} onClick={addLabel}>Add</button>
+        </div>
+        {customValue && <p className="text-xs text-ink-tertiary">Label: #{customValue}</p>}
+        <div className="flex flex-wrap gap-1.5">
+          {reusable.filter(c => !selected.has(`${c.type}:${c.value}`)).map(c => <SelectableChip key={c.value} selected={false} onClick={() => toggle(c.value, c.type)}>{contextLabel(c.value)}</SelectableChip>)}
+        </div>
+      </div>
 
       {derived.length > 0 && (
         <p className="text-[12.5px] text-ink-tertiary">

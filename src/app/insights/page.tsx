@@ -9,6 +9,7 @@ import { FinancialScoreCard } from "@/components/insights/financial-score";
 import { InsightCard } from "@/components/insights/insight-card";
 import { InsightDetailSheet } from "@/components/insights/insight-detail-sheet";
 import { LensAnswers } from "@/components/insights/lens-answers";
+import { SpendingExplorer } from "@/components/insights/spending-explorer";
 import { MonthlyRecap } from "@/components/insights/monthly-recap";
 import { AffordabilityCheck } from "@/components/insights/affordability-check";
 import { EmptyState, Section, Skeleton } from "@/components/ui/primitives";
@@ -23,7 +24,7 @@ import { EmptyState, Section, Skeleton } from "@/components/ui/primitives";
  */
 
 export default function InsightsPage() {
-  const { status, insights, totals } = useFinance();
+  const { status, insights, monthRows } = useFinance();
   const [active, setActive] = useState<Insight | null>(null);
 
   if (status === "loading" || status === "idle") {
@@ -54,7 +55,7 @@ export default function InsightsPage() {
         action={<MonthSwitcher />}
       />
 
-      {totals.spent === 0 && insights.length === 0 ? (
+      {!monthRows.some(t => t.type === "EXPENSE" || (t.type === "INCOME" && t.isRefund)) && insights.length === 0 ? (
         <EmptyState
           icon={<Lightbulb className="h-5 w-5" strokeWidth={1.5} />}
           title="Nothing to report yet"
@@ -62,6 +63,10 @@ export default function InsightsPage() {
         />
       ) : (
         <>
+          <Section title="Explore your spending" description="Follow the money by category, merchant, people, purpose or your own labels.">
+            <SpendingExplorer />
+          </Section>
+
           {attention.length > 0 && (
             <Section title="Worth your attention">
               <div className="grid gap-4 sm:grid-cols-2">

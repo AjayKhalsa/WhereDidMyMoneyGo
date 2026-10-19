@@ -137,7 +137,7 @@ describe("learnFromEntry", () => {
     assert.ok((rules[0]?.confidence ?? 0) >= 0.6);
   });
 
-  test("date-derived contexts are never stored on a rule", () => {
+  test("personal and date-derived tags are never automatically stored on a rule", () => {
     // "weekend" is a property of when it happened, not of the merchant —
     // storing it would re-apply it to a Tuesday.
     const [rule] = learnFromEntry(
@@ -151,7 +151,7 @@ describe("learnFromEntry", () => {
     );
     const values = rule?.contexts.map((c) => c.value) ?? [];
     assert.ok(!values.includes("weekend"));
-    assert.ok(values.includes("friends"));
+    assert.ok(!values.includes("friends"), "one grocery trip with friends must not tag every grocery purchase");
   });
 
   test("an existing rule is found by pattern even without a matched id", () => {

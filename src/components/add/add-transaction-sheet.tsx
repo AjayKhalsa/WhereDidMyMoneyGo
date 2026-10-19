@@ -572,6 +572,8 @@ export function AddTransactionSheet({
           />
         )}
 
+        {!editing && draft.type === "EXPENSE" && <p className="text-[12px] text-ink-tertiary">Add #labels to track a trip or project, for example “450 lunch #goa-trip”.</p>}
+
         {/* Quick starters, only while the field is untouched. */}
         <AnimatePresence initial={false}>
           {!editing && !text.trim() && (
