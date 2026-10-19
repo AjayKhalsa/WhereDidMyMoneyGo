@@ -21,7 +21,11 @@ export function LiquidCashStrip() {
   const { db, safeToSpend } = useFinance();
   const [open, setOpen] = useState(false);
 
-  const accounts = (db?.accounts ?? []).filter((a) => a.isActive);
+  // Investment accounts identify the origin of redemptions. Their transfer
+  // flow totals are not cash balances or portfolio valuations.
+  const accounts = (db?.accounts ?? []).filter(
+    (a) => a.isActive && a.type !== "INVESTMENT",
+  );
   const transactions = db?.transactions ?? [];
   const liquidAccounts = accounts.filter(
     (a) => a.type === "BANK" || a.type === "CASH",

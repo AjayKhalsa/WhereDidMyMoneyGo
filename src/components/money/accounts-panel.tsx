@@ -48,6 +48,7 @@ export function AccountsPanel() {
   const { db } = useFinance();
   const [editing, setEditing] = useState<Account | null>(null);
   const [creating, setCreating] = useState(false);
+  const [showInvestmentAccounts, setShowInvestmentAccounts] = useState(false);
   // Bumped on every "Add account" click so AccountSheet remounts with fresh
   // state — its own lastId tracking only catches switching between two
   // *existing* accounts, not two consecutive new-account sessions (both
@@ -55,7 +56,10 @@ export function AccountsPanel() {
   // from one new account into the next.
   const [creationNonce, setCreationNonce] = useState(0);
 
-  const accounts = db?.accounts ?? [];
+  const hasInvestmentAccounts = db?.accounts.some((a) => a.type === "INVESTMENT");
+  const accounts = (db?.accounts ?? []).filter(
+    (a) => showInvestmentAccounts || a.type !== "INVESTMENT",
+  );
   const transactions = db?.transactions ?? [];
 
   return (
@@ -116,6 +120,10 @@ export function AccountsPanel() {
           );
         })}
       </div>
+
+      {hasInvestmentAccounts && <Button variant="quiet" size="sm" onClick={() => setShowInvestmentAccounts((show) => !show)}>
+        {showInvestmentAccounts ? "Hide investment transfer accounts" : "Show investment transfer accounts"}
+      </Button>}
 
       <Button
         size="sm"
