@@ -74,6 +74,9 @@ export function learnFromEntry(
   input: LearningInput,
   existing: ClassificationRule[],
 ): ClassificationRule[] {
+  // Time-scoped rules are explicitly approved in Settings. An accepted match
+  // must not teach an unconditional rule or strip its conditions/personal tags.
+  if (existing.some(r => r.id === input.matchedRuleId && r.conditions)) return [];
   const pattern = deriveRulePattern(input.description);
   if (!pattern) return [];
 
@@ -83,7 +86,7 @@ export function learnFromEntry(
   // Explicit rule contexts can still be configured in Settings.
   const contexts: TransactionContext[] = [];
   const key = merchantKey(input.merchant || input.description);
-  const applicable = existing.filter(r => !r.learningEvidence || r.learningEvidence.merchantKey === key);
+  const applicable = existing.filter(r => !r.conditions && (!r.learningEvidence || r.learningEvidence.merchantKey === key));
   const match =
     applicable.find((r) => r.id === input.matchedRuleId) ??
     applicable.find((r) => r.pattern === pattern && r.learningEvidence) ??

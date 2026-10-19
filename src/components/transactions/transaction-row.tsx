@@ -6,7 +6,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { contextLabel } from "@/lib/domain/contexts";
-import { formatTime } from "@/lib/domain/dates";
+import { timeLabel } from "@/lib/domain/transaction-time";
 import type { Transaction } from "@/lib/domain/types";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { cn } from "@/lib/utils";
@@ -112,7 +112,7 @@ export function TransactionRow({
           {showTime && (
             <>
               {account && transaction.type !== "TRANSFER" && <span>·</span>}
-              <span className="shrink-0 tnum">{formatTime(transaction.date)}</span>
+              <span className="shrink-0 tnum">{timeLabel(transaction)}</span>
             </>
           )}
         </span>

@@ -1,3 +1,4 @@
+import { actualTransactionTime } from "@/lib/domain/transaction-time";
 import { groupIdOf, UNCATEGORISED_ID } from "@/lib/domain/categories";
 import {
   addMonths,
@@ -412,8 +413,9 @@ export function timeBandOf(date: string | Date): TimeBand {
 
 export function spendByTimeOfDay(
   transactions: Transaction[],
-): Record<TimeBand, Paise> {
-  const out: Record<TimeBand, Paise> = {
+): Record<TimeBand | "unknown", Paise> {
+  const out: Record<TimeBand | "unknown", Paise> = {
+    unknown: 0,
     morning: 0,
     afternoon: 0,
     evening: 0,
@@ -421,7 +423,8 @@ export function spendByTimeOfDay(
   };
   for (const t of transactions) {
     if (!isExpense(t)) continue;
-    out[timeBandOf(t.date)] += t.amount;
+    const time = actualTransactionTime(t);
+    out[time ? timeBandOf(time) : "unknown"] += t.amount;
   }
   return out;
 }
@@ -432,8 +435,10 @@ export function shareAfterHour(transactions: Transaction[], hour: number): numbe
   let all = 0;
   for (const t of transactions) {
     if (!isExpense(t)) continue;
+    const time = actualTransactionTime(t);
+    if (!time) continue;
     all += t.amount;
-    if (new Date(t.date).getHours() >= hour) after += t.amount;
+    if (Number(time.slice(11,13)) >= hour) after += t.amount;
   }
   return all > 0 ? (after / all) * 100 : 0;
 }

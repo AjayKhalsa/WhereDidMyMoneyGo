@@ -1,6 +1,7 @@
 import type { Database, TransactionContext, UserProfile } from "@/lib/domain/types";
 import { getSupabaseBrowserClient } from "./supabase-client";
 import type { ReconciliationBundle } from "@/lib/import/reconciliation";
+import type { EnrichmentChange } from "@/lib/engine/history-enrichment";
 import type { StatementImportEntry, StatementImportResult } from "@/lib/import/identity";
 import {
   RepositoryError,
@@ -113,6 +114,16 @@ export class SupabaseRepository implements Repository {
     });
     assertNoError("statementImport", error);
     return data as StatementImportResult;
+  }
+
+  async commitEnrichment(changes: EnrichmentChange[]): Promise<void> {
+    await this.requireUserId();
+    const { error } = await this.client.rpc("commit_transaction_enrichment", { p_changes: changes.map(c => ({
+      before: toRow(c.before as unknown as Record<string, unknown>),
+      after: toRow(c.after as unknown as Record<string, unknown>),
+      beforeContexts: c.before.contexts, afterContexts: c.after.contexts,
+    })) });
+    assertNoError("enrichment", error);
   }
 
   async commitReconciliation(bundle: ReconciliationBundle): Promise<void> {

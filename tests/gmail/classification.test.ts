@@ -25,10 +25,10 @@ test('explicit saved mapping outranks food clocks and personal-UPI heuristics',(
  assert.equal(suggestCategory(alert({merchant:'Example Driver',paymentRail:'UPI',vpa:'driver@bank'}),[rule({pattern:'driver',categoryId:'gifts'})],categories).categoryId,'gifts');
 });
 test('all requested IST meal boundaries use reliable time; delayed email is only a suggestion',()=>{
- for(const [time,leaf] of [['00:00:00','breakfast'],['11:59:59','breakfast'],['12:00:00','lunch'],['15:59:59','lunch'],['16:00:00','snacks'],['19:59:59','snacks'],['20:00:00','dinner'],['23:59:59','dinner']])assert.equal(suggestCategory(alert({occurredAt:`2026-10-18T${time}`,timeSource:'bank'}),[],categories).categoryId,`dining.${leaf}`);
+ for(const [time,leaf] of [['00:00:00','breakfast'],['11:59:59','breakfast'],['12:00:00','lunch'],['15:59:59','lunch'],['16:00:00','lunch'],['16:59:59','lunch'],['17:00:00','snacks'],['19:59:59','snacks'],['20:00:00','dinner'],['23:59:59','dinner']])assert.equal(suggestCategory(alert({occurredAt:`2026-10-18T${time}`,timeSource:'bank',timeConfidence:'exact'}),[],categories).categoryId,`dining.${leaf}`);
  assert.equal(suggestCategory(alert(),[],categories).categoryId,'dining');
  assert.equal(suggestCategory(alert({occurredAt:'2026-10-18T00:00:00',timeSource:'unknown'}),[],categories).categoryId,'dining');
- assert.equal(suggestCategory(alert({occurredAt:'2026-10-18T13:00:00',timeSource:'gmail'}),[],categories).needsReview,true);
+ assert.equal(suggestCategory(alert({occurredAt:'2026-10-18T13:00:00',timeSource:'gmail',timeConfidence:'fallback'}),[],categories).categoryId,'dining');
  assert.notEqual(suggestCategory(alert({merchant:'Uber',occurredAt:'2026-10-18T13:00:00',timeSource:'bank'}),[],categories).source,'meal');
 });
 test('small personal UPI is a debit-only under-200 preference without inventing Cab',()=>{

@@ -48,9 +48,9 @@ before(async () => {
   await db.query("insert into transactions select * from jsonb_populate_record(null::transactions,$1)",[JSON.stringify({...tx("manual-kept",20000,{description:"My dinner",category_id:"gifts",notes:"Keep my note; reference 123456789012"}),user_id:user})]);
   await db.query("insert into transaction_contexts values('manual-kept',$1,'PEOPLE','work')",[user]);
   await db.query("insert into gmail_messages(user_id,message_id,status,candidate,transaction_id) values($1,'orphan','logged',$2,'deleted-ledger-id'),($1,'dismissed','ignored',$3,null)",[user,{accountId:"bank",direction:"debit",date:"2026-10-12",amount:76500,reference:"777777777777"},{accountId:"bank",direction:"debit",date:"2026-10-12",amount:88800,reference:"888888888888"}]);
-  const before = (await db.query<{j:unknown}>("select jsonb_agg(to_jsonb(t) order by id) j from transactions t")).rows[0]!.j;
+  const before = (await db.query<{j:unknown}>("select jsonb_agg(jsonb_strip_nulls(to_jsonb(t)) order by id) j from transactions t")).rows[0]!.j;
   for (const file of files.filter(f => f >= "0015")) await db.exec(await readFile(new URL(file,dir),"utf8"));
-  assert.deepEqual((await db.query<{j:unknown}>("select jsonb_agg(to_jsonb(t) order by id) j from transactions t")).rows[0]!.j,before,"migration must not mutate financial rows");
+  assert.deepEqual((await db.query<{j:unknown}>("select jsonb_agg(jsonb_strip_nulls(to_jsonb(t)) order by id) j from transactions t")).rows[0]!.j,before,"migration must not mutate financial rows");
 });
 after(async () => { await db?.close(); });
 
@@ -153,4 +153,23 @@ test("stale manual contexts and descriptions abort reconciliation before overwri
   await db.query("insert into transaction_contexts values('rp',$1,'PEOPLE','family')",[user]);
   await assert.rejects(reconcile(changes,[{accountId:"rc",asOf:"2026-10-18",balance:600}]),/changed since/);
   assert.equal((await db.query<{description:string}>("select description from transactions where id='rp'")).rows[0]!.description,"Bank narration");
+});
+
+test("historical enrichment is owner scoped, atomic, metadata only and replay safe", async()=>{
+  await db.query("insert into categories(id,user_id,name) values('dining.dinner',$1,'Dinner')",[user]);
+  const before=tx('enrichment-one'), second=tx('enrichment-two');
+  for(const row of [before,second]) await db.query("insert into transactions select * from jsonb_populate_record(null::transactions,$1)",[JSON.stringify({...row,user_id:user})]);
+  const change=(row: ReturnType<typeof tx>)=>({before:row,after:{...row,date:'2026-10-12T21:00:00',category_id:'dining.dinner',timing:{source:'bank',precision:'exact',timezone:'Asia/Kolkata'},enrichment:{version:1,ruleIds:['meal-time-v1']}},beforeContexts:[],afterContexts:[{type:'PEOPLE',value:'family'}]});
+  const one=change(before),two=change(second);
+  const commit=(changes: unknown[],who=user)=>asUser(()=>db.query("select commit_transaction_enrichment($1)",[JSON.stringify(changes)]),who);
+  await assert.rejects(commit([one],other),/missing or not owned/);
+  await assert.rejects(commit([{...one,after:{...one.after,amount:999}}]),/financial/);
+  await assert.rejects(commit([{...one,after:{...one.after,date:'2026-10-13T21:00:00'}}]),/financial/);
+  await assert.rejects(commit([one,{...two,before:{...two.before,description:'stale'},after:{...two.after,description:'stale'}}]),/changed since preview/);
+  assert.equal((await db.query<{category_id:string}>("select category_id from transactions where id=$1",[before.id])).rows[0]!.category_id,'dining');
+  await commit([one,two]);await commit([one,two]);
+  const saved=(await db.query<{amount:number;category_id:string;timing:unknown}>("select amount,category_id,timing from transactions where id=$1",[before.id])).rows[0]!;
+  assert.equal(saved.amount,before.amount);assert.equal(saved.category_id,'dining.dinner');assert.deepEqual(saved.timing,one.after.timing);
+  await db.query("update transaction_contexts set value='friends' where transaction_id=$1",[before.id]);
+  await assert.rejects(commit([one]),/changed since preview/);
 });

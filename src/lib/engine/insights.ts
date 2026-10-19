@@ -1,3 +1,4 @@
+import { actualTransactionTime } from "@/lib/domain/transaction-time";
 import { groupIdOf } from "@/lib/domain/categories";
 import { contextLabel } from "@/lib/domain/contexts";
 import {
@@ -258,11 +259,12 @@ function detectWeekendConcentration(input: InsightInput): Insight[] {
 function detectLateNight(input: InsightInput): Insight[] {
   const { transactions, month, cycleStartDay } = input;
   const thisMonth = monthTransactions(transactions, month, cycleStartDay).filter(isExpense);
-  if (thisMonth.length < 10) return [];
-  const share = shareAfterHour(thisMonth, 20);
+  const timed = thisMonth.filter(t => actualTransactionTime(t));
+  if (timed.length < 10) return [];
+  const share = shareAfterHour(timed, 20);
   if (share < 35) return [];
 
-  const rows = thisMonth.filter((t) => new Date(t.date).getHours() >= 20);
+  const rows = timed.filter(t => Number(actualTransactionTime(t)!.slice(11,13)) >= 20);
   const amount = total(rows);
   if (amount < MIN_MEANINGFUL_AMOUNT) return [];
 
@@ -272,9 +274,9 @@ function detectLateNight(input: InsightInput): Insight[] {
       kind: "late-night",
       tone: "neutral",
       eyebrow: "Pattern",
-      title: `${Math.round(share)}% of your spending happens after 8 PM`,
+      title: `${Math.round(share)}% of spending with a known time happens after 8 PM`,
       amount,
-      body: `${formatMoney(amount)} across ${rows.length} evening ${rows.length === 1 ? "transaction" : "transactions"}. Late decisions tend to be looser ones.`,
+      body: `${formatMoney(amount)} across ${rows.length} evening ${rows.length === 1 ? "transaction" : "transactions"}. ${timed.length} expenses have verified times; ${thisMonth.length - timed.length} have unknown times.`,
       transactions: rows,
       priority: 40,
       action: "See evening spending",

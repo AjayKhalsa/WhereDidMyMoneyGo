@@ -1,6 +1,8 @@
 import { parseAmountInput } from "@/lib/domain/money";
 import type { Account, Paise, TransactionType } from "@/lib/domain/types";
 import { parseFlexibleDMYDate } from "@/lib/import/statement-row";
+import { alertTime } from "@/lib/gmail/alert-time";
+import type { TransactionTiming } from "@/lib/domain/types";
 
 /**
  * Reading a bank transaction SMS.
@@ -91,6 +93,8 @@ export interface BankSmsRead {
   merchant?: string;
   /** ISO date taken from the message, not today. */
   date?: string;
+  occurredAt?: string;
+  timing?: TransactionTiming;
   /** Resolved against `Account.hint` when the last four digits match one. */
   accountId?: string;
   isRefund?: boolean;
@@ -185,6 +189,7 @@ export function parseBankSms(
   // --- Date ---------------------------------------------------------------
   const rawDate = DATE.exec(text)?.[1];
   const date = rawDate ? (parseFlexibleDMYDate(rawDate) ?? undefined) : undefined;
+  const time = date && rawDate ? alertTime(text, rawDate, date) : undefined;
   if (date) reasons.push(`Dated ${rawDate} in the message`);
 
   // --- Account ------------------------------------------------------------
@@ -196,6 +201,8 @@ export function parseBankSms(
     type,
     merchant,
     date,
+    occurredAt: time?.timeConfidence === "exact" ? time.occurredAt : undefined,
+    timing: time?.timeConfidence === "exact" ? { source: time.timeSource === "payment" ? "payment" : "bank", precision: "exact", timezone: "Asia/Kolkata" } : undefined,
     accountId: account?.id,
     isRefund: isRefund || undefined,
     reasons,

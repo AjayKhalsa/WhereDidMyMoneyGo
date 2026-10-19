@@ -14,6 +14,7 @@ import type {
   UserProfile,
 } from "@/lib/domain/types";
 import type { ReconciliationBundle } from "@/lib/import/reconciliation";
+import type { EnrichmentChange } from "@/lib/engine/history-enrichment";
 import type { StatementImportEntry, StatementImportResult } from "@/lib/import/identity";
 
 /**
@@ -59,6 +60,7 @@ export const COLLECTION_NAMES: CollectionName[] = [
 ];
 
 export interface Repository {
+  commitEnrichment(changes: EnrichmentChange[]): Promise<void>;
   /** Cloud financial writes compare/match and commit atomically. */
   commitStatementImport?(rows: StatementImportEntry[]): Promise<StatementImportResult>;
   commitReconciliation?(bundle: ReconciliationBundle): Promise<void>;

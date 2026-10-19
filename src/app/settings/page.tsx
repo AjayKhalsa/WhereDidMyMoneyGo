@@ -20,6 +20,7 @@ import { ImportStatementSheet } from "@/components/settings/import-statement-she
 import { ReconciliationImport } from "@/components/settings/reconciliation-import";
 import { GmailPanel } from "@/components/settings/gmail-panel";
 import { RulesPanel } from "@/components/settings/rules-panel";
+import { HistoryEnrichment } from "@/components/settings/history-enrichment";
 import { TextField } from "@/components/ui/fields";
 import { Button, Card, Chip, Section, Skeleton } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
@@ -100,6 +101,10 @@ export default function SettingsPage() {
 
       {isSupabaseConfigured && <CloudMigrationPanel />}
       {isSupabaseConfigured && <GmailPanel />}
+
+      <Section title="Transaction times & smarter rules">
+        <HistoryEnrichment />
+      </Section>
 
       <Section title="Your data">
         <DataPanel />

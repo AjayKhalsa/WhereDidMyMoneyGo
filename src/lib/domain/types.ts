@@ -112,6 +112,21 @@ export interface TransactionContext {
   value: string;
 }
 
+export interface TransactionTiming {
+  source: "user" | "bank" | "payment" | "statement" | "unknown";
+  precision: "exact" | "date";
+  timezone: "Asia/Kolkata";
+}
+
+export interface RuleConditions {
+  /** Exact normalized merchant, never a substring match. */
+  merchantKey: string;
+  startHour: number;
+  endHour: number;
+  /** JavaScript weekday numbers, in the transaction's India wall clock. */
+  weekdays: number[];
+}
+
 export interface Transaction {
   id: string;
   type: TransactionType;
@@ -121,6 +136,9 @@ export interface Transaction {
   /** ISO date-time in local wall-clock, e.g. "2026-08-09T20:15:00". */
   date: string;
   merchant?: string;
+  timing?: TransactionTiming;
+  /** Excludes machine-enriched entries from future pattern training. */
+  enrichment?: { version: 1; ruleIds: string[] };
 
   /** Source of funds. For INCOME, the destination. */
   accountId?: string;
@@ -274,6 +292,7 @@ export interface Split {
  */
 export interface ClassificationRule {
   id: string;
+  conditions?: RuleConditions;
   /** Lowercase token or phrase matched against the description. */
   pattern: string;
   categoryId: string;

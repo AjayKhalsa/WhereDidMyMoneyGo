@@ -174,3 +174,10 @@ describe("other shapes", () => {
     assert.equal(read?.amount, rs(120_000));
   });
 });
+
+test("bank SMS retains an exact transaction clock, without inventing time for date-only messages",()=>{
+  const exact=parseBankSms(ZOMATO.replace('On 14/08/26','On 14/08/26 at 20:15:30 IST'))!;
+  assert.equal(exact.occurredAt,'2026-08-14T20:15:30');
+  assert.deepEqual(exact.timing,{source:'bank',precision:'exact',timezone:'Asia/Kolkata'});
+  assert.equal(parseBankSms(ZOMATO)!.occurredAt,undefined);
+});
