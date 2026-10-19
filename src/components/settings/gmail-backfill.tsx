@@ -14,7 +14,7 @@ async function request(method='GET',body?:unknown):Promise<Report>{const r=await
 export function GmailBackfill(){
  const [report,setReport]=useState<Report>(),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const [start,setStart]=useState('2026-07-18'),[end,setEnd]=useState('2026-10-18');
- useEffect(()=>{void request().then(setReport).catch(e=>setError(e.message));},[]);
+ useEffect(()=>{void request().then(r=>{setReport(r);if(r.run){setStart(r.run.start_date);setEnd(r.run.end_date);}}).catch(e=>setError(e.message));},[]);
  async function scan(){setBusy(true);setError('');try{for(let i=0;i<6;i++){const result=await request('POST',report?.run&&report.run.status!=='complete'?{}:{start,end});setReport(result);if(!result.more)break;}}catch(e){setError(e instanceof Error?e.message:'Preview interrupted.');}finally{setBusy(false);}}
  function download(){if(!report)return;const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='gmail-backfill-preview.json';a.click();URL.revokeObjectURL(url);}
  const summary=report?.summary;

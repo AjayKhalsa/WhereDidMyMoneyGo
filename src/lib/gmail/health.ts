@@ -15,7 +15,7 @@ export function gmailHealth(input: {
     stale, pending: input.pending, review: input.review,
     historicalOutdated,
     historicalDiscoveryComplete: !!history && history.status === 'complete' && history.discovery_complete && !historicalOutdated,
-    schedule: 'Daily at 03:00 IST',
+    schedule: 'Nightly, targeting 03:00 IST (timing can vary)',
   };
 }
 

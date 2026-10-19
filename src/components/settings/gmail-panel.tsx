@@ -61,7 +61,7 @@ export function GmailPanel() {
         <div className="text-sm"><p className="font-medium">Connected: {status.connection.email}</p><p className="mt-1 text-ink-tertiary">From {status.connection.start_date} · Last mailbox check: {status.connection.last_synced_at ? new Date(status.connection.last_synced_at).toLocaleString() : "Not yet"}</p></div>
         {status.connection.last_error && <p className="text-sm text-danger">{status.connection.last_error}</p>}
         {status.health && <div className="space-y-1 text-xs text-ink-secondary" aria-label="Gmail sync health">
-          <p>{status.health.schedule}. {status.health.state === 'error' ? 'Sync needs attention.' : status.health.state === 'incomplete' ? 'Mailbox scan unfinished.' : status.health.stale ? 'No recent completed mailbox check.' : 'Recent mailbox discovery finished.'} {status.health.pending} queued · {status.health.review} need review.</p>
+          <p>{status.health.schedule}. {status.health.state === 'error' ? 'Sync needs attention.' : status.health.state === 'incomplete' ? 'Mailbox scan unfinished.' : status.health.stale ? 'No recent completed mailbox check.' : 'Recent incremental discovery finished.'} {status.health.pending} queued · {status.health.review} need review.</p>
           {status.health.historicalOutdated && <p className="text-danger">Historical coverage uses an older bank sender list. Run a new historical preview with an updated date range.</p>}
           <p>Coverage is supported bank alerts only; skipped formats, dismissals and review items are not confirmed ledger imports. A completed scan does not verify account balances.</p>
         </div>}
