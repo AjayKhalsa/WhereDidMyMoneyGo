@@ -10,7 +10,7 @@ export function validWallTime(value: string): boolean {
 /** A clock stored in `date` is not evidence: older imports used midnight and
  * manual entries used the time they were logged. Never use createdAt/email time. */
 export function actualTransactionTime(t: Pick<Transaction, "date" | "timing" | "notes">): string | undefined {
-  if (t.timing) return t.timing.precision === "exact" && t.timing.source !== "unknown" && t.timing.timezone === "Asia/Kolkata" && validWallTime(t.date) ? t.date.slice(0, 19) : undefined;
+  if (t.timing) return t.timing.precision === "exact" && !["unknown", "logged"].includes(t.timing.source) && t.timing.timezone === "Asia/Kolkata" && validWallTime(t.date) ? t.date.slice(0, 19) : undefined;
   const legacy = /; transaction time (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}) Asia\/Kolkata; source (bank|payment)(?:;|$)/.exec(t.notes ?? "");
   return legacy && legacy[1] === t.date.slice(0, 19) && validWallTime(legacy[1]) ? legacy[1] : undefined;
 }
@@ -20,7 +20,13 @@ export function timingFor(t: Pick<Transaction, "date" | "timing" | "notes">): Tr
   return actualTransactionTime(t) ? { source: t.notes?.includes("; source payment") ? "payment" : "bank", precision: "exact", timezone: "Asia/Kolkata" } : UNKNOWN_TIMING;
 }
 
+/** User-preferred fallback for new manual entries, explicitly marked estimated. */
+export function classificationTime(t: Pick<Transaction, "date" | "timing" | "notes">): string | undefined {
+  return actualTransactionTime(t) ?? (t.timing?.source === "logged" && t.timing.precision === "estimated" && t.timing.timezone === "Asia/Kolkata" && validWallTime(t.date) ? t.date.slice(0,19) : undefined);
+}
+
 export function timeLabel(t: Pick<Transaction, "date" | "timing" | "notes">): string {
+  if (t.timing?.source === "logged" && classificationTime(t)) return `${t.date.slice(11,16)} IST · logged time`;
   const time = actualTransactionTime(t);
   return time ? `${time.slice(11, 16)} IST · ${timingFor(t).source === "user" ? "confirmed" : `${timingFor(t).source} time`}` : "Time unknown";
 }
@@ -29,7 +35,7 @@ export function factualTimeContexts(t: Pick<Transaction, "date" | "timing" | "no
   const day = new Date(t.date.slice(0, 10) + "T12:00:00Z").getUTCDay();
   const contexts: TransactionContext[] = [];
   if (day === 0 || day === 6) contexts.push({ type: "OCCASION", value: "weekend" });
-  const actual = actualTransactionTime(t);
+  const actual = classificationTime(t);
   if (actual && (Number(actual.slice(11, 13)) >= 22 || Number(actual.slice(11, 13)) < 4)) contexts.push({ type: "OCCASION", value: "late-night" });
   return contexts;
 }
