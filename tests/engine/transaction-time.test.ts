@@ -77,3 +77,13 @@ test("memory fallback commits batches atomically and rejects stale previews",asy
  await repo.commitEnrichment(changes);await repo.commitEnrichment(changes);
  assert.equal((await repo.load())!.transactions[0]!.categoryId,'dining.dinner');
 });
+
+test("category-only edits retain unverified legacy clocks without trusting them",async()=>{
+ const {dateForTransactionEdit}=await import('@/lib/domain/transaction-time');
+ const original='2026-10-12T16:27:38';
+ assert.equal(dateForTransactionEdit('2026-10-12','',original),original);
+ assert.equal(actualTransactionTime({date:dateForTransactionEdit('2026-10-12','',original),timing:UNKNOWN_TIMING}),undefined);
+ assert.equal(dateForTransactionEdit('2026-10-12','',original,true),'2026-10-12T00:00:00');
+ assert.equal(dateForTransactionEdit('2026-10-13','',original),'2026-10-13T00:00:00');
+ assert.equal(dateForTransactionEdit('2026-10-12','20:00',original),'2026-10-12T20:00:00');
+});

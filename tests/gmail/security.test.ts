@@ -39,3 +39,9 @@ test("a signed-out browser cannot inspect the Gmail connection", async () => {
   assert.equal(response.status, 401);
   assert.equal(response.headers.get("cache-control"), "private, no-store");
 });
+
+test("push registration rejects signed-out and cross-origin requests",async()=>{
+ const {GET,POST}=await import('../../src/app/api/notifications/route');
+ assert.equal((await GET(new NextRequest('https://budget.example/api/notifications'))).status,401);
+ assert.equal((await POST(new NextRequest('https://budget.example/api/notifications',{method:'POST',headers:{origin:'https://evil.example'},body:'{}'}))).status,403);
+});

@@ -60,7 +60,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const id = createId("toast");
       // Cap the stack — three is already more than anyone reads.
       setToasts((current) => [...current.slice(-2), { ...toast, id }]);
-      window.setTimeout(() => dismiss(id), toast.duration ?? DURATION);
+      window.setTimeout(() => dismiss(id), toast.duration ?? (toast.tone === "error" ? 12000 : DURATION));
     },
     [dismiss],
   );
@@ -146,7 +146,7 @@ function ToastViewport({
                 {toast.title}
               </p>
               {toast.detail && (
-                <p className="truncate text-[12.5px] text-ink-secondary">
+                <p className={cn("text-[12.5px] text-ink-secondary", toast.tone === "error" ? "whitespace-normal break-words" : "truncate")}>
                   {toast.detail}
                 </p>
               )}

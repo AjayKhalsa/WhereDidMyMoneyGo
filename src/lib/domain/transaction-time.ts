@@ -37,3 +37,11 @@ export function factualTimeContexts(t: Pick<Transaction, "date" | "timing" | "no
 export function indiaNow(now = new Date()): string {
   return new Date(now.getTime() + 330 * 60000).toISOString().slice(0, 19);
 }
+
+/** Editing a label must not replace an unverified stored clock with midnight.
+ * Preserve the wall-clock for ledger/checkpoint stability, without trusting it. */
+export function dateForTransactionEdit(day: string, clock: string, existingDate?: string, clockEdited = false): string {
+  if (clock) return `${day}T${clock.length === 5 ? clock + ":00" : clock}`;
+  if (!clockEdited && existingDate?.slice(0,10) === day && validWallTime(existingDate)) return existingDate.slice(0,19);
+  return `${day}T00:00:00`;
+}

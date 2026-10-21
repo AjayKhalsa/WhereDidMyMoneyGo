@@ -18,6 +18,7 @@ import { usePrivacy } from "@/lib/hooks/use-privacy";
 import { PageHeader } from "@/components/layout/month-switcher";
 import { ImportStatementSheet } from "@/components/settings/import-statement-sheet";
 import { ReconciliationImport } from "@/components/settings/reconciliation-import";
+import { PushNotifications } from "@/components/settings/push-notifications";
 import { GmailPanel } from "@/components/settings/gmail-panel";
 import { RulesPanel } from "@/components/settings/rules-panel";
 import { HistoryEnrichment } from "@/components/settings/history-enrichment";
@@ -100,7 +101,7 @@ export default function SettingsPage() {
       </Section>
 
       {isSupabaseConfigured && <CloudMigrationPanel />}
-      {isSupabaseConfigured && <GmailPanel />}
+      {isSupabaseConfigured && <><GmailPanel /><PushNotifications /></>}
 
       <Section title="Transaction times & smarter rules">
         <HistoryEnrichment />

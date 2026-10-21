@@ -1,3 +1,4 @@
+import { writeTransactionCompatible } from "./transaction-write";
 import type { Database, TransactionContext, UserProfile } from "@/lib/domain/types";
 import { getSupabaseBrowserClient } from "./supabase-client";
 import type { ReconciliationBundle } from "@/lib/import/reconciliation";
@@ -286,10 +287,16 @@ export class SupabaseRepository implements Repository {
     userId: string,
   ): Promise<void> {
     const table = TABLE_NAMES[collection];
-    const { error } = await this.client
-      .from(table)
-      .upsert({ ...toRow(row as unknown as Record<string, unknown>), user_id: userId });
-    assertNoError(`put:${collection}`, error);
+    const payload = { ...toRow(row as unknown as Record<string, unknown>), user_id: userId };
+    if (collection === "transactions") {
+      await writeTransactionCompatible(payload, async value => {
+        const { error } = await this.client.from(table).upsert(value);
+        return error;
+      });
+    } else {
+      const { error } = await this.client.from(table).upsert(payload);
+      assertNoError(`put:${collection}`, error);
+    }
 
     if (collection === "transactions") {
       const t = row as unknown as Database["transactions"][number];
