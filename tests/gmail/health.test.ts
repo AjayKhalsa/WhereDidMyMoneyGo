@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { gmailHealth, drainMailbox, NIGHTLY_SYNC_UTC } from '../../src/lib/gmail/health';
+import { gmailHealth, drainMailbox, GMAIL_SYNC_UTC } from '../../src/lib/gmail/health';
 import { BANK_SENDERS } from '../../src/lib/gmail/alerts';
 import fs from 'node:fs';
 const now = Date.parse('2026-10-19T06:00:00Z');
@@ -12,6 +12,8 @@ test('health distinguishes discovery, processing, stale checks and review; never
   assert.equal(gmailHealth({ ...current, lastSyncedAt: null }, now).state, 'stale');
   assert.equal(gmailHealth({ ...current, lastSyncedAt: 'invalid' }, now).stale, true);
   assert.equal(gmailHealth({ ...current, lastSyncedAt: new Date(now - 37 * 3600000).toISOString() }, now).stale, true);
+  assert.equal(gmailHealth({ ...current, lastSyncedAt: new Date(now - 13 * 3600000).toISOString() }, now).state, 'stale');
+  assert.equal(gmailHealth({ ...current, lastSyncedAt: new Date(now - 7 * 3600000).toISOString() }, now).state, 'checked');
   assert.equal(gmailHealth({ ...current, error: 'Reconnect Gmail' }, now).state, 'error');
   assert.equal(gmailHealth({ ...current, review: 7 }, now).review, 7);
 });
@@ -33,7 +35,10 @@ test('scheduled continuation totals passes and exposes exhausted work budget as 
   assert.equal(bounded.passes, 1); assert.equal(bounded.complete, false);
   await assert.rejects(drainMailbox(async () => { throw Error('token expired'); }, () => now), /token expired/);
 });
-test('deployed cron schedule is 03:00 IST', () => {
-  assert.equal(JSON.parse(fs.readFileSync('vercel.json', 'utf8')).crons[0].schedule, NIGHTLY_SYNC_UTC);
-  assert.equal(NIGHTLY_SYNC_UTC, '30 21 * * *');
+test('configured cron schedule runs four times daily in IST', () => {
+  assert.equal(JSON.parse(fs.readFileSync('vercel.json', 'utf8')).crons[0].schedule, GMAIL_SYNC_UTC);
+  assert.equal(GMAIL_SYNC_UTC, '30 3,9,15,21 * * *');
+  const [minute,hours] = GMAIL_SYNC_UTC.split(' ');
+  const localHours = hours!.split(',').map(h => (Number(h) * 60 + Number(minute) + 330) % 1440).sort((a,b)=>a-b);
+  assert.deepEqual(localHours, [180,540,900,1260]);
 });

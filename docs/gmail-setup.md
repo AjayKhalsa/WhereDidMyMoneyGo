@@ -47,14 +47,25 @@ and [verification exceptions](https://developers.google.com/identity/protocols/o
    Resolve unknown account/card matches in the queue. A remembered mapping affects
    future alerts; it never changes historical ledger entries.
 
-The cron checks one connected mailbox daily around 08:00 IST (Hobby scheduling is
-approximate). This is a personal-app implementation, not a multi-tenant scheduler.
-Each invocation queues 25 message IDs and processes a bounded batch. A durable
-cursor and seven-day scan overlap handle pagination and recently delayed mail.
-Daily execution continues a backlog; Sync now catches up sooner. Very late alerts
-beyond the overlap require reconnecting with an earlier start date. If production
-traffic exceeds batch capacity, increase cadence on an appropriate hosting plan
-and monitor the backlog rather than assuming every alert has been processed.
+The cron targets one connected mailbox at **03:00, 09:00, 15:00 and 21:00 IST**
+using UTC expression `30 3,9,15,21 * * *`. It reuses the existing authenticated
+`/api/cron/gmail` pipeline, bounded continuation, lease and deduplication receipts.
+
+**Deployment prerequisite:** Vercel Hobby supports cron only once per day and
+rejects more frequent expressions during deployment. Confirm Pro/Enterprise (or
+another plan supporting this cadence) before merging this frequency change.
+No billing-plan upgrade is performed by the application. If remaining on Hobby,
+retain `30 21 * * *` and the daily schedule/health settings instead. Do not assume
+four scheduled runs are active merely because this configuration exists.
+
+Each invocation durably queues message IDs and drains bounded processing passes.
+A cursor and seven-day overlap handle pagination and recently delayed mail; manual
+Sync now reuses the same import pipeline. An unfinished backlog remains explicitly
+incomplete. With a six-hour cadence, Settings marks the check stale after twelve
+hours without a completed discovery scan. OAuth health, deployment environment
+and successful live invocations still need verification on the actual project.
+
+See https://vercel.com/docs/cron-jobs/usage-and-pricing for the platform limits.
 
 ## Import rules and limitations
 

@@ -1,13 +1,13 @@
 import { BANK_SENDERS } from './alerts';
 
-export const NIGHTLY_SYNC_UTC = '30 21 * * *'; // 03:00 IST
+export const GMAIL_SYNC_UTC = '30 3,9,15,21 * * *'; // 03:00, 09:00, 15:00, 21:00 IST
 export function gmailHealth(input: {
   lastSyncedAt?: string | null; error?: string | null; hasNextPage: boolean;
   pending: number; review: number;
   historical?: { query: string; status: string; discovery_complete: boolean } | null;
 }, now = Date.now()) {
   const last = input.lastSyncedAt ? Date.parse(input.lastSyncedAt) : NaN;
-  const stale = !Number.isFinite(last) || last > now || now - last > 36 * 3600000;
+  const stale = !Number.isFinite(last) || last > now || now - last > 12 * 3600000;
   const history = input.historical;
   const historicalOutdated = !!history && Object.keys(BANK_SENDERS).some(sender => !history.query.includes(`from:${sender}`));
   return {
@@ -15,7 +15,7 @@ export function gmailHealth(input: {
     stale, pending: input.pending, review: input.review,
     historicalOutdated,
     historicalDiscoveryComplete: !!history && history.status === 'complete' && history.discovery_complete && !historicalOutdated,
-    schedule: 'Nightly, targeting 03:00 IST (timing can vary)',
+    schedule: 'Four times daily: 03:00, 09:00, 15:00 and 21:00 IST',
   };
 }
 
