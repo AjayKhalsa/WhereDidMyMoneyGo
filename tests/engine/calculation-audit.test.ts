@@ -108,3 +108,10 @@ test('a future payment never marks a recurring bill paid, while a same-day unkno
  assert.equal(transactionOccurredBy(today,now),true);
  assert.equal(transactionOccurredBy({...today,timing:{source:'bank',precision:'exact',timezone:'Asia/Kolkata'}},now),false);
 });
+
+
+test('an ongoing-cycle month change compares matched elapsed dates, including refunds',()=>{
+ const rows=[expense({amount:rs(20000),date:at('2026-09-10')}),expense({amount:rs(80000),date:at('2026-09-29')}),expense({amount:rs(20000),date:at('2026-10-10')})];
+ const insights=generateInsights({transactions:rows,accounts:[],investments:[],goals:[],month,now,cycleStartDay:1,groupLabel:id=>id});
+ assert.equal(insights.some(i=>i.id==='month-over-month'),false); // Both comparable periods are 20k, not an invented 80% drop.
+});

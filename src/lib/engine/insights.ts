@@ -1,3 +1,4 @@
+import { spendingReport } from "./spending-report";
 import { isSpendingActivity, isCategoryActivity, netSpending, investmentMovement, spendingAttribution } from "./spending";
 import { actualTransactionTime, transactionOccurredBy } from "@/lib/domain/transaction-time";
 import { groupIdOf } from "@/lib/domain/categories";
@@ -487,11 +488,12 @@ function detectGoalProgress(input: InsightInput): Insight[] {
 }
 
 function detectMonthOverMonth(input: InsightInput): Insight[] {
-  const { transactions, month, cycleStartDay } = input;
+  const { transactions, month, cycleStartDay, now } = input;
   const previous = previousMonths(month, 1, cycleStartDay)[0]!;
-  const currentRows = monthTransactions(transactions, month, cycleStartDay).filter(isSpendingActivity);
-  const current = netSpending(currentRows, transactions);
-  const base = netSpending(monthTransactions(transactions, previous, cycleStartDay), transactions);
+  const report = spendingReport(transactions, [], { month, cycleStartDay, now, dimension: "category" });
+  const currentRows = report.current.transactions;
+  const current = report.current.net;
+  const base = report.previous.net;
   if (base < MIN_MEANINGFUL_AMOUNT || current < MIN_MEANINGFUL_AMOUNT) return [];
 
   const change = ((current - base) / base) * 100;
@@ -507,7 +509,7 @@ function detectMonthOverMonth(input: InsightInput): Insight[] {
       eyebrow: "Better than last month",
       title: `Spending is down ${Math.abs(Math.round(change))}%`,
       amount: current,
-      body: `${formatMoney(current)} so far against ${formatMoney(base)} in ${formatMonthLabel(previous, cycleStartDay)}.`,
+      body: `${formatMoney(current)} against ${formatMoney(base)} in ${formatMonthLabel(previous, cycleStartDay)}${report.comparableDays !== null ? `, comparing the first ${report.comparableDays} days or cycle end` : ""}.`,
       transactions: currentRows,
       priority: 58,
       action: "See this month",

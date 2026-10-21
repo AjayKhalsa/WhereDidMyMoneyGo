@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { isCategoryActivity, spendingAttribution, spendingSummary } from "@/lib/engine/spending";
 import { contextLabel } from "@/lib/domain/contexts";
-import { formatMonthLong } from "@/lib/domain/dates";
+import { formatMonthLabel } from "@/lib/domain/dates";
 import { formatMoney, percentOf } from "@/lib/domain/money";
 import type { Transaction } from "@/lib/domain/types";
 import {
@@ -62,7 +62,7 @@ export function MoneyFlowSheet({
   open: boolean;
   onClose: () => void;
 }) {
-  const { monthRows, totals, safeToSpend, categories, month, db } = useFinance();
+  const { monthRows, totals, safeToSpend, categories, month, db, cycleStartDay } = useFinance();
   const [dimension, setDimension] = useState<Dimension>("category");
   const [drill, setDrill] = useState<DrillTarget | null>(null);
 
@@ -145,7 +145,7 @@ export function MoneyFlowSheet({
       description={
         drill
           ? `${drillTransactions.length} ${drillTransactions.length === 1 ? "transaction" : "transactions"} · ${formatMoney(drillSummary.net)}`
-          : formatMonthLong(month)
+          : formatMonthLabel(month, cycleStartDay)
       }
     >
       {drill ? (
