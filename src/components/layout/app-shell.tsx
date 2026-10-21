@@ -165,6 +165,10 @@ function MobileTabBar() {
         {NAV_ITEMS.map((item) => (
           <TabItem key={item.href} item={item} pathname={pathname} />
         ))}
+        <TabItem
+          item={{ href: "/settings", label: "Settings", icon: Settings, purpose: "Preferences, Gmail sync and learned rules" }}
+          pathname={pathname}
+        />
       </ul>
     </nav>
   );
