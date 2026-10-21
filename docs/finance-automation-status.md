@@ -51,3 +51,13 @@ Private evidence and the detailed `finance-automation-state.md` handoff remain e
 The user confirms bank-statement reconciliation was completed in another chat. This supersedes the earlier assumption that they still need to perform initial reconciliation. The underlying artifacts are unavailable here, so preserve existing checkpoints and request only new coverage or a prior report when needed. No repeat financial mutation is authorized by this observation.
 
 A screenshot showed a truncated Supabase `put:transactions` failure; the full production error remains unavailable. See `save-errors-and-notifications.md` for the narrowly scoped missing-column compatibility fix, persistent errors, preserved unverified clocks on category edits, push deployment requirements and the monthly statement reminder. Notification migration 0021 and VAPID credentials are prepared but not applied/configured in production here.
+
+## GitHub Actions scheduler follow-up
+
+The user chose GitHub Actions for frequent checks while retaining one daily Vercel
+job. The new workflow targets 03:17/09:17/15:17/21:17 IST, calling the same secured
+endpoint with bounded retries and explicit backlog completion validation. The
+Vercel multi-run proposal is superseded. No financial behavior or schema is changed.
+See `github-actions-gmail-sync.md`. Repository-secret access returned HTTP 403;
+copying the existing Vercel CRON_SECRET into GitHub and verifying the first run
+remain activation steps, not completed production claims.

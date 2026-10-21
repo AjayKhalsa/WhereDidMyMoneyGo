@@ -1,0 +1,29 @@
+name: Gmail sync
+
+on:
+  schedule:
+    # UTC -> 03:17, 09:17, 15:17, 21:17 IST; offset from Vercel's nightly check.
+    - cron: '47 3,9,15,21 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gmail-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the sync caller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Sync financial email
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          GMAIL_SYNC_URL: ${{ vars.GMAIL_SYNC_URL || 'https://where-did-my-money-go-chi.vercel.app/api/cron/gmail' }}
+        run: python3 scripts/gmail_sync.py
