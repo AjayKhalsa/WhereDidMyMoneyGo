@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { UNCATEGORISED_ID } from "@/lib/domain/categories";
 import { contextLabel } from "@/lib/domain/contexts";
 import { formatFullDate, toDateInputValue } from "@/lib/domain/dates";
-import { actualTransactionTime, indiaNow, timingFor, UNKNOWN_TIMING } from "@/lib/domain/transaction-time";
+import { actualTransactionTime, dateForTransactionEdit, indiaNow, timingFor, UNKNOWN_TIMING } from "@/lib/domain/transaction-time";
 import { timedMealCategory } from "@/lib/engine/time-rules";
 import { formatMoney, formatMoneyPrecise, parseAmountInput } from "@/lib/domain/money";
 import type {
@@ -164,6 +164,7 @@ export function AddTransactionSheet({
 
   const [text, setText] = useState(options.initialText ?? "");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   // Keyed on the direction chosen rather than the live type, so the sheet
   // does not rename itself under you while you are typing into it.
   const preset = DIRECTION_PRESETS[options.initialType ?? "EXPENSE"];
@@ -395,10 +396,11 @@ export function AddTransactionSheet({
   // ---- Persistence --------------------------------------------------------
   async function handleSave() {
     if (!canSave || saving) return;
+    setSaveError("");
     setSaving(true);
 
     const clock = draft.clock ? (draft.clock.length === 5 ? draft.clock + ":00" : draft.clock) : "00:00:00";
-    const when = new Date(`${draft.date}T${clock}`);
+    const when = new Date(dateForTransactionEdit(draft.date, draft.clock, editing?.date, touched.has("clock")));
     const timing = draft.clock ? draft.timing : UNKNOWN_TIMING;
 
     const payload: TransactionDraft = {
@@ -456,6 +458,7 @@ export function AddTransactionSheet({
       }
       onClose();
     } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Please try again.");
       toast.show({
         tone: "error",
         title: "Couldn't save that",
@@ -537,6 +540,7 @@ export function AddTransactionSheet({
       }
     >
       <div className="space-y-5 pt-1">
+        {saveError && <p role="alert" className="rounded-xl border border-danger/30 bg-danger/5 p-3 text-sm text-danger break-words">{saveError}</p>}
         {/* Amount is the loudest thing on the sheet. */}
         <div className="flex min-h-[68px] items-center justify-center pt-1">
           <AnimatePresence mode="popLayout" initial={false}>
@@ -582,9 +586,9 @@ export function AddTransactionSheet({
         {!editing && draft.type === "EXPENSE" && <p className="text-[12px] text-ink-tertiary">Add #labels to track a trip or project, for example “450 lunch #goa-trip”.</p>}
 
         <div className="space-y-2">
-          <div className="flex items-end gap-2">
-            <TextField label="Actual transaction time (IST)" type="time" step="1" value={draft.clock} onChange={e => { patch({ clock: e.target.value, timing: e.target.value ? { source: "user", precision: "exact", timezone: "Asia/Kolkata" } : UNKNOWN_TIMING }); markTouched("clock"); }} />
-            <Button variant="secondary" onClick={() => { const now = indiaNow(); patch({ date: now.slice(0,10), clock: now.slice(11,19), timing: { source: "user", precision: "exact", timezone: "Asia/Kolkata" } }); markTouched("clock"); markTouched("date"); markTouched("clock"); }}>Now</Button>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+            <TextField wrapperClassName="min-w-0" className="min-w-0" label="Actual transaction time (IST)" type="time" step="1" value={draft.clock} onChange={e => { patch({ clock: e.target.value, timing: e.target.value ? { source: "user", precision: "exact", timezone: "Asia/Kolkata" } : UNKNOWN_TIMING }); markTouched("clock"); }} />
+            <Button variant="secondary" onClick={() => { const now = indiaNow(); patch({ date: now.slice(0,10), clock: now.slice(11,19), timing: { source: "user", precision: "exact", timezone: "Asia/Kolkata" } }); markTouched("clock"); markTouched("date"); }}>Now</Button>
           </div>
           <p className="text-[12px] text-ink-tertiary">Use the time on your payment receipt. Leave blank if unknown; logging time and email delivery time are not used for meal rules.</p>
         </div>
