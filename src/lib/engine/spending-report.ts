@@ -1,3 +1,4 @@
+import { spendingAttribution, isSpendingActivity, isCategoryActivity, spendingSummary } from "./spending";
 import { createCategoryLookup } from "@/lib/domain/categories";
 import { contextLabel } from "@/lib/domain/contexts";
 import {
@@ -26,6 +27,8 @@ export interface SpendingFilter {
 export interface SpendingSummary {
   gross: number;
   refunds: number;
+  credits: number;
+  creditCount: number;
   net: number;
   count: number;
   average: number;
@@ -47,24 +50,9 @@ export interface SpendingReport {
   untagged: Transaction[];
 }
 
-function summarise(rows: Transaction[]): SpendingSummary {
-  let gross = 0,
-    refunds = 0,
-    count = 0;
-  for (const t of rows) {
-    if (t.type === "EXPENSE") {
-      gross += t.amount;
-      count++;
-    } else refunds += t.amount;
-  }
-  return {
-    gross,
-    refunds,
-    net: gross - refunds,
-    count,
-    average: count ? Math.round(gross / count) : 0,
-    transactions: rows,
-  };
+function summarise(rows: Transaction[], all: Transaction[]): SpendingSummary {
+  const summary = spendingSummary(rows, all);
+  return { ...summary, average: summary.count ? Math.round(summary.gross / summary.count) : 0, transactions: rows };
 }
 
 /** Each figure retains its source rows. Refunds inherit linked purchase metadata,
@@ -77,25 +65,13 @@ export function spendingReport(
     now: Date;
     cycleStartDay: number;
     dimension: SpendingDimension;
+    /** Categorized cash flow includes explicit same-category credits, not all income. */
+    includeCredits?: boolean;
   },
 ): SpendingReport {
   const lookup = createCategoryLookup(categories);
-  const byId = new Map(transactions.map((t) => [t.id, t]));
-  const metadata = (t: Transaction) => {
-    const original =
-      t.type === "INCOME" && t.isRefund && t.reversesTransactionId
-        ? byId.get(t.reversesTransactionId)
-        : undefined;
-    return original?.type === "EXPENSE" ? original : t;
-  };
-  const eligible = transactions.filter((t) => {
-    if (
-      t.categoryId === "adjustment" ||
-      metadata(t).categoryId === "adjustment"
-    )
-      return false;
-    return t.type === "EXPENSE" || (t.type === "INCOME" && t.isRefund);
-  });
+  const metadata = spendingAttribution(transactions);
+  const eligible = transactions.filter(t => options.includeCredits ? isCategoryActivity(metadata(t)) : isSpendingActivity(metadata(t)));
   const matches = (t: Transaction) => {
     const m = metadata(t);
     if (
@@ -191,8 +167,8 @@ export function spendingReport(
   const hasPrevious = previousPeriod.length > 0;
   const buckets = [...new Set([...current.keys(), ...previous.keys()])]
     .map((id) => {
-      const now = summarise(current.get(id) ?? []),
-        before = summarise(previous.get(id) ?? []);
+      const now = summarise(current.get(id) ?? [], transactions),
+        before = summarise(previous.get(id) ?? [], transactions);
       return {
         id,
         label: labels.get(id)!,
@@ -203,8 +179,8 @@ export function spendingReport(
     })
     .sort((a, b) => b.net - a.net || a.label.localeCompare(b.label));
   return {
-    current: summarise(currentRows),
-    previous: summarise(previousRows),
+    current: summarise(currentRows, transactions),
+    previous: summarise(previousRows, transactions),
     hasPrevious,
     comparableDays,
     buckets,

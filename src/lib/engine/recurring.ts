@@ -1,3 +1,4 @@
+import { transactionOccurredBy } from "@/lib/domain/transaction-time";
 import { clampToMonth, daysBetween, monthKey, type MonthKey } from "@/lib/domain/dates";
 import type { Paise, RecurringTransaction, Transaction } from "@/lib/domain/types";
 import { monthTransactions } from "./analytics";
@@ -111,14 +112,16 @@ export function recurringStatuses(
   now: Date = new Date(),
   cycleStartDay = 1,
 ): RecurringStatus[] {
+  const types = new Map(rules.map(r => [r.id, r.type]));
+  const actualPayments = transactions.filter(t => t.recurringId && types.get(t.recurringId) === t.type && t.categoryId !== "adjustment" && transactionOccurredBy(t, now));
   const paidRuleIds = new Set(
-    monthTransactions(transactions, month, cycleStartDay)
+    monthTransactions(actualPayments, month, cycleStartDay)
       .map((t) => t.recurringId)
       .filter((id): id is string => Boolean(id)),
   );
 
   const lastByRule = new Map<string, Transaction>();
-  for (const t of transactions) {
+  for (const t of actualPayments) {
     if (!t.recurringId) continue;
     const current = lastByRule.get(t.recurringId);
     if (!current || t.date > current.date) lastByRule.set(t.recurringId, t);

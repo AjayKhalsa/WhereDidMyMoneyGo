@@ -1,5 +1,7 @@
 "use client";
 
+import { netSpending, netCategoryOutflow, netInvestment } from "@/lib/engine/spending";
+import { useFinance } from "@/lib/hooks/use-finance";
 import type { Insight } from "@/lib/engine/insights";
 import { useMoneyText, useMaskedProse } from "@/lib/hooks/use-privacy";
 import { Amount, DeltaBadge } from "@/components/ui/amount";
@@ -23,6 +25,9 @@ export function InsightDetailSheet({
   insight: Insight | null;
   onClose: () => void;
 }) {
+  const { db } = useFinance();
+  const rows = insight?.transactions ?? [];
+  const evidenceAmount = insight?.basis === "balance" ? insight.amount ?? 0 : insight?.basis === "investment" ? netInvestment(rows) : insight?.basis === "gross" ? rows.reduce((sum, t) => sum + (t.type === "EXPENSE" ? t.amount : 0), 0) : insight?.basis === "category-flow" ? netCategoryOutflow(rows, db?.transactions ?? rows) : netSpending(rows, db?.transactions ?? rows);
   const prose = useMaskedProse();
   const money = useMoneyText();
   const comparison = insight?.comparison;
@@ -74,7 +79,7 @@ export function InsightDetailSheet({
                   {insight.transactions.length}{" "}
                   {insight.transactions.length === 1 ? "item" : "items"} ·{" "}
                   {money(
-                    insight.transactions.reduce((acc, t) => acc + t.amount, 0),
+                    evidenceAmount,
                   )}
                 </span>
               </header>

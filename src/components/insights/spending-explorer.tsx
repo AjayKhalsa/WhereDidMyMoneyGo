@@ -48,6 +48,7 @@ export function SpendingExplorer() {
         now,
         cycleStartDay,
         dimension,
+        includeCredits: true,
         groupId: groupId || undefined,
         contexts,
       }),
@@ -134,7 +135,7 @@ export function SpendingExplorer() {
       )}
       <div className="rounded-xl border border-line bg-surface p-4">
         <p className="text-[12px] text-ink-secondary">
-          Net spending for this selection
+          Net category outflow for this selection
         </p>
         <button
           type="button"
@@ -147,8 +148,8 @@ export function SpendingExplorer() {
           <Amount value={report.current.net} size="lg" />
         </button>
         <p className="mt-2 text-[12px] text-ink-secondary">
-          {money(report.current.gross)} in purchases −{" "}
-          {money(report.current.refunds)} refunded · {report.current.count}{" "}
+          {money(report.current.gross)} outgoing −{" "}
+          {money(report.current.refunds + report.current.credits)} credits and refunds · {report.current.count}{" "}
           expenses · {money(report.current.average)} average purchase
         </p>
         <p className="mt-2 text-[12px] text-ink-tertiary">
@@ -184,8 +185,8 @@ export function SpendingExplorer() {
                   <span className="block text-sm text-ink">{bucket.label}</span>
                   <span className="text-[12px] text-ink-tertiary">
                     {bucket.count} expenses
-                    {bucket.refunds > 0
-                      ? ` · ${money(bucket.refunds)} refunded`
+                    {bucket.refunds + bucket.credits > 0
+                      ? ` · ${money(bucket.refunds + bucket.credits)} credited/refunded`
                       : ""}
                   </span>
                 </span>
@@ -247,11 +248,12 @@ export function SpendingExplorer() {
         open={Boolean(detail && detail.month === month)}
         onClose={() => setDetail(null)}
         title={detail?.title}
-        description="Tap a transaction to correct its category or add tags."
+        description="Outgoing minus recorded credits and refunds. Tap a transaction to edit it."
         size="lg"
       >
         <TransactionList
           transactions={detailRows}
+          dayTotalBasis="category-flow"
           showTime
           showDayTotals={false}
         />

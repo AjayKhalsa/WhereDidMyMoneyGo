@@ -1,4 +1,6 @@
 "use client";
+import { useFinance } from "@/lib/hooks/use-finance";
+import { netSpending, netCategoryOutflow } from "@/lib/engine/spending";
 
 import { useMemo } from "react";
 import { Receipt } from "lucide-react";
@@ -21,6 +23,7 @@ import { TransactionRow } from "./transaction-row";
 export function TransactionList({
   transactions,
   showDayTotals = true,
+  dayTotalBasis = "spending",
   showTime,
   emptyTitle = "No transactions yet",
   emptyDescription,
@@ -29,12 +32,14 @@ export function TransactionList({
 }: {
   transactions: Transaction[];
   showDayTotals?: boolean;
+  dayTotalBasis?: "spending" | "category-flow";
   showTime?: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
   className?: string;
   onSelect?: (transaction: Transaction) => void;
 }) {
+  const { db } = useFinance();
   const money = useMoneyText();
   const { open } = useAddSheet();
 
@@ -68,9 +73,7 @@ export function TransactionList({
       {groups.map(([key, rows]) => {
         // Only expenses contribute to the day's spend — a salary landing on
         // the 1st must not read as a ₹1,52,660 day.
-        const daySpend = rows
-          .filter((t) => t.type === "EXPENSE")
-          .reduce((acc, t) => acc + t.amount, 0);
+        const daySpend = dayTotalBasis === "category-flow" ? netCategoryOutflow(rows, db?.transactions ?? transactions) : netSpending(rows, db?.transactions ?? transactions);
 
         return (
           <section key={key}>
@@ -78,7 +81,7 @@ export function TransactionList({
               <h3 className="text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">
                 {formatRelativeDay(rows[0]!.date)}
               </h3>
-              {showDayTotals && daySpend > 0 && (
+              {showDayTotals && daySpend !== 0 && (
                 <span className="text-[12px] text-ink-tertiary tnum">
                   {money(daySpend)}
                 </span>

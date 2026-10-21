@@ -56,7 +56,7 @@ export function BarList({
   return (
     <ul className={cn("min-w-0 space-y-0.5", className)}>
       {visible.map((slice, index) => {
-        const width = Math.max(2, (slice.amount / max) * 100);
+        const width = slice.amount > 0 ? Math.max(2, Math.min(100, (slice.amount / max) * 100)) : 0;
         const interactive = Boolean(onSelect);
         const Row = interactive ? "button" : "div";
 

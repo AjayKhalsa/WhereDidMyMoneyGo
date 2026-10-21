@@ -58,7 +58,7 @@ export const LENSES: Lens[] = [
     id: "cabs",
     label: "Cabs",
     question: "How much did I spend on cabs?",
-    categoryIds: ["transport"],
+    categoryIds: ["transport.cab"],
   },
   {
     id: "diet",
@@ -97,10 +97,10 @@ export const LENSES: Lens[] = [
 ];
 
 export function matchesLens(transaction: Transaction, lens: Lens): boolean {
-  if (transaction.type !== "EXPENSE") return false;
+  if (transaction.categoryId === "adjustment" || !(transaction.type === "EXPENSE" || (transaction.type === "INCOME" && transaction.isRefund))) return false;
 
   if (lens.categoryIds && transaction.categoryId) {
-    if (lens.categoryIds.includes(transaction.categoryId)) return true;
+    if (lens.categoryIds.includes(transaction.categoryId) || lens.categoryIds.includes(groupIdOf(transaction.categoryId))) return true;
   }
   if (lens.groupIds && transaction.categoryId) {
     if (lens.groupIds.includes(groupIdOf(transaction.categoryId))) return true;

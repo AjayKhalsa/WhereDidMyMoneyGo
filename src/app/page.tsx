@@ -93,6 +93,7 @@ export default function HomePage() {
         <div className="min-w-0 space-y-10">
           <Section
             title="Where your money went"
+            description="Net category outflows after recorded credits and refunds."
             action={
               groupBreakdown.length > 0 ? (
                 <TextAction onClick={() => setFlowOpen(true)}>

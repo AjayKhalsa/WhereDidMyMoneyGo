@@ -1,4 +1,5 @@
-import { actualTransactionTime } from "@/lib/domain/transaction-time";
+import { isSpendingActivity, isCategoryActivity, netSpending, investmentMovement, spendingAttribution } from "./spending";
+import { actualTransactionTime, transactionOccurredBy } from "@/lib/domain/transaction-time";
 import { groupIdOf } from "@/lib/domain/categories";
 import { contextLabel } from "@/lib/domain/contexts";
 import {
@@ -89,6 +90,7 @@ export interface Insight {
   transactions: Transaction[];
   /** Higher surfaces first. */
   priority: number;
+  basis?: "spending" | "category-flow" | "gross" | "investment" | "balance";
   /** Label for the drill-down action. */
   action?: string;
 }
@@ -102,6 +104,7 @@ export interface InsightInput {
   now: Date;
   cycleStartDay: number;
   groupLabel: (groupId: string) => string;
+  groupFor?: (categoryId: string) => string;
 }
 
 const MIN_MEANINGFUL_AMOUNT = 100_000; // ₹1,000 in paise — below this, who cares
@@ -114,7 +117,9 @@ const MIN_MEANINGFUL_AMOUNT = 100_000; // ₹1,000 in paise — below this, who 
 function detectCategorySpikes(input: InsightInput): Insight[] {
   const { transactions, month, cycleStartDay, groupLabel } = input;
   const thisMonth = monthTransactions(transactions, month, cycleStartDay);
-  const slices = spendByGroup(thisMonth, groupLabel);
+  const groupFor = input.groupFor ?? groupIdOf;
+  const metadata = spendingAttribution(transactions);
+  const slices = spendByGroup(thisMonth, groupLabel, transactions, true, groupFor);
   const out: Insight[] = [];
 
   for (const slice of slices.slice(0, 6)) {
@@ -122,23 +127,24 @@ function detectCategorySpikes(input: InsightInput): Insight[] {
     const comparison = compareToAverage(
       transactions,
       month,
-      (t) => Boolean(t.categoryId) && groupIdOf(t.categoryId!) === slice.id,
+      (t) => Boolean(t.categoryId) && groupFor(t.categoryId!) === slice.id,
       3,
-      cycleStartDay,
+      cycleStartDay, true,
     );
     if (comparison.monthsCounted === 0) continue;
     if (comparison.percentChange === null || comparison.percentChange < 30) continue;
 
     const rows = thisMonth.filter(
-      (t) => isExpense(t) && t.categoryId && groupIdOf(t.categoryId) === slice.id,
+      (t) => isCategoryActivity(metadata(t)) && metadata(t).categoryId && groupFor(metadata(t).categoryId!) === slice.id,
     );
 
     out.push({
       id: `category-spike:${slice.id}`,
+      basis: "category-flow",
       kind: "category-spike",
       tone: comparison.percentChange >= 60 ? "alert" : "warning",
       eyebrow: comparison.percentChange >= 60 ? "Money leak detected" : "Worth a look",
-      title: `${slice.label} spending is up ${Math.round(comparison.percentChange)}%`,
+      title: `${slice.label} net outflow is up ${Math.round(comparison.percentChange)}%`,
       amount: comparison.current,
       body:
         `${formatMoney(comparison.current)} this month against a ${comparison.monthsCounted}-month average of ` +
@@ -173,9 +179,8 @@ function detectLensSpikes(input: InsightInput): Insight[] {
     if (comparison.monthsCounted === 0) continue;
     if (comparison.percentChange === null || comparison.percentChange < 40) continue;
 
-    const rows = monthTransactions(transactions, month, cycleStartDay).filter((t) =>
-      matchesLens(t, lens),
-    );
+    const metadata = spendingAttribution(transactions);
+    const rows = monthTransactions(transactions, month, cycleStartDay).filter(t => matchesLens(metadata(t), lens));
     const multiple = comparison.average > 0 ? comparison.current / comparison.average : 0;
 
     out.push({
@@ -203,24 +208,27 @@ function detectLensSpikes(input: InsightInput): Insight[] {
 function detectBiggestLeak(input: InsightInput): Insight[] {
   const { transactions, month, cycleStartDay, groupLabel } = input;
   const thisMonth = monthTransactions(transactions, month, cycleStartDay);
-  const slices = spendByGroup(thisMonth, groupLabel);
+  const groupFor = input.groupFor ?? groupIdOf;
+  const metadata = spendingAttribution(transactions);
+  const slices = spendByGroup(thisMonth, groupLabel, transactions, true, groupFor);
   const top = slices[0];
   if (!top || top.amount < MIN_MEANINGFUL_AMOUNT) return [];
   if (top.share < 22) return []; // nothing is dominating; not a story
 
   const rows = thisMonth.filter(
-    (t) => isExpense(t) && t.categoryId && groupIdOf(t.categoryId) === top.id,
+    (t) => isCategoryActivity(metadata(t)) && metadata(t).categoryId && groupFor(metadata(t).categoryId!) === top.id,
   );
 
   return [
     {
       id: `leak:${top.id}`,
+      basis: "category-flow",
       kind: "category-spike",
       tone: "neutral",
-      eyebrow: "Biggest money leak",
+      eyebrow: "Largest net category outflow",
       title: top.label,
       amount: top.amount,
-      body: `${formatMoney(top.amount)} this month — ${Math.round(top.share)}% of everything you spent, over ${rows.length} ${rows.length === 1 ? "transaction" : "transactions"}.`,
+      body: `${formatMoney(top.amount)} net outgoing after recorded credits and refunds, across ${rows.length} ${rows.length === 1 ? "transaction" : "transactions"}.`,
       transactions: rows,
       priority: 55,
       action: "See transactions",
@@ -243,15 +251,16 @@ function detectWeekendConcentration(input: InsightInput): Insight[] {
   return [
     {
       id: "weekend-concentration",
+      basis: "gross",
       kind: "weekend-concentration",
       tone: "neutral",
       eyebrow: "Pattern",
-      title: `${Math.round(split.weekendShare)}% of your spending happens at weekends`,
+      title: `${Math.round(split.weekendShare)}% of your purchases happen at weekends`,
       amount: split.weekend,
       body: `${formatMoney(split.weekend)} across Saturdays and Sundays, against ${formatMoney(split.weekday)} on the other five days.`,
       transactions: rows,
       priority: 45,
-      action: "See weekend spending",
+      action: "See weekend purchases",
     },
   ];
 }
@@ -271,10 +280,11 @@ function detectLateNight(input: InsightInput): Insight[] {
   return [
     {
       id: "late-night",
+      basis: "gross",
       kind: "late-night",
       tone: "neutral",
       eyebrow: "Pattern",
-      title: `${Math.round(share)}% of spending with a known time happens after 8 PM`,
+      title: `${Math.round(share)}% of purchases with a known time happen after 8 PM`,
       amount,
       body: `${formatMoney(amount)} across ${rows.length} evening ${rows.length === 1 ? "transaction" : "transactions"}. ${timed.length} expenses have verified times; ${thisMonth.length - timed.length} have unknown times.`,
       transactions: rows,
@@ -347,19 +357,20 @@ function detectInvestmentRate(input: InsightInput): Insight[] {
   if (totals.income <= 0 || totals.invested <= 0) return [];
   const rate = investmentRate(totals);
   const rows = monthTransactions(transactions, month, cycleStartDay).filter(
-    (t) => t.type === "INVESTMENT",
+    (t) => investmentMovement(t) !== 0,
   );
 
   if (rate >= 25) {
     return [
       {
         id: "investment-rate",
+        basis: "investment",
         kind: "investment-rate",
         tone: "positive",
         eyebrow: "You're doing well",
-        title: `${formatMoney(totals.invested)} invested this month`,
+        title: `${formatMoney(totals.invested)} net invested this month`,
         amount: totals.invested,
-        body: `That's ${rate.toFixed(1)}% of your income going into long-term assets, across ${rows.length} ${rows.length === 1 ? "contribution" : "contributions"}. Well above the 20% most people aim for.`,
+        body: `That's ${rate.toFixed(1)}% of your income going into long-term assets, across ${rows.length} investment ${rows.length === 1 ? "movement" : "movements"}. Well above the 20% most people aim for.`,
         transactions: rows,
         priority: 68,
         action: "See contributions",
@@ -370,6 +381,7 @@ function detectInvestmentRate(input: InsightInput): Insight[] {
     return [
       {
         id: "investment-rate-low",
+        basis: "investment",
         kind: "investment-rate",
         tone: "warning",
         eyebrow: "Worth a look",
@@ -397,23 +409,22 @@ function detectCreditCommitment(input: InsightInput): Insight[] {
   if (outstanding < MIN_MEANINGFUL_AMOUNT) return [];
 
   const totals = monthTotals(transactions, month, cycleStartDay);
-  const share = percentOf(outstanding, Math.max(1, totals.income));
-  if (share < 12) return [];
+  const share = totals.income > 0 ? percentOf(outstanding, totals.income) : null;
+  if (share !== null && share < 12) return [];
 
   const cardIds = new Set(cards.map((c) => c.id));
-  const rows = monthTransactions(transactions, month, cycleStartDay).filter(
-    (t) => isExpense(t) && t.accountId && cardIds.has(t.accountId),
-  );
+  const rows = transactions.filter(t => (t.accountId && cardIds.has(t.accountId)) || (t.toAccountId && cardIds.has(t.toAccountId)));
 
   return [
     {
       id: "credit-commitment",
+      basis: "balance",
       kind: "credit-commitment",
       tone: "warning",
       eyebrow: "Already committed",
       title: `${formatMoney(outstanding)} is owed on your cards`,
       amount: outstanding,
-      body: `That's ${Math.round(share)}% of a month's income. You've already spent this money — it just hasn't left your account yet.`,
+      body: share === null ? "Current recorded card liabilities after payments and credits. No income is recorded for this cycle, so an income percentage is unavailable." : `That's ${Math.round(share)}% of this cycle's recorded income, after card payments and credits.`,
       transactions: rows,
       priority: 64,
       action: "See card spending",
@@ -427,13 +438,13 @@ function detectVelocity(input: InsightInput): Insight[] {
   if (velocity.daysElapsed < 5) return [];
 
   const history = previousMonths(month, 3, cycleStartDay)
-    .map((m) => total(monthTransactions(transactions, m, cycleStartDay).filter(isExpense)))
+    .map((m) => netSpending(monthTransactions(transactions, m, cycleStartDay), transactions))
     .filter((v) => v > 0);
   if (history.length === 0) return [];
   const average = history.reduce((a, b) => a + b, 0) / history.length;
   if (velocity.projectedMonthEnd <= average * 1.15) return [];
 
-  const rows = monthTransactions(transactions, month, cycleStartDay).filter(isExpense);
+  const rows = monthTransactions(transactions, month, cycleStartDay).filter(isSpendingActivity);
   const over = velocity.projectedMonthEnd - average;
 
   return [
@@ -478,9 +489,9 @@ function detectGoalProgress(input: InsightInput): Insight[] {
 function detectMonthOverMonth(input: InsightInput): Insight[] {
   const { transactions, month, cycleStartDay } = input;
   const previous = previousMonths(month, 1, cycleStartDay)[0]!;
-  const currentRows = monthTransactions(transactions, month, cycleStartDay).filter(isExpense);
-  const current = total(currentRows);
-  const base = total(monthTransactions(transactions, previous, cycleStartDay).filter(isExpense));
+  const currentRows = monthTransactions(transactions, month, cycleStartDay).filter(isSpendingActivity);
+  const current = netSpending(currentRows, transactions);
+  const base = netSpending(monthTransactions(transactions, previous, cycleStartDay), transactions);
   if (base < MIN_MEANINGFUL_AMOUNT || current < MIN_MEANINGFUL_AMOUNT) return [];
 
   const change = ((current - base) / base) * 100;
@@ -524,6 +535,7 @@ const DETECTORS: ((input: InsightInput) => Insight[])[] = [
 ];
 
 export function generateInsights(input: InsightInput): Insight[] {
+  input = { ...input, transactions: input.transactions.filter(t => transactionOccurredBy(t, input.now)) };
   const all = DETECTORS.flatMap((detector) => {
     try {
       return detector(input);
@@ -538,7 +550,7 @@ export function generateInsights(input: InsightInput): Insight[] {
   const seen = new Set<string>();
   const deduped: Insight[] = [];
   for (const insight of all.sort((a, b) => b.priority - a.priority)) {
-    const fingerprint = `${insight.kind}:${insight.amount ?? 0}`;
+    const fingerprint = `${insight.kind}:${insight.amount ?? 0}:${insight.transactions.length ? insight.transactions.map(t => t.id).sort().join(",") : insight.id}`;
     const overlapKey =
       insight.kind === "category-spike" || insight.kind === "lens-spike"
         ? `spike:${insight.amount}`
