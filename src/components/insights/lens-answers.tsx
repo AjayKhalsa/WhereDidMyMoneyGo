@@ -28,8 +28,8 @@ export function LensAnswers() {
   const [active, setActive] = useState<LensResult | null>(null);
 
   const results = useMemo(
-    () => lensTotals(monthRows, LENSES).filter((r) => r.count > 0),
-    [monthRows],
+    () => lensTotals(monthRows, LENSES, db?.transactions ?? monthRows).filter((r) => r.count > 0),
+    [monthRows, db?.transactions],
   );
 
   const comparison = useMemo(() => {

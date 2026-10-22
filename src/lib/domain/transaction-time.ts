@@ -51,3 +51,12 @@ export function dateForTransactionEdit(day: string, clock: string, existingDate?
   if (!clockEdited && existingDate?.slice(0,10) === day && validWallTime(existingDate)) return existingDate.slice(0,19);
   return `${day}T00:00:00`;
 }
+
+/** Unknown clocks are calendar-day facts. Only a verified clock can prove an
+ * entry lies later today; a legacy logging clock is not such evidence. */
+export function transactionOccurredBy(t: Pick<Transaction, "date" | "timing" | "notes">, now: Date): boolean {
+  const cutoff = indiaNow(now);
+  if (t.date.slice(0,10) !== cutoff.slice(0,10)) return t.date.slice(0,10) < cutoff.slice(0,10);
+  const clock = actualTransactionTime(t);
+  return !clock || clock <= cutoff;
+}

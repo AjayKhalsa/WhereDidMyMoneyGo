@@ -1,3 +1,4 @@
+import { transactionOccurredBy } from "@/lib/domain/transaction-time";
 import {
   clampToMonth,
   daysBetween,
@@ -44,11 +45,11 @@ import {
  *
  * `monthlySurplus` — *change over the cycle*. Income received minus what was
  * spent and invested. Crucially this is a delta, not a balance: it equals
- * exactly how much `position` (cash minus card debt) moved since the cycle
- * began, which is why it can legitimately exceed the cash on hand — clearing
+ * the operating change in `position` (cash minus card debt), including
+ * explicitly linked investment redemptions, which is why it can legitimately exceed the cash on hand — clearing
  * card debt improves your position without putting anything in the bank.
  * `positionAtCycleStart`/`positionNow` are surfaced alongside it so the UI can
- * show that derivation rather than leaving a delta to be misread as a pot of
+ * compare the ledger's actual position change rather than present a delta as
  * money. Strictly retrospective: no expected-but-unreceived income, no
  * not-yet-paid commitments, or the identity breaks and the figure stops being
  * checkable against real accounts.
@@ -81,8 +82,9 @@ export interface SafeToSpendResult {
   /**
    * How much better (or worse) off this cycle left you: income received,
    * less what was spent and invested. A *change*, not a balance — it equals
-   * `positionNow − positionAtCycleStart` exactly. Never render this as
-   * "safe to spend", and never render it without its two endpoints.
+   * `positionNow − positionAtCycleStart` when all cash/card movements are
+   * covered. Adjustments, excluded accounts and missing history require
+   * reconciliation. Never render this operating delta as "safe to spend".
    */
   monthlySurplus: Paise;
   /** Cash − card debt at the moment this cycle began. */
@@ -202,8 +204,9 @@ export function upcomingRecurring(
   cycleStartDay = 1,
 ): { rule: RecurringTransaction; dueDate: Date; amount: Paise }[] {
   const paidCounts = new Map<string, number>();
+  const ruleTypes = new Map(recurring.map(r => [r.id, r.type]));
   for (const t of monthTransactions(transactions, month, cycleStartDay)) {
-    if (!t.recurringId) continue;
+    if (!t.recurringId || t.type !== ruleTypes.get(t.recurringId) || t.categoryId === "adjustment" || !transactionOccurredBy(t, now)) continue;
     paidCounts.set(t.recurringId, (paidCounts.get(t.recurringId) ?? 0) + 1);
   }
 
@@ -303,7 +306,8 @@ function netPosition(accounts: Account[], transactions: Transaction[]): Paise {
 export function calculateSafeToSpend(
   input: SafeToSpendInput,
 ): SafeToSpendResult {
-  const { transactions, accounts, month, now, cycleStartDay } = input;
+  const { accounts, month, now, cycleStartDay } = input;
+  const transactions = input.transactions.filter(t => transactionOccurredBy(t, now));
 
   const totals = monthTotals(transactions, month, cycleStartDay);
 
@@ -320,12 +324,7 @@ export function calculateSafeToSpend(
     (acc, card) => acc + creditCardOutstanding(transactions, card.id),
     0,
   );
-  // Salary due this cycle that hasn't landed yet. Without this, opening the
-  // app on payday morning — before the credit posts — would show a near-zero
-  // safe-to-spend that jumps hours later. Zero once pay has arrived, so it
-  // never inflates the figure mid-cycle.
-  const expectedNotYetReceived = Math.max(0, expected - totals.income);
-
+  // Expected salary remains a planning basis, not available cash.
   // --- Other commitments --------------------------------------------------
   const upcoming = upcomingRecurring(input.recurring, transactions, month, now, cycleStartDay);
   const upcomingTotal = upcoming.reduce((acc, u) => acc + u.amount, 0);
@@ -343,16 +342,15 @@ export function calculateSafeToSpend(
   // owed has to be paid out of this same cash, whenever it was charged.
   const safeAmount =
     bankBalance -
-    cardOutstanding +
-    expectedNotYetReceived -
+    cardOutstanding -
     upcomingTotal -
     plannedInvestmentsLeft -
     goalMoney;
 
   // Strictly what happened inside this cycle — actual income, not the
-  // expected-or-actual basis, and nothing forward-looking. That restraint is
-  // what makes this equal `positionNow - positionAtCycleStart` exactly, and
-  // therefore checkable by hand against real statements.
+  // expected-or-actual basis, and nothing forward-looking. Linked redemptions
+  // reduce net invested. Compare this operating delta with the position
+  // endpoints; adjustments or incomplete account coverage can differ.
   const monthlySurplus = totals.income - totals.invested - totals.spent;
 
   const cycleStart = monthKeyToDate(month);
@@ -360,7 +358,9 @@ export function calculateSafeToSpend(
     (t) => new Date(t.date) < cycleStart,
   );
   const positionAtCycleStart = netPosition(accounts, priorTransactions);
-  const positionNow = netPosition(accounts, transactions);
+  const periodEnd = endOfMonth(month, cycleStartDay);
+  const positionRows = transactions.filter(t => new Date(t.date) <= periodEnd);
+  const positionNow = netPosition(accounts, positionRows);
   const cardDebtCleared = Math.max(
     0,
     cardDebtOf(accounts, priorTransactions) - cardOutstanding,
@@ -371,7 +371,7 @@ export function calculateSafeToSpend(
     safeAmount > 0 ? Math.floor(safeAmount / remainingDays) : 0;
 
   const velocity = spendingVelocity(transactions, month, now, cycleStartDay);
-  const projectedRemainingSpend = velocity.perDay * Math.max(0, remainingDays - 1);
+  const projectedRemainingSpend = Math.max(0, velocity.perDay) * Math.max(0, remainingDays - 1);
   const projectedSurplus = safeAmount - projectedRemainingSpend;
 
   // Ordered so the first two lines read as the sentence the number is:
@@ -392,16 +392,6 @@ export function calculateSafeToSpend(
       hint: "You've spent this money — it just hasn't left your account yet",
     },
   ];
-
-  if (expectedNotYetReceived > 0) {
-    breakdown.push({
-      id: "expected-income",
-      label: "Salary still to land",
-      amount: expectedNotYetReceived,
-      direction: "add",
-      hint: "Expected this cycle but not yet credited",
-    });
-  }
 
   if (upcomingTotal > 0) {
     breakdown.push({
@@ -445,16 +435,16 @@ export function calculateSafeToSpend(
     },
     {
       id: "invested",
-      label: "Already invested",
-      amount: totals.invested,
-      direction: "subtract",
-      hint: "Moved into PPF, funds and deposits — not spending",
+      label: totals.invested < 0 ? "Net investment withdrawals" : "Net invested",
+      amount: Math.abs(totals.invested),
+      direction: totals.invested < 0 ? "add" : "subtract",
+      hint: "Contributions minus explicitly linked withdrawals",
     },
     {
       id: "spent",
-      label: "Spent so far",
-      amount: totals.spent,
-      direction: "subtract",
+      label: totals.spent < 0 ? "Net refunds received" : "Spent after refunds",
+      amount: Math.abs(totals.spent),
+      direction: totals.spent < 0 ? "add" : "subtract",
       hint: `${totals.expenseCount} ${totals.expenseCount === 1 ? "expense" : "expenses"} this month, across every payment method`,
     },
   ];
