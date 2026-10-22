@@ -82,3 +82,12 @@ Run `npm test`, `npm run typecheck`, and `npm run build`. After applying the mig
 and supplying credentials, verify consent, a small first sync, a repeated sync with
 no added duplicates, cron authentication, and disconnect/reconnect against the live
 account. Local tests cannot verify Google consent or deployed environment settings.
+
+## Optional frequent checks on Vercel Hobby
+
+Use the GitHub Actions workflow in `.github/workflows/gmail-sync.yml` for four extra
+checks per day, retaining the daily Vercel fallback. Copy the existing Vercel
+`CRON_SECRET` to the GitHub Actions repository secret of the same name. See
+[GitHub Actions setup](github-actions-gmail-sync.md) for activation, timing and
+bounded backlog handling. No Vercel plan upgrade or mailbox credentials in GitHub
+are needed. A workflow on an unmerged branch or without its secret is not active.

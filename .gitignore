@@ -22,3 +22,7 @@ docs/finance-automation-state.md
 docs/finance-balance-diagnostic.md
 docs/reconciliation-2026-10-18-dry-run.md
 docs/finance-implementation-plan.md
+
+# Python scheduler test artifacts.
+__pycache__/
+*.pyc
