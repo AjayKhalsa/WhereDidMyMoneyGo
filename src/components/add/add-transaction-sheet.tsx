@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { UNCATEGORISED_ID } from "@/lib/domain/categories";
 import { contextLabel } from "@/lib/domain/contexts";
 import { formatFullDate, toDateInputValue } from "@/lib/domain/dates";
-import { actualTransactionTime, dateForTransactionEdit, indiaNow, timingFor, UNKNOWN_TIMING } from "@/lib/domain/transaction-time";
+import { classificationTime, dateForTransactionEdit, indiaNow, timingFor, UNKNOWN_TIMING } from "@/lib/domain/transaction-time";
 import { timedMealCategory } from "@/lib/engine/time-rules";
 import { formatMoney, formatMoneyPrecise, parseAmountInput } from "@/lib/domain/money";
 import type {
@@ -211,7 +211,7 @@ export function AddTransactionSheet({
           reversesTransactionId: editing.reversesTransactionId,
           notes: editing.notes ?? "",
           date: toDateInputValue(editing.date),
-          clock: actualTransactionTime(editing)?.slice(11,19) ?? "",
+          clock: classificationTime(editing)?.slice(11,19) ?? "",
           timing: timingFor(editing),
         }
       : {
@@ -224,8 +224,8 @@ export function AddTransactionSheet({
           isRefund: false,
           notes: "",
           date: indiaNow().slice(0,10),
-          clock: "",
-          timing: UNKNOWN_TIMING,
+          clock: indiaNow().slice(11,19),
+          timing: { source: "logged", precision: "estimated", timezone: "Asia/Kolkata" },
         },
   );
 
@@ -399,8 +399,11 @@ export function AddTransactionSheet({
     setSaveError("");
     setSaving(true);
 
-    const clock = draft.clock ? (draft.clock.length === 5 ? draft.clock + ":00" : draft.clock) : "00:00:00";
-    const when = new Date(dateForTransactionEdit(draft.date, draft.clock, editing?.date, touched.has("clock")));
+    const loggedNow = indiaNow();
+    const savedDate = !editing && draft.timing?.source === "logged" && !touched.has("date") ? loggedNow.slice(0,10) : draft.date;
+    const savedClock = !editing && draft.timing?.source === "logged" && savedDate === loggedNow.slice(0,10) ? loggedNow.slice(11,19) : draft.clock;
+    const clock = savedClock ? (savedClock.length === 5 ? savedClock + ":00" : savedClock) : "00:00:00";
+    const when = new Date(dateForTransactionEdit(savedDate, savedClock, editing?.date, touched.has("clock")));
     const timing = draft.clock ? draft.timing : UNKNOWN_TIMING;
 
     const payload: TransactionDraft = {
@@ -409,7 +412,7 @@ export function AddTransactionSheet({
       description: draft.description || (isExpense ? "Expense" : "Transaction"),
       date: when,
       timing,
-      categoryId: isExpense || draft.type === "INCOME" ? (isExpense && !touched.has("categoryId") ? timedMealCategory(draft.categoryId, draft.clock ? `${draft.date}T${clock}` : undefined, draft.description) ?? draft.categoryId : draft.categoryId) : undefined,
+      categoryId: isExpense || draft.type === "INCOME" ? (isExpense && !touched.has("categoryId") ? timedMealCategory(draft.categoryId, savedClock ? `${savedDate}T${clock}` : undefined, draft.description) ?? draft.categoryId : draft.categoryId) : undefined,
       contexts: draft.contexts,
       accountId: draft.accountId,
       toAccountId: draft.toAccountId,
@@ -584,14 +587,6 @@ export function AddTransactionSheet({
         )}
 
         {!editing && draft.type === "EXPENSE" && <p className="text-[12px] text-ink-tertiary">Add #labels to track a trip or project, for example “450 lunch #goa-trip”.</p>}
-
-        <div className="space-y-2">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
-            <TextField wrapperClassName="min-w-0" className="min-w-0" label="Actual transaction time (IST)" type="time" step="1" value={draft.clock} onChange={e => { patch({ clock: e.target.value, timing: e.target.value ? { source: "user", precision: "exact", timezone: "Asia/Kolkata" } : UNKNOWN_TIMING }); markTouched("clock"); }} />
-            <Button variant="secondary" onClick={() => { const now = indiaNow(); patch({ date: now.slice(0,10), clock: now.slice(11,19), timing: { source: "user", precision: "exact", timezone: "Asia/Kolkata" } }); markTouched("clock"); markTouched("date"); }}>Now</Button>
-          </div>
-          <p className="text-[12px] text-ink-tertiary">Use the time on your payment receipt. Leave blank if unknown; logging time and email delivery time are not used for meal rules.</p>
-        </div>
 
         {/* Quick starters, only while the field is untouched. */}
         <AnimatePresence initial={false}>
@@ -833,9 +828,16 @@ export function AddTransactionSheet({
                     type="date"
                     value={draft.date}
                     max={toDateInputValue(new Date())}
-                    onChange={(e) => { patch({ date: e.target.value, timing: draft.clock ? { source: "user", precision: "exact", timezone: "Asia/Kolkata" } : UNKNOWN_TIMING }); markTouched("date"); markTouched("clock"); }}
+                    onChange={(e) => { const backdatedLog = draft.timing?.source === "logged" && e.target.value !== indiaNow().slice(0,10); patch({ date: e.target.value, ...(backdatedLog ? { clock: "", timing: UNKNOWN_TIMING } : {}) }); markTouched("date"); markTouched("clock"); }}
                   />
                 </div>
+
+                <details className="text-sm text-ink-secondary">
+                  <summary className="cursor-pointer">Time · {draft.clock ? `${draft.clock.slice(0,5)} IST${draft.timing?.source === "logged" ? " (logged)" : ""}` : "not available"}</summary>
+                  <div className="mt-3">
+                    <TextField label="Change time (optional, IST)" type="time" value={draft.clock} onChange={e => { patch({ clock: e.target.value, timing: e.target.value ? { source: "user", precision: "exact", timezone: "Asia/Kolkata" } : UNKNOWN_TIMING }); markTouched("clock"); }} />
+                  </div>
+                </details>
 
                 <TextField
                   label="Description"

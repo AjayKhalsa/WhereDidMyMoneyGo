@@ -87,3 +87,18 @@ test("category-only edits retain unverified legacy clocks without trusting them"
  assert.equal(dateForTransactionEdit('2026-10-13','',original),'2026-10-13T00:00:00');
  assert.equal(dateForTransactionEdit('2026-10-12','20:00',original),'2026-10-12T20:00:00');
 });
+
+test("new manual logging times support tags as estimates, never bank-verified insights",async()=>{
+ const {classificationTime,timeLabel,factualTimeContexts}=await import('@/lib/domain/transaction-time');
+ const t=expense({date:'2026-10-12T22:15:00',categoryId:'dining',timing:{source:'logged',precision:'estimated',timezone:'Asia/Kolkata'}});
+ assert.equal(actualTransactionTime(t),undefined);
+ assert.equal(classificationTime(t),t.date);
+ assert.match(timeLabel(t),/logged time/);
+ assert.equal(timedMealCategory(t.categoryId,classificationTime(t)),'dining.dinner');
+ assert.ok(factualTimeContexts(t).some(c=>c.value==='late-night'));
+ assert.equal(shareAfterHour([t],20),0);
+ const db=fixture();db.transactions=[{...t,accountId:'bank'}];
+ const result=planHistoryEnrichment(db,[{transactionId:t.id,occurredAt:'2026-10-12T13:00:00',source:'bank',amount:t.amount,accountId:'bank',bankDate:'2026-10-12'}],now);
+ assert.equal(result.changes[0]!.after.categoryId,'dining.lunch');
+ assert.equal(result.changes[0]!.after.timing!.source,'bank');
+});

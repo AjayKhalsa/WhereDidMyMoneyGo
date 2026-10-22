@@ -113,8 +113,8 @@ export interface TransactionContext {
 }
 
 export interface TransactionTiming {
-  source: "user" | "bank" | "payment" | "statement" | "unknown";
-  precision: "exact" | "date";
+  source: "user" | "bank" | "payment" | "statement" | "logged" | "unknown";
+  precision: "exact" | "estimated" | "date";
   timezone: "Asia/Kolkata";
 }
 
