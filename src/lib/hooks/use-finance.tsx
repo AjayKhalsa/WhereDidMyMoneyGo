@@ -1,4 +1,5 @@
 "use client";
+import { transactionOccurredBy } from "@/lib/domain/transaction-time";
 
 import {
   createContext,
@@ -166,7 +167,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<FinanceContextValue>(() => {
     const empty: Database["transactions"] = [];
-    const transactions = db?.transactions ?? empty;
+    const transactions = (db?.transactions ?? empty).filter(t => transactionOccurredBy(t, now));
 
     const liveMonth = monthKey(now, cycleStartDay);
     const month = pinnedMonth ?? liveMonth;
@@ -195,6 +196,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       now,
       cycleStartDay,
       groupLabel: (groupId) => categories.byId.get(groupId)?.name ?? "Other",
+      groupFor: id => categories.groupOf(id)?.id ?? "other",
     });
 
     const peopleBalances = personBalances(db?.people ?? [], db?.splits ?? []);
@@ -238,9 +240,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const groupBreakdown = spendByGroup(
       monthRows,
       (groupId) => categories.byId.get(groupId)?.name ?? "Other",
+      transactions, true, id => categories.groupOf(id)?.id ?? "other",
     );
 
-    const contextBreakdown = spendByContext(monthRows, contextLabel);
+    const contextBreakdown = spendByContext(monthRows, contextLabel, transactions, true);
 
     const creditCards = (db?.accounts ?? [])
       .filter((a) => a.type === "CREDIT_CARD" && a.isActive)

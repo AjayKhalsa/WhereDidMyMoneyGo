@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { groupIdOf } from "@/lib/domain/categories";
+import { isCategoryActivity, spendingAttribution, spendingSummary } from "@/lib/engine/spending";
 import { contextLabel } from "@/lib/domain/contexts";
-import { formatMonthLong } from "@/lib/domain/dates";
+import { formatMonthLabel } from "@/lib/domain/dates";
 import { formatMoney, percentOf } from "@/lib/domain/money";
 import type { Transaction } from "@/lib/domain/types";
 import {
@@ -13,7 +13,6 @@ import {
   spendByContext,
   spendByGroup,
   spendByMerchant,
-  total,
   type BreakdownSlice,
 } from "@/lib/engine/analytics";
 import { useFinance } from "@/lib/hooks/use-finance";
@@ -63,59 +62,64 @@ export function MoneyFlowSheet({
   open: boolean;
   onClose: () => void;
 }) {
-  const { monthRows, totals, safeToSpend, categories, month, db } = useFinance();
+  const { monthRows, totals, safeToSpend, categories, month, db, cycleStartDay } = useFinance();
   const [dimension, setDimension] = useState<Dimension>("category");
   const [drill, setDrill] = useState<DrillTarget | null>(null);
 
   const expenses = useMemo(
-    () => monthRows.filter((t) => t.type === "EXPENSE"),
-    [monthRows],
+    () => { const metadata = spendingAttribution(db?.transactions ?? monthRows); return monthRows.filter(t => isCategoryActivity(metadata(t))); },
+    [monthRows, db?.transactions],
   );
 
+  const attributed = useMemo(() => spendingAttribution(db?.transactions ?? monthRows), [db?.transactions, monthRows]);
+  const allRows = db?.transactions ?? monthRows;
   const slices = useMemo<BreakdownSlice[]>(() => {
     switch (dimension) {
       case "category":
         return spendByGroup(
           expenses,
           (id) => categories.byId.get(id)?.name ?? "Other",
+          allRows, true, id => categories.groupOf(id)?.id ?? "other",
         );
       case "context":
-        return spendByContext(expenses, contextLabel);
+        return spendByContext(expenses, contextLabel, allRows, true);
       case "merchant":
-        return spendByMerchant(expenses);
+        return spendByMerchant(expenses, allRows, true);
       case "account":
-        return spendByAccount(expenses, db?.accounts ?? []);
+        return spendByAccount(expenses, db?.accounts ?? [], allRows, true);
     }
-  }, [dimension, expenses, categories, db?.accounts]);
+  }, [dimension, expenses, categories, db?.accounts, allRows]);
 
   const drillTransactions = useMemo<Transaction[]>(() => {
     if (!drill) return [];
     switch (drill.dimension) {
       case "category":
         return expenses.filter(
-          (t) => t.categoryId && groupIdOf(t.categoryId) === drill.id,
+          (t) => (categories.groupOf(attributed(t).categoryId ?? "other")?.id ?? "other") === drill.id,
         );
       case "context":
         return expenses.filter((t) =>
-          t.contexts.some((c) => c.value === drill.id),
+          attributed(t).contexts.some((c) => c.value === drill.id),
         );
       case "merchant":
-        return expenses.filter((t) => t.merchant === drill.id);
+        return expenses.filter((t) => (attributed(t).merchant ?? "Merchant not recorded") === drill.id);
       case "account":
         return expenses.filter(
           (t) => (t.accountId ?? "unassigned") === drill.id,
         );
     }
-  }, [drill, expenses]);
+  }, [drill, expenses, categories, attributed]);
 
   const drillSubSlices = useMemo<BreakdownSlice[]>(() => {
     if (!drill || drill.dimension !== "category") return [];
     return spendByCategory(
       drillTransactions,
       (id) => categories.nameOf(id),
-      drill.id,
+      undefined, allRows, true,
     );
-  }, [drill, drillTransactions, categories]);
+  }, [drill, drillTransactions, categories, allRows]);
+
+  const drillSummary = spendingSummary(drillTransactions, db?.transactions ?? monthRows);
 
   // Unallocated is what the month's income has not yet been claimed by.
   const unallocated = Math.max(
@@ -140,8 +144,8 @@ export function MoneyFlowSheet({
       title={drill ? drill.label : "Where your money went"}
       description={
         drill
-          ? `${drillTransactions.length} ${drillTransactions.length === 1 ? "transaction" : "transactions"} · ${formatMoney(total(drillTransactions))}`
-          : formatMonthLong(month)
+          ? `${drillTransactions.length} ${drillTransactions.length === 1 ? "transaction" : "transactions"} · ${formatMoney(drillSummary.net)}`
+          : formatMonthLabel(month, cycleStartDay)
       }
     >
       {drill ? (
@@ -157,12 +161,13 @@ export function MoneyFlowSheet({
           </Button>
 
           <div className="flex items-baseline gap-3">
-            <Amount value={total(drillTransactions)} size="xl" />
+            <Amount value={drillSummary.net} size="xl" />
             <span className="text-[13px] text-ink-tertiary">
-              {percentOf(total(drillTransactions), totals.spent).toFixed(0)}% of
-              this month&rsquo;s spending
+              Net outgoing
             </span>
           </div>
+
+          <p className="text-sm text-ink-secondary">{formatMoney(drillSummary.gross)} outgoing − {formatMoney(drillSummary.refunds + drillSummary.credits)} credits and refunds = {formatMoney(drillSummary.net)} net. {drillSummary.count} {drillSummary.count === 1 ? "debit" : "debits"} · {drillSummary.creditCount} {drillSummary.creditCount === 1 ? "credit" : "credits"}.</p>
 
           {drillSubSlices.length > 1 && (
             <section>
@@ -177,7 +182,7 @@ export function MoneyFlowSheet({
             <h3 className="mb-2 px-2.5 text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">
               Every transaction
             </h3>
-            <TransactionList transactions={drillTransactions} showTime />
+            <TransactionList transactions={drillTransactions} showTime dayTotalBasis="category-flow" />
           </section>
         </div>
       ) : (
@@ -188,11 +193,11 @@ export function MoneyFlowSheet({
               label="Earned"
               amount={totals.income}
               tone="positive"
-              detail="Everything that came in this month"
+              detail="Recorded income credits, excluding refunds"
               emphasis
             />
             <FlowStep
-              label="Invested"
+              label="Net invested"
               amount={totals.invested}
               tone="accent"
               detail={
@@ -202,7 +207,7 @@ export function MoneyFlowSheet({
               }
             />
             <FlowStep
-              label="Spent"
+              label="Outgoing after refunds"
               amount={totals.spent}
               tone="ink"
               detail={
@@ -215,7 +220,7 @@ export function MoneyFlowSheet({
               label="Committed"
               amount={safeToSpend.cardOutstanding}
               tone="warning"
-              detail="Owed on cards — already inside the spending above"
+              detail="Current card debt across all cycles"
             />
             <FlowStep
               label="Unallocated"
@@ -244,12 +249,13 @@ export function MoneyFlowSheet({
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">
-                Explore {formatMoney(totals.spent)} of spending
+                Explore category cash flow
               </h3>
             </div>
 
+            <p className="text-xs text-ink-tertiary">Outgoing minus credits recorded in the same category. Uncategorised income, transfers and investments are excluded. This view does not change how a credit is classified.</p>
             <SegmentedControl
-              label="Break spending down by"
+              label="Break category cash flow down by"
               value={dimension}
               onChange={(value) => setDimension(value)}
               options={DIMENSIONS}
@@ -262,8 +268,8 @@ export function MoneyFlowSheet({
                 <span className="font-medium text-ink-secondary">Friends</span>{" "}
                 and{" "}
                 <span className="font-medium text-ink-secondary">Alcohol</span>.
-                These add up to more than your total spending, and that is
-                correct: the same money is answering more than one question.
+                Tag totals overlap and should not be added together.
+                The selection total counts each recorded movement once.
               </p>
             )}
 

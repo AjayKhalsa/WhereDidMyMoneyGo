@@ -160,18 +160,18 @@ describe("upcomingRecurring", () => {
     // Two of four payments recorded means two still to come — not none, which
     // is what suppressing the whole rule used to produce.
     const rule = makeRecurring({ frequency: "WEEKLY", dayOfPeriod: 1, amount: rs(1000) });
-    const unpaid = upcomingRecurring([rule], [], MONTH, NOW, PAYDAY).length;
+    const afterPayments = new Date(2026, 7, 4);
     const paid = [
       expense({ recurringId: rule.id, amount: rs(1000), date: at("2026-07-27") }),
       expense({ recurringId: rule.id, amount: rs(1000), date: at("2026-08-03") }),
     ];
-    const out = upcomingRecurring([rule], paid, MONTH, NOW, PAYDAY);
-    assert.equal(out.length, unpaid - 2);
+    const out = upcomingRecurring([rule], paid, MONTH, afterPayments, PAYDAY);
+    assert.equal(out.length, 2); // Aug 10 and 17 remain after the two real payments.
   });
 
   test("a paid monthly bill stops being reserved", () => {
     const rule = makeRecurring({ frequency: "MONTHLY", dayOfPeriod: 1, amount: rs(30_000) });
-    const paid = [expense({ recurringId: rule.id, amount: rs(30_000), date: at("2026-08-01") })];
+    const paid = [expense({ recurringId: rule.id, amount: rs(30_000), date: at("2026-07-24") })];
     assert.deepEqual(upcomingRecurring([rule], paid, MONTH, NOW, PAYDAY), []);
   });
 
@@ -216,7 +216,7 @@ describe("upcomingRecurring", () => {
 describe("recurringStatuses", () => {
   test("marks a rule paid once a charge exists this cycle", () => {
     const rule = makeRecurring({ dayOfPeriod: 1, amount: rs(30_000) });
-    const rows = [expense({ recurringId: rule.id, amount: rs(30_000), date: at("2026-08-01") })];
+    const rows = [expense({ recurringId: rule.id, amount: rs(30_000), date: at("2026-07-24") })];
     const [status] = recurringStatuses([rule], rows, MONTH, NOW, PAYDAY);
     assert.ok(status?.paidThisMonth);
     assert.equal(status?.lastCharge?.amount, rs(30_000));

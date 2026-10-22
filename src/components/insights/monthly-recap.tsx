@@ -1,4 +1,5 @@
 "use client";
+import { netSpending, netCategoryOutflow } from "@/lib/engine/spending";
 
 import { groupIdOf } from "@/lib/domain/categories";
 import { useMoneyText } from "@/lib/hooks/use-privacy";
@@ -7,10 +8,8 @@ import { percentOf } from "@/lib/domain/money";
 import {
   compareToAverage,
   investmentRate,
-  isExpense,
   monthTransactions,
   spendByGroup,
-  total,
 } from "@/lib/engine/analytics";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { Amount, DeltaBadge } from "@/components/ui/amount";
@@ -28,23 +27,24 @@ import { cn } from "@/lib/utils";
 
 export function MonthlyRecap() {
   const money = useMoneyText();
-  const { db, month, cycleStartDay, totals, groupBreakdown, safeToSpend } = useFinance();
+  const { db, month, cycleStartDay, totals, safeToSpend, monthRows, categories } = useFinance();
 
   const transactions = db?.transactions ?? [];
-  const top = groupBreakdown.slice(0, 5);
+  const categoryFlows = spendByGroup(monthRows, id => categories.byId.get(id)?.name ?? "Other", transactions, true, id => categories.groupOf(id)?.id ?? "other");
+  const top = categoryFlows.slice(0, 5);
 
   // Biggest mover: the category group with the largest percentage swing
   // against its own history, ignoring trivial amounts.
-  const movers = groupBreakdown
+  const movers = categoryFlows
     .filter((slice) => slice.amount >= 100_000)
     .map((slice) => ({
       slice,
       comparison: compareToAverage(
         transactions,
         month,
-        (t) => Boolean(t.categoryId) && groupIdOf(t.categoryId!) === slice.id,
+        (t) => Boolean(t.categoryId) && categories.groupOf(t.categoryId!)?.id === slice.id,
         3,
-        cycleStartDay,
+        cycleStartDay, true,
       ),
     }))
     .filter((m) => m.comparison.percentChange !== null)
@@ -56,7 +56,7 @@ export function MonthlyRecap() {
   const biggestChange = movers[0];
 
   const spark = [...previousMonths(month, 5, cycleStartDay), month].map((m) =>
-    total(monthTransactions(transactions, m, cycleStartDay).filter(isExpense)),
+    netSpending(monthTransactions(transactions, m, cycleStartDay), transactions),
   );
 
   const invRate = investmentRate(totals);
@@ -84,12 +84,12 @@ export function MonthlyRecap() {
       <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5 border-y border-line py-5 sm:grid-cols-4">
         <Figure label="Income" value={totals.income} />
         <Figure
-          label="Invested"
+          label="Net invested"
           value={totals.invested}
           sub={totals.income > 0 ? `${invRate.toFixed(1)}%` : undefined}
         />
         <Figure
-          label="Spent"
+          label="Outgoing after refunds"
           value={totals.spent}
           sub={
             totals.income > 0
@@ -97,13 +97,14 @@ export function MonthlyRecap() {
               : undefined
           }
         />
+        <Figure label="Net category outflow" value={netCategoryOutflow(monthRows, transactions)} />
         <Figure label="Committed" value={safeToSpend.cardOutstanding} />
       </dl>
 
       {top.length > 0 && (
         <section className="mt-5">
           <h3 className="text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">
-            Top spending
+            Largest net category outflows
           </h3>
           <ol className="mt-2.5 space-y-2">
             {top.map((slice, index) => (
@@ -162,13 +163,13 @@ export function MonthlyRecap() {
           }
         />
         <Verdict
-          label="Biggest leak"
+          label="Largest net outflow"
           headline={top[0]?.label ?? "No spending yet"}
           detail={
             top[0] ? (
               <span className="text-[13px] text-ink-secondary tnum">
-                {money(top[0].amount)} · {Math.round(top[0].share)}% of
-                spending
+                {money(top[0].amount)} · {Math.round(top[0].share)}% of positive net
+                category outflows
               </span>
             ) : null
           }

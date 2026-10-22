@@ -1,5 +1,5 @@
 import type { ClassificationRule, Transaction } from "@/lib/domain/types";
-import { actualTransactionTime, validWallTime } from "@/lib/domain/transaction-time";
+import { classificationTime, validWallTime } from "@/lib/domain/transaction-time";
 import { merchantKey } from "./merchant-identity";
 
 export const MEAL_WINDOWS = [
@@ -30,5 +30,5 @@ export function ruleConditionsMatch(rule: ClassificationRule, merchant: string, 
 }
 
 export function conditionalRulesFor(t: Transaction, rules: ClassificationRule[]): ClassificationRule[] {
-  return rules.filter(r => r.conditions && ruleConditionsMatch(r, t.merchant || t.description, actualTransactionTime(t)));
+  return rules.filter(r => r.conditions && ruleConditionsMatch(r, t.merchant || t.description, classificationTime(t)));
 }

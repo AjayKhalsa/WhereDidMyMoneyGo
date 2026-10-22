@@ -1,5 +1,5 @@
 import { CONTEXT_DEFINITIONS, DERIVED_CONTEXT_VALUES, normaliseContexts } from "@/lib/domain/contexts";
-import { actualTransactionTime, factualTimeContexts, indiaNow, validWallTime } from "@/lib/domain/transaction-time";
+import { actualTransactionTime, classificationTime, factualTimeContexts, indiaNow, validWallTime } from "@/lib/domain/transaction-time";
 import type { ClassificationRule, Database, Transaction } from "@/lib/domain/types";
 import { merchantKey } from "./merchant-identity";
 import { conditionalRulesFor, MEAL_WINDOWS, timedMealCategory } from "./time-rules";
@@ -53,12 +53,12 @@ export function planHistoryEnrichment(db: Database, evidence: TimeEvidence[] = [
       after = { ...after, date: e.occurredAt, timing: { source: e.source, precision: "exact", timezone: "Asia/Kolkata" } };
       reasons.push("Recovered actual time from the bank alert already linked to this transaction.");
     }
-    const time = actualTransactionTime(after);
-    if (!time) unknownTimeIds.push(before.id);
+    const time = classificationTime(after);
+    if (!actualTransactionTime(after)) unknownTimeIds.push(before.id);
     const meal = timedMealCategory(after.categoryId, time, before.description);
     if (meal && validCategories.has(meal) && meal !== after.categoryId) {
       after.categoryId = meal;
-      reasons.push(`Meal rule: ${time!.slice(11,16)} IST → ${meal.split(".")[1]}.`);
+      reasons.push(`Meal rule (${after.timing?.source === "logged" ? "estimated logging time" : "verified time"}): ${time!.slice(11,16)} IST → ${meal.split(".")[1]}.`);
       ruleIds.push("meal-time-v1");
     }
     const matched = conditionalRulesFor(after, db.rules).filter(r => validCategories.has(r.categoryId) && r.categoryId !== "adjustment");
@@ -75,7 +75,7 @@ export function planHistoryEnrichment(db: Database, evidence: TimeEvidence[] = [
     const factual = normaliseContexts([...after.contexts.filter(c => !DERIVED_CONTEXT_VALUES.has(c.value)), ...factualTimeContexts(after)]);
     if (enrichmentImage(factual) !== enrichmentImage(after.contexts)) {
       after.contexts = factual;
-      reasons.push("Recomputed weekend and late-night tags from the date and verified clock.");
+      reasons.push("Recomputed weekend and late-night tags from the date and recorded time; logging times remain estimates.");
     }
     if (enrichmentImage(after) === enrichmentImage(before)) continue;
     after = { ...after, enrichment: { version: 1, ruleIds: [...new Set([...(before.enrichment?.ruleIds ?? []), ...ruleIds])] }, updatedAt: now.toISOString() };
@@ -90,7 +90,7 @@ export function discoverTimePatterns(transactions: Transaction[], existing: Clas
   const groups = new Map<string, Transaction[]>();
   for (const t of transactions) {
     if (t.type !== "EXPENSE" || !["manual", "parsed"].includes(t.source) || Boolean(t.enrichment?.ruleIds.length) || !t.categoryId || ["other", "adjustment"].includes(t.categoryId) || t.date.slice(0,10) > indiaNow(now).slice(0,10)) continue;
-    const time = actualTransactionTime(t), key = merchantKey(t.merchant ?? "");
+    const time = classificationTime(t), key = merchantKey(t.merchant ?? "");
     if (!time || key.length < 3) continue;
     const hour = Number(time.slice(11,13)), window = MEAL_WINDOWS.find(w => hour >= w.start && hour < w.end)!;
     const weekday = new Date(time.slice(0,10) + "T12:00:00Z").getUTCDay();
@@ -110,7 +110,7 @@ export function discoverTimePatterns(transactions: Transaction[], existing: Clas
     const support = rows.filter(t => contexts.every(c => t.contexts.some(v => v.type === c.type && v.value === c.value))).length;
     if (support < 4 || support / rows.length < 0.8) continue;
     const stamp = now.toISOString();
-    proposals.push({ support, total: rows.length, days, explanation: `${support} of ${rows.length} user-recorded expenses across ${days} dates share these tags, ${weekend ? "on weekends" : "on weekdays"} between ${String(startHour).padStart(2,"0")}:00 and ${String(endHour).padStart(2,"0")}:00 IST. This is a pattern to confirm, not proof of purpose.`,
+    proposals.push({ support, total: rows.length, days, explanation: `${support} of ${rows.length} user-recorded expenses across ${days} dates share these tags, ${weekend ? "on weekends" : "on weekdays"} between ${String(startHour).padStart(2,"0")}:00 and ${String(endHour).padStart(2,"0")}:00 IST. ${rows.filter(t => t.timing?.source === "logged").length} use estimated logging times. This is a pattern to confirm, not proof of purpose.`,
       rule: { id: `time_${encodeURIComponent(group)}`, pattern: key, merchant: rows[0]!.merchant, categoryId: rows[0]!.categoryId!, conditions, contexts, confidence: support / rows.length, timesApplied: 0, createdAt: stamp, updatedAt: stamp,
         learningEvidence: { source: "history", merchantKey: key, support, exampleIds: rows.map(t => t.id) } } });
   }

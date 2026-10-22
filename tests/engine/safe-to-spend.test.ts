@@ -116,15 +116,14 @@ describe("the three no-double-counting invariants", () => {
 });
 
 describe("commitments still to come", () => {
-  test("salary due but not yet landed is added back", () => {
-    // Otherwise the app reads near-zero on payday morning and jumps hours
-    // later, which trains people to distrust it.
+  test("expected salary never inflates cash available before it lands", () => {
+    // Expected salary is a planning basis; it cannot be spent before receipt.
     const sources = [makeIncomeSource({ amount: rs(300_000), deductions: rs(50_000) })];
     const result = calc({ incomeSources: sources });
-    assert.equal(result.safeAmount, rs(26_231) + rs(250_000));
+    assert.equal(result.safeAmount, rs(26_231));
   });
 
-  test("once pay lands the add-back disappears rather than doubling", () => {
+  test("received salary increases available cash exactly once", () => {
     const sources = [makeIncomeSource({ amount: rs(250_000), deductions: 0 })];
     const salary = income({
       accountId: bank.id,

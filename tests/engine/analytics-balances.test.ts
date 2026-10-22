@@ -131,12 +131,12 @@ describe("credit card balances", () => {
     assert.equal(creditCardOutstanding(rows, card.id), rs(1500));
   });
 
-  test("non-refund income on a card is not treated as a payment", () => {
+  test("recorded non-refund card credits reduce liabilities without becoming a bank repayment", () => {
     const rows = [
       expense({ accountId: card.id, amount: rs(2000) }),
       income({ accountId: card.id, amount: rs(500) }),
     ];
-    assert.equal(creditCardOutstanding(rows, card.id), rs(2000));
+    assert.equal(creditCardOutstanding(rows, card.id), rs(1500));
   });
 
   test("overpaying shows as a credit, not a negative outstanding", () => {

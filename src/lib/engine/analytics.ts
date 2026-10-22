@@ -1,4 +1,5 @@
-import { actualTransactionTime } from "@/lib/domain/transaction-time";
+import { isSpendingActivity, isCategoryActivity, investmentMovement, netSpending, netCategoryOutflow, spendingAttribution } from "./spending";
+import { actualTransactionTime, transactionOccurredBy } from "@/lib/domain/transaction-time";
 import { groupIdOf, UNCATEGORISED_ID } from "@/lib/domain/categories";
 import {
   addMonths,
@@ -37,7 +38,7 @@ import type {
  */
 
 export function isExpense(t: Transaction): boolean {
-  return t.type === "EXPENSE";
+  return t.type === "EXPENSE" && t.categoryId !== "adjustment";
 }
 
 export function inMonth(t: Transaction, key: MonthKey, cycleStartDay = 1): boolean {
@@ -87,6 +88,7 @@ export function monthTotals(
   let invested = 0;
   let transferred = 0;
   let expenseCount = 0;
+  const metadata = spendingAttribution(transactions);
 
   for (const t of transactions) {
     if (!inMonth(t, key, cycleStartDay)) continue;
@@ -94,7 +96,7 @@ export function monthTotals(
     // earnings or spending. It still moves cash (see `accountBalance`, which
     // deliberately doesn't filter by category) — it just must never land in
     // Income/Spent, where it would distort the monthly surplus and Insights.
-    if (t.categoryId === "adjustment") continue;
+    if (t.categoryId === "adjustment" || metadata(t).categoryId === "adjustment") continue;
     switch (t.type) {
       case "INCOME":
         // A refund is money credited back against earlier spending, not new
@@ -109,9 +111,10 @@ export function monthTotals(
         expenseCount += 1;
         break;
       case "INVESTMENT":
-        invested += t.amount;
+        invested += investmentMovement(t);
         break;
       case "TRANSFER":
+        invested += investmentMovement(t);
         transferred += t.amount;
         break;
     }
@@ -129,7 +132,7 @@ export interface BreakdownSlice {
   label: string;
   amount: Paise;
   count: number;
-  /** Share of the breakdown total, 0–100. */
+  /** Share of positive net buckets, 0–100; negative buckets have no positive share. */
   share: number;
 }
 
@@ -137,14 +140,14 @@ function toSlices(
   buckets: Map<string, { amount: Paise; count: number }>,
   label: (id: string) => string,
 ): BreakdownSlice[] {
-  const grand = [...buckets.values()].reduce((a, b) => a + b.amount, 0);
+  const grand = [...buckets.values()].reduce((a, b) => a + Math.max(0, b.amount), 0);
   return [...buckets.entries()]
     .map(([id, v]) => ({
       id,
       label: label(id),
       amount: v.amount,
       count: v.count,
-      share: grand > 0 ? (v.amount / grand) * 100 : 0,
+      share: grand > 0 ? (Math.max(0, v.amount) / grand) * 100 : 0,
     }))
     .sort((a, b) => b.amount - a.amount);
 }
@@ -157,12 +160,17 @@ function toSlices(
 export function spendByGroup(
   transactions: Transaction[],
   labelFor: (groupId: string) => string,
+  all: Transaction[] = transactions,
+  includeCredits = false,
+  groupFor: (id: string) => string = groupIdOf,
 ): BreakdownSlice[] {
+  const metadata = spendingAttribution(all);
   const buckets = new Map<string, { amount: Paise; count: number }>();
-  for (const t of transactions) {
-    const refund = t.type === "INCOME" && t.isRefund;
-    if (!isExpense(t) && !refund) continue;
-    const id = t.categoryId ? groupIdOf(t.categoryId) : UNCATEGORISED_ID;
+  for (const original of transactions) {
+    const t = metadata(original);
+    const refund = t.type === "INCOME";
+    if (!(includeCredits ? isCategoryActivity(t) : isSpendingActivity(t))) continue;
+    const id = t.categoryId ? groupFor(t.categoryId) : UNCATEGORISED_ID;
     const bucket = buckets.get(id) ?? { amount: 0, count: 0 };
     bucket.amount += refund ? -t.amount : t.amount;
     // Only real expenses count toward "N expenses" — a refund reduces the
@@ -178,16 +186,21 @@ export function spendByCategory(
   transactions: Transaction[],
   labelFor: (categoryId: string) => string,
   groupId?: string,
+  all: Transaction[] = transactions,
+  includeCredits = false,
 ): BreakdownSlice[] {
+  const metadata = spendingAttribution(all);
   const buckets = new Map<string, { amount: Paise; count: number }>();
-  for (const t of transactions) {
-    const refund = t.type === "INCOME" && t.isRefund;
-    if ((!isExpense(t) && !refund) || !t.categoryId) continue;
-    if (groupId && groupIdOf(t.categoryId) !== groupId) continue;
-    const bucket = buckets.get(t.categoryId) ?? { amount: 0, count: 0 };
+  for (const original of transactions) {
+    const t = metadata(original);
+    const refund = t.type === "INCOME";
+    if (!(includeCredits ? isCategoryActivity(t) : isSpendingActivity(t))) continue;
+    const categoryId = t.categoryId ?? UNCATEGORISED_ID;
+    if (groupId && groupIdOf(categoryId) !== groupId) continue;
+    const bucket = buckets.get(categoryId) ?? { amount: 0, count: 0 };
     bucket.amount += refund ? -t.amount : t.amount;
     if (!refund) bucket.count += 1;
-    buckets.set(t.categoryId, bucket);
+    buckets.set(categoryId, bucket);
   }
   return toSlices(buckets, labelFor);
 }
@@ -202,18 +215,22 @@ export function spendByCategory(
 export function spendByContext(
   transactions: Transaction[],
   labelFor: (value: string) => string,
+  all: Transaction[] = transactions,
+  includeCredits = false,
 ): BreakdownSlice[] {
+  const metadata = spendingAttribution(all);
   const buckets = new Map<string, { amount: Paise; count: number }>();
-  for (const t of transactions) {
-    if (!isExpense(t)) continue;
-    for (const c of t.contexts) {
-      const bucket = buckets.get(c.value) ?? { amount: 0, count: 0 };
-      bucket.amount += t.amount;
-      bucket.count += 1;
-      buckets.set(c.value, bucket);
+  for (const original of transactions) {
+    const t = metadata(original);
+    if (!(includeCredits ? isCategoryActivity(t) : isSpendingActivity(t))) continue;
+    for (const value of new Set(t.contexts.map(c => c.value))) {
+      const bucket = buckets.get(value) ?? { amount: 0, count: 0 };
+      bucket.amount += t.type === "INCOME" ? -t.amount : t.amount;
+      if (t.type === "EXPENSE") bucket.count += 1;
+      buckets.set(value, bucket);
     }
   }
-  const spent = total(transactions.filter(isExpense));
+  const spent = includeCredits ? netCategoryOutflow(transactions, all) : netSpending(transactions, all);
   return [...buckets.entries()]
     .map(([id, v]) => ({
       id,
@@ -225,14 +242,16 @@ export function spendByContext(
     .sort((a, b) => b.amount - a.amount);
 }
 
-export function spendByMerchant(transactions: Transaction[]): BreakdownSlice[] {
+export function spendByMerchant(transactions: Transaction[], all: Transaction[] = transactions, includeCredits = false): BreakdownSlice[] {
+  const metadata = spendingAttribution(all);
   const buckets = new Map<string, { amount: Paise; count: number }>();
-  for (const t of transactions) {
-    if (!isExpense(t) || !t.merchant) continue;
-    const bucket = buckets.get(t.merchant) ?? { amount: 0, count: 0 };
-    bucket.amount += t.amount;
-    bucket.count += 1;
-    buckets.set(t.merchant, bucket);
+  for (const original of transactions) {
+    const t = metadata(original);
+    if (!(includeCredits ? isCategoryActivity(t) : isSpendingActivity(t))) continue;
+    const bucket = buckets.get(t.merchant ?? "Merchant not recorded") ?? { amount: 0, count: 0 };
+    bucket.amount += t.type === "INCOME" ? -t.amount : t.amount;
+    if (t.type === "EXPENSE") bucket.count += 1;
+    buckets.set(t.merchant ?? "Merchant not recorded", bucket);
   }
   return toSlices(buckets, (id) => id);
 }
@@ -240,15 +259,19 @@ export function spendByMerchant(transactions: Transaction[]): BreakdownSlice[] {
 export function spendByAccount(
   transactions: Transaction[],
   accounts: Account[],
+  all: Transaction[] = transactions,
+  includeCredits = false,
 ): BreakdownSlice[] {
   const names = new Map(accounts.map((a) => [a.id, a.name]));
+  const metadata = spendingAttribution(all);
   const buckets = new Map<string, { amount: Paise; count: number }>();
-  for (const t of transactions) {
-    if (!isExpense(t)) continue;
+  for (const original of transactions) {
+    const t = metadata(original);
+    if (!(includeCredits ? isCategoryActivity(t) : isSpendingActivity(t))) continue;
     const id = t.accountId ?? "unassigned";
     const bucket = buckets.get(id) ?? { amount: 0, count: 0 };
-    bucket.amount += t.amount;
-    bucket.count += 1;
+    bucket.amount += t.type === "INCOME" ? -t.amount : t.amount;
+    if (t.type === "EXPENSE") bucket.count += 1;
     buckets.set(id, bucket);
   }
   return toSlices(buckets, (id) => names.get(id) ?? "Unassigned");
@@ -267,7 +290,7 @@ export function monthlySpendHistory(
 ): { key: MonthKey; amount: Paise }[] {
   return previousMonths(key, months, cycleStartDay).map((m) => ({
     key: m,
-    amount: total(monthTransactions(transactions, m, cycleStartDay).filter(isExpense)),
+    amount: netSpending(monthTransactions(transactions, m, cycleStartDay), transactions),
   }));
 }
 
@@ -285,7 +308,7 @@ export function averageMonthlySpend(
   cycleStartDay = 1,
 ): { average: Paise; monthsCounted: number } {
   const history = monthlySpendHistory(transactions, key, months, cycleStartDay);
-  const active = history.filter((h) => h.amount > 0);
+  const active = history.filter(h => monthTransactions(transactions, h.key, cycleStartDay).some(isSpendingActivity));
   if (active.length === 0) return { average: 0, monthsCounted: 0 };
   return {
     average: Math.round(
@@ -311,13 +334,16 @@ export function compareToAverage(
   predicate: (t: Transaction) => boolean,
   months = 3,
   cycleStartDay = 1,
+  includeCredits = false,
 ): ComparisonResult {
-  const matching = transactions.filter((t) => isExpense(t) && predicate(t));
-  const current = total(monthTransactions(matching, key, cycleStartDay));
+  const metadata = spendingAttribution(transactions);
+  const matching = transactions.filter(t => (includeCredits ? isCategoryActivity(metadata(t)) : isSpendingActivity(metadata(t))) && predicate(metadata(t)));
+  const net = includeCredits ? netCategoryOutflow : netSpending;
+  const current = net(monthTransactions(matching, key, cycleStartDay), transactions);
   const history = previousMonths(key, months, cycleStartDay).map((m) =>
-    total(monthTransactions(matching, m, cycleStartDay)),
+    net(monthTransactions(matching, m, cycleStartDay), transactions),
   );
-  const active = history.filter((amount) => amount > 0);
+  const active = history.filter((_, i) => monthTransactions(matching, previousMonths(key, months, cycleStartDay)[i]!, cycleStartDay).length > 0);
   const average =
     active.length > 0
       ? Math.round(active.reduce((a, b) => a + b, 0) / active.length)
@@ -337,8 +363,8 @@ export function monthOverMonthChange(
   cycleStartDay = 1,
 ): ComparisonResult {
   const previous = previousMonths(key, 1, cycleStartDay)[0]!;
-  const current = total(monthTransactions(transactions, key, cycleStartDay).filter(isExpense));
-  const base = total(monthTransactions(transactions, previous, cycleStartDay).filter(isExpense));
+  const current = netSpending(monthTransactions(transactions, key, cycleStartDay), transactions);
+  const base = netSpending(monthTransactions(transactions, previous, cycleStartDay), transactions);
   return {
     current,
     average: base,
@@ -366,7 +392,8 @@ export function spendingVelocity(
   now: Date,
   cycleStartDay = 1,
 ): VelocityResult {
-  const spentSoFar = total(monthTransactions(transactions, key, cycleStartDay).filter(isExpense));
+  const actualRows = transactions.filter(t => transactionOccurredBy(t, now));
+  const spentSoFar = netSpending(monthTransactions(actualRows, key, cycleStartDay), transactions);
   const daysElapsed = Math.max(1, elapsedDaysInMonth(now, key, cycleStartDay));
   const perDay = Math.round(spentSoFar / daysElapsed);
   return {
@@ -514,13 +541,15 @@ export interface LensResult {
 export function lensTotals(
   transactions: Transaction[],
   lenses: Lens[] = LENSES,
+  all: Transaction[] = transactions,
 ): LensResult[] {
   return lenses
     .map((lens) => {
-      const matched = applyLens(transactions, lens);
+      const metadata = spendingAttribution(all);
+      const matched = transactions.filter(t => applyLens([metadata(t)], lens).length > 0);
       return {
         lens,
-        amount: total(matched),
+        amount: netSpending(matched, all),
         count: matched.length,
         transactions: matched,
       };
@@ -613,14 +642,14 @@ function cardActivity(
   let paid = 0;
   for (const t of transactions) {
     if (!inRange(new Date(t.date))) continue;
-    if (t.type === "EXPENSE" && t.accountId === cardAccountId) {
+    if ((t.type === "EXPENSE" || t.type === "INVESTMENT") && t.accountId === cardAccountId) {
       charged += t.amount;
     } else if (t.type === "TRANSFER" && t.toAccountId === cardAccountId) {
       paid += t.amount;
     } else if (t.type === "TRANSFER" && t.accountId === cardAccountId) {
       // A cash advance or a refund routed out of the card increases the debt.
       charged += t.amount;
-    } else if (t.type === "INCOME" && t.isRefund && t.accountId === cardAccountId) {
+    } else if (t.type === "INCOME" && t.accountId === cardAccountId) {
       // A merchant refund credited back to the card reduces what's owed —
       // this works whether or not it's linked to the original charge, since
       // only "landed back in the card account" matters here.
@@ -846,6 +875,7 @@ export function netWorth(
   peopleBalances: { netAmount: Paise }[],
   now: Date,
 ): Paise {
+  transactions = transactions.filter(t => transactionOccurredBy(t, now));
   const cash = liquidBalance(accounts, transactions);
   const portfolio = portfolioValue(investments, transactions, now);
   const cardDebt = totalCommitted(accounts, transactions);
@@ -936,6 +966,7 @@ export function valueInvestments(
   transactions: Transaction[],
   now: Date,
 ): InvestmentValuation[] {
+  transactions = transactions.filter(t => transactionOccurredBy(t, now));
   const contributions = ofType(transactions, "INVESTMENT");
   return investments.map((investment) => {
     const mine = contributions.filter((t) => t.investmentId === investment.id);
@@ -945,7 +976,8 @@ export function valueInvestments(
     const withdrawals = transactions.filter((t) => t.type === "TRANSFER" &&
       t.investmentId === investment.id && t.accountId && t.toAccountId &&
       t.accountId !== t.toAccountId);
-    const valuedAt = investment.valuedAt ? new Date(investment.valuedAt) : null;
+    const stamp = investment.valuedAt ? new Date(investment.valuedAt) : null;
+    const valuedAt = stamp && stamp <= now ? stamp : null;
 
     const value =
       investment.currentValue === undefined || valuedAt === null

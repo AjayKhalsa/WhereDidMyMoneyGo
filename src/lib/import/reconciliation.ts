@@ -69,7 +69,7 @@ function validateRow(collection: Collection, input: unknown) {
     if (row.timing != null) {
       const timing = record(row.timing);
       keys(timing, ["source", "precision", "timezone"]);
-      if (!["user", "bank", "payment", "statement", "unknown"].includes(String(timing.source)) || !["exact", "date"].includes(String(timing.precision)) || timing.timezone !== "Asia/Kolkata") fail("Invalid transaction timing.");
+      if (!["user", "bank", "payment", "statement", "logged", "unknown"].includes(String(timing.source)) || !["exact", "estimated", "date"].includes(String(timing.precision)) || timing.timezone !== "Asia/Kolkata") fail("Invalid transaction timing.");
     }
     if (row.enrichment != null) {
       const enrichment = record(row.enrichment);
