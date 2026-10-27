@@ -13,7 +13,7 @@ export const BANK_SENDERS: Record<string, string> = {
   "protect@cred.club": "CRED",
 };
 // Bump only when review receipts need another deterministic parsing attempt.
-export const ALERT_PARSER_VERSION = 1;
+export const ALERT_PARSER_VERSION = 2;
 export function financialSendersQuery(): string {
   return `(${Object.keys(BANK_SENDERS).filter(sender => sender !== 'protect@cred.club').map(sender => `from:${sender}`).join(' OR ')} OR (from:protect@cred.club subject:"your credit card bill payment was successful"))`;
 }
@@ -31,6 +31,7 @@ export interface Alert extends Partial<AlertTime> {
   special?: boolean;
   vpa?: string;
   paymentRail?: "UPI" | "NEFT" | "IMPS";
+  upiRecipientKind?: "person" | "merchant";
   creditKind?: "refund" | "income" | "repayment" | "unknown";
   incomeKind?: "salary";
   refundStatus?: "initiated" | "posted";
@@ -146,6 +147,8 @@ export function parseAlert(from: string, subject: string, text: string, received
   if (!Number.isSafeInteger(paise) || paise <= 0) return null;
   const reference = normalizeBankReference(merchant.match(/^UPI[-/](?:P2[MP]\/)?(\d{10,})[-/]/i)?.[1] ?? body.match(/UPI (?:transaction )?reference no\.?\s*:\s*(\d{10,})/i)?.[1]);
   const vpa = merchant.match(/\bVPA:?\s+(\S+@[^\s)]+)/i)?.[1];
+  const recipient = /^UPI\/P2([MP])\//i.exec(merchant)?.[1]?.toUpperCase();
+  const upiRecipientKind = recipient === 'P' ? 'person' : recipient === 'M' ? 'merchant' : undefined;
   const paymentRail = /\bUPI\b/i.test(body) ? "UPI" : /\bNEFT\b/i.test(merchant) ? "NEFT" : /\bIMPS\b/i.test(merchant) ? "IMPS" : undefined;
   const parsedTime = alertTime(body, date!, day, receivedAt);
   const refundInitiatedAt = refundStatus === 'initiated' && parsedTime.timeSource === 'bank' ? parsedTime.occurredAt : undefined;
@@ -154,12 +157,12 @@ export function parseAlert(from: string, subject: string, text: string, received
   const transactionDay = time.timeSource === "bank" || time.timeSource === "payment" ? time.occurredAt!.slice(0, 10) : day;
   const creditKind = direction !== "credit" ? undefined : repayment ? "repayment" : refundStatus || /refund|reversal|cashback/i.test(merchant) ? "refund" : /\bSAL(?:ARY)?\b|Int\.Pd|interest paid/i.test(merchant) ? "income" : "unknown";
   const incomeKind = direction === 'credit' && instrument === 'bank' && creditKind === 'income' && isSalaryNarration(merchant) ? 'salary' : undefined;
-  merchant = merchant.replace(/^UPI-\d+-/i, "").replace(/^VPA\s+\S+\s+\((.+)\)$/i, "$1").trim().slice(0, 180);
+  merchant = merchant.replace(/^UPI(?:\/P2[MP])?[-/]\d+[-/]/i, "").replace(/^VPA\s+\S+\s+\((.+)\)$/i, "$1").trim().slice(0, 180);
   const special = repayment || !!refundStatus || /refund|reversal|cashback|billpay|card payment|\bcred\b|dreamplug|neft|imps|zerodha|mutual fund|mandate/i.test(merchant);
   const words = merchant.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/);
   const matches = MERCHANTS.filter(m => m.aliases.some(a => words.includes(a)));
   const categoryId = new Set(matches.map(m => m.categoryId)).size === 1 ? matches[0]?.categoryId : undefined;
-  return { bank, instrument, tail, amount: paise, date: transactionDay, merchant, direction, reference, providerReference, categoryId, special, vpa, paymentRail, creditKind, incomeKind, refundStatus, refundInitiatedAt, ...time };
+  return { bank, instrument, tail, amount: paise, date: transactionDay, merchant, direction, reference, providerReference, categoryId, special, vpa, paymentRail, upiRecipientKind, creditKind, incomeKind, refundStatus, refundInitiatedAt, ...time };
 }
 
 export function accountForAlert(alert: Alert, accounts: Pick<Account, "id" | "name" | "type" | "hint" | "isActive">[], aliases: Record<string, string>): string | undefined {

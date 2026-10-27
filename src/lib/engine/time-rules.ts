@@ -4,8 +4,8 @@ import { merchantKey } from "./merchant-identity";
 
 export const MEAL_WINDOWS = [
   { start: 0, end: 12, categoryId: "dining.breakfast", label: "Breakfast" },
-  { start: 12, end: 17, categoryId: "dining.lunch", label: "Lunch" },
-  { start: 17, end: 20, categoryId: "dining.snacks", label: "Snacks" },
+  { start: 12, end: 16, categoryId: "dining.lunch", label: "Lunch" },
+  { start: 16, end: 20, categoryId: "dining.snacks", label: "Snacks" },
   { start: 20, end: 24, categoryId: "dining.dinner", label: "Dinner" },
 ] as const;
 const MEALS = new Set<string>(["dining", "dining.other", ...MEAL_WINDOWS.map(w => w.categoryId)]);

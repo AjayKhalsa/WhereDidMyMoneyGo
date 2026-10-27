@@ -219,9 +219,10 @@ test('new parser version retries only unresolved receipts, preserving dismissals
  for(const [id,status] of [['old-format','review'],['intentional-dismissal','ignored'],['already-logged','logged']] as const){
   await db.query("insert into gmail_messages(user_id,message_id,status) values($1,$2,$3)",[user,id,status]);
  }
- const queue=async()=>(await db.query<{message_id:string}>("select message_id from gmail_messages where user_id=$1 and (status='pending' or (status='review' and parser_version<1)) and message_id in ('old-format','intentional-dismissal','already-logged')",[user])).rows.map(r=>r.message_id);
+ await db.query("update gmail_messages set parser_version=1 where message_id='old-format'");
+ const queue=async()=>(await db.query<{message_id:string}>("select message_id from gmail_messages where user_id=$1 and (status='pending' or (status='review' and parser_version<2)) and message_id in ('old-format','intentional-dismissal','already-logged')",[user])).rows.map(r=>r.message_id);
  assert.deepEqual(await queue(),['old-format']);
- await db.query("update gmail_messages set parser_version=1 where message_id='old-format'");assert.deepEqual(await queue(),[]);
+ await db.query("update gmail_messages set parser_version=2 where message_id='old-format'");assert.deepEqual(await queue(),[]);
 });
 
 test('partial card repayment changes bank cash and liability once, without a second spending expense',async()=>{
