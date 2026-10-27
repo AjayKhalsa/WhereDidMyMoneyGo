@@ -1,5 +1,11 @@
 # Finance automation handoff
 
+## Latest scheduling and preview follow-up — 2026-10-28
+
+The separately requested every-four-hour workflow was merged in PR 30 and verified on main. It targets 01:17, 05:17, 09:17, 13:17, 17:17 and 21:17 IST, retaining the nightly Vercel fallback. The ten automation tests pass. GitHub dispatch can run late. This scheduling change is active independently of PR 29.
+
+PR 29 additionally refreshes historical preview display against current ledger links and dismissals without rewriting staging evidence. Already recorded items count as matched and need no action. Ambiguous amount/date-only cases still require review. Source changes in PR 29 remain unmerged. Gmail durable-consent instructions are in `gmail-setup.md`; actual Google OAuth publishing status and device push delivery remain unverified.
+
 ## Expense reliability follow-up — 2026-10-28
 
 PR 29 now also addresses expired Gmail paging cursors, Axis contact-footer parsing, P2A reference extraction and statement routing-bank names being mistaken for merchants. It includes a read-only private expense audit CLI. No historical financial records or manually assigned categories were changed. The new parser retry applies only after source deployment; no migration is required. See `expense-quality.md` for observed review/Other coverage and outstanding work. PR 29 remains unmerged; production behavior is unchanged by this source follow-up.
