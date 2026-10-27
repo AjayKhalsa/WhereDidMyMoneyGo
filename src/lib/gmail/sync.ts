@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Account } from "@/lib/domain/types";
 import { accountForAlert, authenticatedSender, automaticReason, financialSendersQuery, ALERT_PARSER_VERSION, header, mailText, parseAlert, type MailPart } from "./alerts";
-import { admin, GmailError, google, tokenRequest, unseal } from "./server";
+import { admin, GmailError, GoogleRequestError, google, tokenRequest, unseal } from "./server";
 import { historicalRules, classifiedAlert } from "./classification";
 import { learningData, ruleRow } from "./learning-data";
 import { merchantKey } from "@/lib/engine/merchant-identity";
@@ -27,7 +27,19 @@ export async function syncMailbox(userId: string, deadline = Date.now() + 45000)
     const q = `after:${after} before:${Math.ceil(new Date(scanStarted).getTime()/1000)} -in:spam -in:trash -subject:OTP -subject:statement ${financialSendersQuery()}`;
     const params = new URLSearchParams({ q, maxResults: "25" });
     if (connection.page_token) params.set("pageToken", connection.page_token);
-    const page = await google<{ messages?: { id: string }[]; nextPageToken?: string }>(`${base}/messages?${params}`, { headers });
+    type Page={ messages?: { id: string }[]; nextPageToken?: string };
+    let page:Page;
+    try { page=await google<Page>(`${base}/messages?${params}`,{headers}); }
+    catch(error) {
+      // Gmail cursors expire. Restart the same fixed scan, retaining all queued
+      // receipts and its time bounds; idempotent upserts make replay safe.
+      // Auth, rate-limit and network failures must not erase a valid cursor.
+      if(!connection.page_token||!(error instanceof GoogleRequestError)||error.upstreamStatus!==400)throw error;
+      const reset=await db.from('gmail_connections').update({page_token:null}).eq('user_id',userId).eq('lease_id',lease);
+      if(reset.error)throw reset.error;
+      params.delete('pageToken');
+      page=await google<Page>(`${base}/messages?${params}`,{headers});
+    }
     if (page.messages?.length) {
       const inserted = await db.from("gmail_messages").upsert(page.messages.map(m => ({ user_id: userId, message_id: m.id })), { onConflict: "user_id,message_id", ignoreDuplicates: true });
       if (inserted.error) throw inserted.error;

@@ -5,7 +5,7 @@ import { admin,GmailError,google,tokenRequest,unseal } from './server';
 import { domainRow,learningData } from './learning-data';
 import { classifiedAlert } from './classification';
 import { merchantKey } from '@/lib/engine/merchant-identity';
-import { backfillDisposition,backfillRange,backfillSummary,subscriptionSuggestion,subscriptionPatterns } from './backfill-plan';
+import { backfillDisposition,backfillRange,backfillSummary,subscriptionSuggestion,subscriptionPatterns,currentBackfillItems } from './backfill-plan';
 
 type DB=ReturnType<typeof admin>;
 // Explicit paging: never silently treat Supabase's default first 1000 as all history.
@@ -20,14 +20,15 @@ async function allRows(db:DB,table:string,user:string,order:string,run?:string){
 export async function backfillReport(user:string){
  const db=admin(),run=await db.from('gmail_backfill_runs').select('*').eq('user_id',user).order('created_at',{ascending:false}).limit(1).maybeSingle();if(run.error)throw run.error;
  if(!run.data)return {run:null,items:[],subscriptions:[]};
- const items=await allRows(db,'gmail_backfill_items',user,'message_id',run.data.id);
- const [tx,rr]=await Promise.all([allRows(db,'transactions',user,'id'),allRows(db,'recurring',user,'id')]);
+ const staged=await allRows(db,'gmail_backfill_items',user,'message_id',run.data.id);
+ const [tx,rr,receipts]=await Promise.all([allRows(db,'transactions',user,'id'),allRows(db,'recurring',user,'id'),allRows(db,'gmail_messages',user,'message_id')]);
+ const items=currentBackfillItems(staged as ({message_id:string;status:string}&Record<string,any>)[],receipts as any,new Set(tx.map(t=>String(t.id))));
  const rules=rr.map(r=>domainRow<RecurringTransaction>(r));
  const subscriptions=tx.filter(t=>t.date.slice(0,10)>=run.data.start_date&&t.date.slice(0,10)<=run.data.end_date).flatMap(t=>{const suggestion=subscriptionSuggestion(domainRow<Transaction>(t),rules);return suggestion?[{transactionId:t.id,merchant:t.merchant||t.description,date:t.date, ...suggestion}]:[];});
  const patterns=subscriptionPatterns(tx.filter(t=>t.date.slice(0,10)>=run.data.start_date&&t.date.slice(0,10)<=run.data.end_date).map(t=>domainRow<Transaction>(t)));
  return {run:{...run.data,query:undefined,page_token:undefined},summary:backfillSummary(items.map(i=>({status:String(i.status)})),run.data.discovery_complete),items,subscriptions,patterns};
 }
-export async function scanBackfill(user:string,input?:{start:string;end:string}){
+export async function scanBackfill(user:string,input?:{start:string;end:string;refresh?:boolean}){
  const db=admin(),lease=randomUUID(),lock=await db.rpc('gmail_acquire_lease',{p_user:user,p_lease:lease});if(lock.error)throw lock.error;if(!lock.data)throw new GmailError('A Gmail job is running, or Gmail is disconnected. Retry shortly.',409);
  let runId:string|undefined;
  const begun=Date.now();
@@ -35,9 +36,10 @@ export async function scanBackfill(user:string,input?:{start:string;end:string})
   const c=await db.from('gmail_connections').select('refresh_token,aliases').eq('user_id',user).single();if(c.error)throw c.error;
   let found=await db.from('gmail_backfill_runs').select('*').eq('user_id',user).neq('status','complete').maybeSingle();if(found.error)throw found.error;
   if(!found.data){
-   // A completed run is returned unchanged on retry; a different explicit range starts a new preview.
+   // Ordinary retries reuse a completed report. An explicit refresh starts a
+   // new immutable preview so parser updates can reconsider unresolved mail.
    const previous=await db.from('gmail_backfill_runs').select('*').eq('user_id',user).order('created_at',{ascending:false}).limit(1).maybeSingle();if(previous.error)throw previous.error;
-   if(previous.data&&(!input||(input.start===previous.data.start_date&&input.end===previous.data.end_date)))return await backfillReport(user);
+   if(previous.data&&(!input||(!input.refresh&&input.start===previous.data.start_date&&input.end===previous.data.end_date)))return await backfillReport(user);
    if(!input)throw new GmailError('Choose the historical date range.');
    let bounds;try{bounds=backfillRange(input.start,input.end);}catch{throw new GmailError('Choose a historical range of at most 100 days.');}
    const query=`after:${bounds.after} before:${bounds.before} -in:spam -in:trash -subject:OTP -subject:statement ${financialSendersQuery()}`;

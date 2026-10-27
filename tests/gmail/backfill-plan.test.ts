@@ -1,11 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { backfillDisposition,backfillRange,backfillSummary,subscriptionSuggestion,subscriptionPatterns } from '../../src/lib/gmail/backfill-plan';
+import { backfillDisposition,backfillRange,backfillSummary,subscriptionSuggestion,subscriptionPatterns,currentBackfillItems } from '../../src/lib/gmail/backfill-plan';
 import type { Transaction,RecurringTransaction } from '../../src/lib/domain/types';
 import type { Alert } from '../../src/lib/gmail/alerts';
 const a:Alert={bank:'HDFC',instrument:'bank',tail:'1234',amount:10000,date:'2026-08-01',merchant:'Example',direction:'debit',accountId:'bank',categoryId:'other',reference:'123456789012'};
 const globalTransaction={id:'manual',type:'EXPENSE',amount:10000,date:'2026-08-01',description:'Reviewed payee',notes:'ref 123456789012',accountId:'bank',categoryId:'health',contexts:[]} as unknown as Transaction;
 const decide=(alert:Alert|null=a,existing?:any,tx:Transaction[]=[globalTransaction],sources:any[]=[])=>backfillDisposition(alert,true,existing,tx,sources,'abc','2026-07-18','2026-10-18');
+test('current ledger decisions remove resolved snapshot cases without rewriting evidence or guessing matches',()=>{
+ const staged=[{message_id:'saved',status:'review'},{message_id:'dismissed',status:'proposed'},{message_id:'gone',status:'matched',matched_transaction_id:'deleted'},{message_id:'uncertain',status:'review'}];
+ const before=JSON.stringify(staged);
+ const shown=currentBackfillItems(staged,[{message_id:'saved',status:'logged',transaction_id:'manual'},{message_id:'dismissed',status:'ignored'}],new Set(['manual']));
+ assert.deepEqual(shown.map(i=>i.status),['matched','ignored','review','review']);
+ assert.equal(shown[0]!.matched_transaction_id,'manual');assert.equal(JSON.stringify(staged),before);
+});
 test('recurring patterns require actual monthly debits and expose changing amounts',()=>{
  const charges=['2026-07-25','2026-08-25','2026-09-25'].map((date,i)=>({...globalTransaction,id:String(i),date,description:'Spotify',amount:i===2?20000:10000}));
  assert.equal(subscriptionPatterns(charges).length,1);assert.equal(subscriptionPatterns(charges)[0]!.amountChanged,true);

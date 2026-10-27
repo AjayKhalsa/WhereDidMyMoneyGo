@@ -1,4 +1,5 @@
 import type { TransactionType } from "@/lib/domain/types";
+import { merchantPayee } from './merchant-identity';
 
 /**
  * Bank-narration cleanup for statement import.
@@ -76,7 +77,7 @@ export function cleanBankNarration(raw: string): NarrationCleanupResult {
     typeHint = "INVESTMENT";
   }
 
-  let text = original;
+  let text = merchantPayee(original);
   for (const pattern of STRIP_PREFIXES) {
     text = text.replace(pattern, "");
   }

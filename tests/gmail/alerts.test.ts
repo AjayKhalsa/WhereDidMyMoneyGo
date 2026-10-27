@@ -5,6 +5,11 @@ import type { Account } from "../../src/lib/domain/types";
 
 // Synthetic fixtures preserving observed bank layouts, not private emails.
 const card = "Your ICICI Bank Credit Card XX1234 has been used for a transaction of INR 340.00 on Oct 15, 2026 at 07:26:54. Info: UPI-123456789012-ZOMATO. The Available Credit Limit on your card is INR 3,63,534.82.";
+test('Axis footer text cannot become payee identity or a learned merchant pattern',()=>{
+ const text='Amount Credited: INR 650.00 Account Number: XX1234 Date & Time: 22-10-2026, 12:15:00 IST Transaction Info: UPI/P2A/123456789012/EXAMPLE PERSON/HDFC/UPI Feel free to connect with us for any clarification. Call us at: 18000000000 Always open to help';
+ const a=parseAlert('alerts@axis.bank.in','INR 650.00 was credited to your A/c.',text)!;
+ assert.equal(a.merchant,'EXAMPLE PERSON/HDFC/UPI');assert.equal(a.amount,65000);assert.equal(a.reference,'123456789012');assert.equal(a.direction,'credit');assert.equal(a.occurredAt,'2026-10-22T12:15:00');
+});
 test("ICICI reads the purchase, not the much larger available limit", () => {
   const a = parseAlert("credit_cards@icici.bank.in", "Transaction alert for your ICICI Bank Credit Card", card)!;
   assert.equal(a.amount, 34000); assert.equal(a.tail, "1234"); assert.equal(a.date, "2026-10-15");

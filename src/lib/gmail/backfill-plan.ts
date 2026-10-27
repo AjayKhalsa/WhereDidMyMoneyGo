@@ -51,3 +51,15 @@ export function backfillSummary(items:{status:string}[],discoveryComplete:boolea
   const counts=Object.fromEntries(['pending','matched','proposed','review','ignored','skipped','failed'].map(s=>[s,items.filter(i=>i.status===s).length]));
   return {discovered:items.length,processed:items.length-counts.pending!,matched:counts.matched!,proposed:counts.proposed!,needsReview:counts.review!,ignored:counts.ignored!,skipped:counts.skipped!,failed:counts.failed!,pending:counts.pending!,imported:0,complete:discoveryComplete&&counts.pending===0&&counts.failed===0};
 }
+
+/** Refresh display against current decisions without mutating the original scan. */
+export function currentBackfillItems<T extends {message_id:string;status:string;matched_transaction_id?:string|null;reason?:string}>(items:T[],receipts:{message_id:string;status:string;transaction_id?:string|null}[],transactionIds:Set<string>):T[] {
+  return items.map(item=>{
+    const receipt=receipts.find(r=>r.message_id===item.message_id);
+    if(receipt?.status==='logged'&&receipt.transaction_id&&transactionIds.has(receipt.transaction_id))return {...item,status:'matched',matched_transaction_id:receipt.transaction_id,reason:'Already recorded in the current ledger. No action needed.'};
+    if(receipt?.status==='ignored')return {...item,status:'ignored',reason:'Dismissed by you; dismissal preserved.'};
+    if(receipt?.status==='duplicate')return {...item,status:'skipped',reason:'Duplicate receipt already resolved; no action needed.'};
+    if(item.status==='matched'&&item.matched_transaction_id&&!transactionIds.has(item.matched_transaction_id))return {...item,status:'review',reason:'The previously matched ledger entry is no longer present. Review before importing.'};
+    return item;
+  });
+}

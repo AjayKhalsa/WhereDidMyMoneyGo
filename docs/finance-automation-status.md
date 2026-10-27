@@ -1,5 +1,23 @@
 # Finance automation handoff
 
+## Latest scheduling and preview follow-up — 2026-10-28
+
+The separately requested every-four-hour workflow was merged in PR 30 and verified on main. It targets 01:17, 05:17, 09:17, 13:17, 17:17 and 21:17 IST, retaining the nightly Vercel fallback. The ten automation tests pass. GitHub dispatch can run late. This scheduling change is active independently of PR 29.
+
+PR 29 additionally refreshes historical preview display against current ledger links and dismissals without rewriting staging evidence. Already recorded items count as matched and need no action. Ambiguous amount/date-only cases still require review. Source changes in PR 29 remain unmerged. Gmail durable-consent instructions are in `gmail-setup.md`; actual Google OAuth publishing status and device push delivery remain unverified.
+
+## Expense reliability follow-up — 2026-10-28
+
+PR 29 now also addresses expired Gmail paging cursors, Axis contact-footer parsing, P2A reference extraction and statement routing-bank names being mistaken for merchants. It includes a read-only private expense audit CLI. No historical financial records or manually assigned categories were changed. The new parser retry applies only after source deployment; no migration is required. See `expense-quality.md` for observed review/Other coverage and outstanding work. PR 29 remains unmerged; production behavior is unchanged by this source follow-up.
+
+## Current verified status — 2026-10-27
+
+This section supersedes historical baseline notes below. PRs 27 and 28 are merged. Migrations 0022 and 0023 are applied; the under-₹150 personal-UPI Auto rule and 16:00 Snacks boundary are on main. The exact, separately approved payment/refund repair batch has been applied atomically after a private backup and dry run. Two missing financial events were recorded, four receipts now reference three canonical transactions, and the existing card repayment was checked unchanged field-for-field. Salary was already linked and was left unchanged. No balancing adjustment was inserted. These checks verify the approved repair, not complete statement coverage after the existing reconciliation date.
+
+Migration 0021 is now applied. Push subscriptions are encrypted and server-only: RLS is enabled, authenticated clients cannot read the table or execute registration directly, and the service role can register. Vercel team access was granted. Production-only VAPID keys and the app HTTPS subject were added without changing existing secrets. The current main commit was redeployed successfully with those settings; the production alias serves the push-enabled service worker, and unauthenticated notification requests redirect to login. No runtime errors were found in the new deployment during inspection. Device registration, authenticated status and actual delivery still require user permission and a test on the device. PR 29 remains separate and unmerged. The monthly statement reminder is already configured separately. Recent GitHub Gmail sync runs completed successfully; this does not imply all review cases are resolved.
+
+The current branch adds explicit historical-preview refresh for parser/sender updates and a read-only temporal holdout evaluator. Neither changes existing categories or imports historical money. The latest completed preview still contains proposed imports and unresolved cases, so three-month import and reliable recurring links remain unfinished. Refresh the dry run against current ledger/statement evidence before proposing another financial mutation batch. See `learning-evaluation.md` and `gmail-backfill.md`.
+
 ## Receipt matching follow-up — 2026-10-27
 
 The latest work adds ICICI card-repayment receipts, Axis account debit/credit summaries and authenticated CRED successful-payment receipts; shared-reference matching runs before financial-purpose review. Parser-version metadata permits bounded retry of unresolved review formats while preserving dismissals and canonical ledger fields. Partial repayments default to transfers, with the paying account requiring confirmation. See `gmail-payment-receipts.md` for safeguards and validation. PR 27 was merged; required migration 0022 was subsequently backed up, applied and schema/permissions verified with explicit approval. The service-only credit helper, matcher, parser metadata and RLS are verified. No existing ledger rows were changed by these database updates. Historical financial repairs still require separate approval. Existing statement reconciliation is preserved.

@@ -13,7 +13,7 @@ export const BANK_SENDERS: Record<string, string> = {
   "protect@cred.club": "CRED",
 };
 // Bump only when review receipts need another deterministic parsing attempt.
-export const ALERT_PARSER_VERSION = 2;
+export const ALERT_PARSER_VERSION = 3;
 export function financialSendersQuery(): string {
   return `(${Object.keys(BANK_SENDERS).filter(sender => sender !== 'protect@cred.club').map(sender => `from:${sender}`).join(' OR ')} OR (from:protect@cred.club subject:"your credit card bill payment was successful"))`;
 }
@@ -132,7 +132,7 @@ export function parseAlert(from: string, subject: string, text: string, received
       const axis = /Transaction Amount:\s*INR\s*([\d,.]+)\s+Merchant Name:\s*(.+?)\s+Axis Bank Credit Card No\.\s*X+(\d{4})\s+Date\s*&\s*Time:\s*(\d{2}-\d{2}-\d{4})/i.exec(body);
       if (axis) [, amount, merchant, tail, date] = axis;
     } else {
-      const account = /Amount\s+(Debited|Credited):\s*INR\s*([\d,.]+)\s+Account Number:\s*X+(\d{4})\s+Date\s*&\s*Time:\s*(\d{2}-\d{2}-\d{2,4}),?\s+\d{1,2}:\d{2}(?::\d{2})?\s+IST\s+Transaction Info:\s*(.+?)(?=\s+(?:If this transaction|Available Balance|Regards)|$)/i.exec(body);
+      const account = /Amount\s+(Debited|Credited):\s*INR\s*([\d,.]+)\s+Account Number:\s*X+(\d{4})\s+Date\s*&\s*Time:\s*(\d{2}-\d{2}-\d{2,4}),?\s+\d{1,2}:\d{2}(?::\d{2})?\s+IST\s+Transaction Info:\s*(.+?)(?=\s+(?:If this transaction|Available Balance|Regards|Feel free to connect with us|Call us at:|Always open to help)|$)/i.exec(body);
       if (account) { [, , amount, tail, date, merchant] = account; direction = account[1]!.toLowerCase() === "credited" ? "credit" : "debit"; instrument = "bank"; }
     }
   } else if (bank === "CRED" && /^your credit card bill payment was successful\s*$/i.test(subject.trim())) {
@@ -145,7 +145,7 @@ export function parseAlert(from: string, subject: string, text: string, received
   if (!amount || !/^\d+(?:,\d+)*(?:\.\d{1,2})?$/.test(amount) || !tail || !day || !merchant) return null;
   const paise = Math.round(Number(amount.replace(/,/g, "")) * 100);
   if (!Number.isSafeInteger(paise) || paise <= 0) return null;
-  const reference = normalizeBankReference(merchant.match(/^UPI[-/](?:P2[MP]\/)?(\d{10,})[-/]/i)?.[1] ?? body.match(/UPI (?:transaction )?reference no\.?\s*:\s*(\d{10,})/i)?.[1]);
+  const reference = normalizeBankReference(merchant.match(/^UPI[-/](?:P2[MPA]\/)?(\d{10,})[-/]/i)?.[1] ?? body.match(/UPI (?:transaction )?reference no\.?\s*:\s*(\d{10,})/i)?.[1]);
   const vpa = merchant.match(/\bVPA:?\s+(\S+@[^\s)]+)/i)?.[1];
   const recipient = /^UPI\/P2([MP])\//i.exec(merchant)?.[1]?.toUpperCase();
   const upiRecipientKind = recipient === 'P' ? 'person' : recipient === 'M' ? 'merchant' : undefined;
@@ -157,7 +157,7 @@ export function parseAlert(from: string, subject: string, text: string, received
   const transactionDay = time.timeSource === "bank" || time.timeSource === "payment" ? time.occurredAt!.slice(0, 10) : day;
   const creditKind = direction !== "credit" ? undefined : repayment ? "repayment" : refundStatus || /refund|reversal|cashback/i.test(merchant) ? "refund" : /\bSAL(?:ARY)?\b|Int\.Pd|interest paid/i.test(merchant) ? "income" : "unknown";
   const incomeKind = direction === 'credit' && instrument === 'bank' && creditKind === 'income' && isSalaryNarration(merchant) ? 'salary' : undefined;
-  merchant = merchant.replace(/^UPI(?:\/P2[MP])?[-/]\d+[-/]/i, "").replace(/^VPA\s+\S+\s+\((.+)\)$/i, "$1").trim().slice(0, 180);
+  merchant = merchant.replace(/^UPI(?:\/P2[MPA])?[-/]\d+[-/]/i, "").replace(/^VPA\s+\S+\s+\((.+)\)$/i, "$1").trim().slice(0, 180);
   const special = repayment || !!refundStatus || /refund|reversal|cashback|billpay|card payment|\bcred\b|dreamplug|neft|imps|zerodha|mutual fund|mandate/i.test(merchant);
   const words = merchant.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/);
   const matches = MERCHANTS.filter(m => m.aliases.some(a => words.includes(a)));

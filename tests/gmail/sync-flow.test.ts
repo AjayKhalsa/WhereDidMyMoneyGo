@@ -7,11 +7,39 @@ const require=createRequire(import.meta.url);
 const hook=registerHooks({resolve(specifier,context,next){return next(specifier==='next/server'?pathToFileURL(require.resolve('next/server.js')).href:specifier,context);}});
 const {syncMailbox}=await import('@/lib/gmail/sync');
 const {seal}=await import('@/lib/gmail/server');
+const {ALERT_PARSER_VERSION}=await import('@/lib/gmail/alerts');
 const user='11111111-1111-4111-8111-111111111111';
 const originalFetch=globalThis.fetch;
 const names=['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_ANON_KEY','SUPABASE_SERVICE_ROLE_KEY','GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','GMAIL_TOKEN_KEY','APP_ORIGIN','CRON_SECRET'];
 const previous=Object.fromEntries(names.map(k=>[k,process.env[k]]));
 after(()=>{globalThis.fetch=originalFetch;hook.deregister();for(const k of names){if(previous[k]===undefined)delete process.env[k];else process.env[k]=previous[k];}});
+
+test('expired paging cursor replays fixed scan without deleting receipts or advancing on other errors',async()=>{
+ for(const name of names)process.env[name]='synthetic';
+ process.env.NEXT_PUBLIC_SUPABASE_URL='https://database.example';process.env.GMAIL_TOKEN_KEY='ab'.repeat(32);
+ let upstreamStatus=400;let queries:URLSearchParams[]=[];let updates:any[]=[];
+ const connection={refresh_token:seal('refresh',user),start_date:'2026-10-01',aliases:{},page_token:'expired',scan_after:1791000000,scan_started_at:'2026-10-25T05:00:00Z',last_synced_at:'2026-10-20T05:00:00Z'};
+ const json=(v:unknown,status=200)=>new Response(JSON.stringify(v),{status,headers:{'content-type':'application/json','content-range':'*/0'}});
+ globalThis.fetch=async(input,init)=>{
+  const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url),method=init?.method??'GET';
+  if(url.hostname==='oauth2.googleapis.com')return json({access_token:'synthetic'});
+  if(url.hostname==='gmail.googleapis.com'){queries.push(url.searchParams);return url.searchParams.has('pageToken')?json({error:'Synthetic invalid cursor'},upstreamStatus):json({messages:[]});}
+  const body=init?.body?JSON.parse(String(init.body)):undefined;
+  if(url.pathname.endsWith('/rpc/gmail_acquire_lease'))return json(true);
+  if(url.pathname.endsWith('/gmail_connections')){if(method==='GET')return json(connection);updates.push(body);return json(null);}
+  assert.equal(method==='GET'||method==='HEAD',true,'Replay may not delete receipts or write financial rows');
+  if(url.pathname.endsWith('/profiles'))return json(null);
+  if(method==='HEAD')return new Response(null,{headers:{'content-range':'*/0'}});
+  return json([]);
+ };
+ assert.equal((await syncMailbox(user)).more,false);assert.equal(queries.length,2);
+ assert.equal(queries[0]!.get('q'),queries[1]!.get('q'));assert.equal(queries[1]!.has('pageToken'),false);
+ assert.deepEqual(updates[0],{page_token:null});
+ for(const status of [403,429,503]){
+  upstreamStatus=status;queries=[];updates=[];await assert.rejects(syncMailbox(user));
+  assert.equal(queries.length,1);assert.equal(updates.some(p=>'page_token' in p||'last_synced_at' in p),false);
+ }
+});
 
 test('real sync retries review upgrades, matches before categorization and dispatches only identified posted credits',async()=>{
  for(const name of names)process.env[name]='synthetic';
@@ -62,8 +90,8 @@ test('real sync retries review upgrades, matches before categorization and dispa
    }
    if(method==='HEAD')return new Response(null,{status:200,headers:{'content-range':'*/0'}});
    if(url.searchParams.get('select')==='message_id'){
-    assert.match(url.searchParams.get('or')!,/status\.eq\.pending,and\(status\.eq\.review,parser_version\.lt\.2\)/);
-    return json(mail.status==='review'&&mail.parser_version<2?[{message_id:'credit'}]:[]);
+    assert.equal(url.searchParams.get('or'),`(status.eq.pending,and(status.eq.review,parser_version.lt.${ALERT_PARSER_VERSION}))`);
+    return json(mail.status==='review'&&mail.parser_version<ALERT_PARSER_VERSION?[{message_id:'credit'}]:[]);
    }
    return json([]);
   }
@@ -74,7 +102,7 @@ test('real sync retries review upgrades, matches before categorization and dispa
  assert.equal(updates.some(p=>'parser_version' in p),false);
  const result=await syncMailbox(user);
  assert.deepEqual(result,{logged:0,reviewed:0,matched:1,more:false});
- assert.equal(mail.status,'logged');assert.equal(mail.parser_version,2);
+ assert.equal(mail.status,'logged');assert.equal(mail.parser_version,ALERT_PARSER_VERSION);
  assert.equal(calls.some(c=>c.includes('gmail_commit_classified')),false,'Credit was matched before financial-purpose review');
  assert.equal(calls.filter(c=>c.endsWith('/rpc/gmail_match_recorded')).length,2);
  for(const kind of ['salary','posted-refund','initiated-refund'] as const){
