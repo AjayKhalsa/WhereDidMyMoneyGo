@@ -13,7 +13,7 @@ export const BANK_SENDERS: Record<string, string> = {
   "protect@cred.club": "CRED",
 };
 // Bump only when review receipts need another deterministic parsing attempt.
-export const ALERT_PARSER_VERSION = 1;
+export const ALERT_PARSER_VERSION = 2;
 export function financialSendersQuery(): string {
   return `(${Object.keys(BANK_SENDERS).filter(sender => sender !== 'protect@cred.club').map(sender => `from:${sender}`).join(' OR ')} OR (from:protect@cred.club subject:"your credit card bill payment was successful"))`;
 }

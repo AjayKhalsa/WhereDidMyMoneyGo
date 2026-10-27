@@ -17,7 +17,7 @@ test('real sync retries review upgrades, matches before categorization and dispa
  for(const name of names)process.env[name]='synthetic';
  process.env.NEXT_PUBLIC_SUPABASE_URL='https://database.example';process.env.GMAIL_TOKEN_KEY='ab'.repeat(32);
  const connection={refresh_token:seal('synthetic-refresh',user),start_date:'2026-10-01',aliases:{},last_synced_at:null};
- let mail:{status:string;parser_version:number}={status:'review',parser_version:0};
+ let mail:{status:string;parser_version:number}={status:'review',parser_version:1};
  let bodyKind:'other-credit'|'salary'|'posted-refund'|'initiated-refund'='other-credit';
  let failMatch=true;
  const updates:Record<string,unknown>[]=[];
@@ -62,23 +62,23 @@ test('real sync retries review upgrades, matches before categorization and dispa
    }
    if(method==='HEAD')return new Response(null,{status:200,headers:{'content-range':'*/0'}});
    if(url.searchParams.get('select')==='message_id'){
-    assert.match(url.searchParams.get('or')!,/status\.eq\.pending,and\(status\.eq\.review,parser_version\.lt\.1\)/);
-    return json(mail.status==='review'&&mail.parser_version<1?[{message_id:'credit'}]:[]);
+    assert.match(url.searchParams.get('or')!,/status\.eq\.pending,and\(status\.eq\.review,parser_version\.lt\.2\)/);
+    return json(mail.status==='review'&&mail.parser_version<2?[{message_id:'credit'}]:[]);
    }
    return json([]);
   }
   throw Error(`Unexpected synthetic request: ${method} ${url.pathname}`);
  };
  await assert.rejects(syncMailbox(user));
- assert.equal(mail.status,'review');assert.equal(mail.parser_version,0,'Failure must not consume the parser upgrade');
+ assert.equal(mail.status,'review');assert.equal(mail.parser_version,1,'Failure must not consume the parser upgrade');
  assert.equal(updates.some(p=>'parser_version' in p),false);
  const result=await syncMailbox(user);
  assert.deepEqual(result,{logged:0,reviewed:0,matched:1,more:false});
- assert.equal(mail.status,'logged');assert.equal(mail.parser_version,1);
+ assert.equal(mail.status,'logged');assert.equal(mail.parser_version,2);
  assert.equal(calls.some(c=>c.includes('gmail_commit_classified')),false,'Credit was matched before financial-purpose review');
  assert.equal(calls.filter(c=>c.endsWith('/rpc/gmail_match_recorded')).length,2);
  for(const kind of ['salary','posted-refund','initiated-refund'] as const){
-  bodyKind=kind;mail={status:'review',parser_version:0};
+  bodyKind=kind;mail={status:'review',parser_version:1};
   const actual=await syncMailbox(user);
   assert.deepEqual(actual,{logged:kind==='initiated-refund'?0:1,reviewed:kind==='initiated-refund'?1:0,matched:0,more:false});
   assert.equal(mail.status,kind==='initiated-refund'?'review':'logged');
