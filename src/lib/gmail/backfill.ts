@@ -5,7 +5,7 @@ import { admin,GmailError,google,tokenRequest,unseal } from './server';
 import { domainRow,learningData } from './learning-data';
 import { classifiedAlert } from './classification';
 import { merchantKey } from '@/lib/engine/merchant-identity';
-import { backfillDisposition,backfillRange,backfillSummary,subscriptionSuggestion,subscriptionPatterns } from './backfill-plan';
+import { backfillDisposition,backfillRange,backfillSummary,subscriptionSuggestion,subscriptionPatterns,currentBackfillItems } from './backfill-plan';
 
 type DB=ReturnType<typeof admin>;
 // Explicit paging: never silently treat Supabase's default first 1000 as all history.
@@ -20,8 +20,9 @@ async function allRows(db:DB,table:string,user:string,order:string,run?:string){
 export async function backfillReport(user:string){
  const db=admin(),run=await db.from('gmail_backfill_runs').select('*').eq('user_id',user).order('created_at',{ascending:false}).limit(1).maybeSingle();if(run.error)throw run.error;
  if(!run.data)return {run:null,items:[],subscriptions:[]};
- const items=await allRows(db,'gmail_backfill_items',user,'message_id',run.data.id);
- const [tx,rr]=await Promise.all([allRows(db,'transactions',user,'id'),allRows(db,'recurring',user,'id')]);
+ const staged=await allRows(db,'gmail_backfill_items',user,'message_id',run.data.id);
+ const [tx,rr,receipts]=await Promise.all([allRows(db,'transactions',user,'id'),allRows(db,'recurring',user,'id'),allRows(db,'gmail_messages',user,'message_id')]);
+ const items=currentBackfillItems(staged as ({message_id:string;status:string}&Record<string,any>)[],receipts as any,new Set(tx.map(t=>String(t.id))));
  const rules=rr.map(r=>domainRow<RecurringTransaction>(r));
  const subscriptions=tx.filter(t=>t.date.slice(0,10)>=run.data.start_date&&t.date.slice(0,10)<=run.data.end_date).flatMap(t=>{const suggestion=subscriptionSuggestion(domainRow<Transaction>(t),rules);return suggestion?[{transactionId:t.id,merchant:t.merchant||t.description,date:t.date, ...suggestion}]:[];});
  const patterns=subscriptionPatterns(tx.filter(t=>t.date.slice(0,10)>=run.data.start_date&&t.date.slice(0,10)<=run.data.end_date).map(t=>domainRow<Transaction>(t)));

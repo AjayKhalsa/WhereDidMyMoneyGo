@@ -20,6 +20,7 @@ export function GmailBackfill(){
  const summary=report?.summary;
  return <div className="space-y-3 border-t border-line pt-4">
   <h3 className="text-sm font-medium">Historical Gmail preview</h3>
+  <p className="text-xs text-ink-secondary">Already recorded emails count as matched and need no action. Only unresolved cases appear below. Possible matches still need confirmation when a shared bank reference is missing.</p>
   <p className="text-xs text-ink-secondary">Scan supported bank alerts before your connection start date. This is a dry run: no ledger imports, category edits or subscription links are saved. Existing dismissals stay dismissed. Statements remain the balance evidence; payment-provider receipts without a supported parser are outside this scan.</p>
   <div className="flex flex-wrap gap-2 text-sm"><label>From <input aria-label="Backfill from" type="date" className="rounded-lg border border-line bg-surface p-2" value={start} disabled={busy||!!report?.run&&report.run.status!=='complete'} onChange={e=>setStart(e.target.value)}/></label><label>Through <input aria-label="Backfill through" type="date" className="rounded-lg border border-line bg-surface p-2" value={end} disabled={busy||!!report?.run&&report.run.status!=='complete'} onChange={e=>setEnd(e.target.value)}/></label></div>
   {error&&<p role="alert" className="text-sm text-danger">{error}</p>}

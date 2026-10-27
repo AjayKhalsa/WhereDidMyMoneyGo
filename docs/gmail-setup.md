@@ -91,3 +91,11 @@ checks per day, retaining the daily Vercel fallback. Copy the existing Vercel
 [GitHub Actions setup](github-actions-gmail-sync.md) for activation, timing and
 bounded backlog handling. No Vercel plan upgrade or mailbox credentials in GitHub
 are needed. A workflow on an unmerged branch or without its secret is not active.
+
+## Keeping Gmail connected
+
+The app already requests offline, read-only Gmail access and encrypts the refresh token server-side. Short-lived access tokens are refreshed on sync; keeping the app open is unnecessary. Google can still revoke authorization.
+
+Check **Google Cloud → Google Auth Platform → Audience** for the OAuth project that owns this app's client ID. An external app left in **Testing** receives Gmail refresh tokens that expire in seven days. Change publishing status to **In production**, complete any verification Google requires for the app's audience/scopes, and then reconnect Gmail once in Settings to obtain a new refresh token. Publishing does not extend an old testing token. Do not rotate the OAuth client secret or Gmail encryption key as a workaround. Personal-use exceptions and verification requirements depend on Google's rules; publishing is not a promise that verification is waived.
+
+There is no non-expiring connection guarantee: revoking app access, changing the Google password for Gmail-scoped tokens, account/admin policy, token limits or prolonged disuse can still require consent again. More frequent sync helps with inactivity, but cannot bypass Google's authorization policy. See [Google refresh-token expiration](https://developers.google.com/identity/protocols/oauth2#expiration). The app's publishing status cannot be read from its OAuth token or Vercel environment metadata; check the Google console.
