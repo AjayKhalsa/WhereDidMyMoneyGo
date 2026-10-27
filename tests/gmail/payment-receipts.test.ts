@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { accountForAlert, authenticatedSender, automaticReason, financialSendersQuery, parseAlert } from '@/lib/gmail/alerts';
 import { reviewDefaults } from '@/lib/gmail/review-defaults';
+import {suggestCategory} from '@/lib/gmail/classification';
 
 // Synthetic details, preserving the independently observed email layouts.
 const icici = 'We have received payment of INR 12,345.67 on your ICICI Bank Credit Card account 1234 XXXX XXXX 4321 on 26-Oct-2026.';
@@ -26,6 +27,16 @@ test('Axis bank debit preserves exact transaction time, reference and source acc
  assert.deepEqual(reviewDefaults({...a,accountId:'bank'}),{kind:'TRANSFER',accountId:'bank',toAccountId:''});
  const credit = parseAlert('alerts@axis.bank.in','Account credit',axis.replace('Amount Debited','Amount Credited'))!;
  assert.equal(credit.direction,'credit'); assert.equal(credit.creditKind,'unknown');
+});
+
+test('explicit Axis P2P names qualify for Auto without a VPA; P2M merchants do not',()=>{
+ const body=axis.replace('64000.00','149.99').replace('P2M','P2P').replace('CRED Club','Example Person');
+ const a=parseAlert('alerts@axis.bank.in','Account debit',body)!;
+ assert.equal(a.merchant,'Example Person');assert.equal(a.upiRecipientKind,'person');assert.equal(a.reference,'123456789012');
+ const categories=[{id:'other'},{id:'transport'},{id:'transport.auto'}];
+ assert.equal(suggestCategory(a,[],categories).categoryId,'transport.auto');
+ const merchant=parseAlert('alerts@axis.bank.in','Account debit',body.replace('P2P','P2M'))!;
+ assert.equal(merchant.upiRecipientKind,'merchant');assert.notEqual(suggestCategory(merchant,[],categories).source,'small-upi');
 });
 
 test('CRED successful receipt uses amount paid, not full statement due, and does not invent a bank RRN', () => {

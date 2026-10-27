@@ -15,6 +15,8 @@ Posted card refunds use the same server-only path, reduce card liability and net
 
 Card receipt credits default to Transfer / card repayment, with the receiving card selected and the paying account requiring confirmation. CRED bank debits also default to transfers with a destination to choose. Only the amount actually paid reduces card liability. Repayments never become a second consumption expense or earned income.
 
+The latest personal-UPI preference is strictly below ₹150 → Transport / Auto, after known merchants and explicit payee corrections. Bank-identified P2P recipients can qualify without a VPA; P2M merchants, credits, self-transfers and financial-purpose exceptions do not qualify. Exactly ₹150 is outside the rule. Equivalent existing Auto categories are reused. Meal windows are breakfast before noon, lunch until 16:00, snacks until 20:00 and dinner thereafter, using reliable transaction time for bank imports.
+
 ## Matching and review
 
 `gmail_match_recorded` runs before category/financial-purpose gating. A unique shared bank reference, saved source identity or previously confirmed CRED order can acknowledge an existing canonical transaction. All financial fields, manually chosen categories, descriptions, notes and contexts remain untouched. Matching is serialized with existing imports and user ledger edits. Browser roles cannot invoke the matching RPC.
@@ -25,7 +27,7 @@ A card receipt lacking a shared reference may suggest an existing transfer, but 
 
 ## Deployment and financial repair
 
-Apply the receipt-matching migration in this PR before deploying the new pipeline. It adds a metadata column/index on `gmail_messages`, updates shared UPI reference extraction and installs service-role-only matching and identified-credit RPCs. Applying the migration itself inserts, deletes or updates no financial rows, and does not reset intentional dismissals. Reload PostgREST's schema cache (included in the migration). Existing account and transaction RLS remain in place.
+Apply the receipt-matching migration in this PR before deploying the new pipeline. It adds a metadata column/index on `gmail_messages`, updates shared UPI reference extraction and installs service-role-only matching and identified-credit RPCs. It adds an Auto leaf only to an unambiguous Transport group lacking an equivalent category; existing category IDs and names are preserved. Applying the migration itself inserts, deletes or updates no financial rows, and does not reset intentional dismissals. Reload PostgREST's schema cache (included in the migration). Existing account and transaction RLS remain in place.
 
 After deployment, Sync now or the next Actions/Vercel job retries eligible review receipts and discovers recent CRED confirmations through the existing overlap window. It is not a full historical backfill. Future parser upgrades must increment `ALERT_PARSER_VERSION` deliberately. Previously completed historical previews using an older sender set are marked outdated by the existing health check.
 

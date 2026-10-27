@@ -11,8 +11,8 @@ Meal rules use India time (Asia/Kolkata), including when the browser is elsewher
 | Actual time | Meal category |
 | --- | --- |
 | 00:00–11:59 | Breakfast |
-| 12:00–16:59 | Lunch |
-| 17:00–19:59 | Snacks |
+| 12:00–15:59 | Lunch |
+| 16:00–19:59 | Snacks |
 | 20:00–23:59 | Dinner |
 
 These are heuristics applied to meal categories, not groceries, coffee, drinks or arbitrary merchants. Explicit meal wording in the description wins. Historical previews may revise existing meal subcategories; deselect exceptions. Personal tags are retained. Weekend comes from the calendar day; late-night requires a verified clock (22:00–03:59). Time-based spending insights disclose known-time coverage and do not count unknown clocks as midnight spending.

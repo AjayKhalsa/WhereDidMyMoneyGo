@@ -33,6 +33,7 @@ export const CATEGORY_TREE: CategorySeed[] = [
     name: "Transport",
     children: [
       { id: "cab", name: "Cab" },
+      { id: "auto", name: "Auto" },
       { id: "metro", name: "Metro" },
       { id: "train", name: "Train" },
       { id: "bus", name: "Bus" },

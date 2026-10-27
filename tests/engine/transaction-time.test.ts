@@ -24,7 +24,7 @@ test("only verified clocks or matching legacy bank evidence establish actual tim
  assert.equal(actualTransactionTime({...t,date:t.date+'Z',timing}),undefined);
 });
 test("meal boundaries preserve specific food and explicit descriptions",()=>{
- for(const [clock,category] of [['00:00:00','breakfast'],['11:59:59','breakfast'],['12:00:00','lunch'],['16:59:59','lunch'],['17:00:00','snacks'],['19:59:59','snacks'],['20:00:00','dinner'],['23:59:59','dinner']]) assert.equal(timedMealCategory('dining',`2026-10-12T${clock}`),`dining.${category}`);
+ for(const [clock,category] of [['00:00:00','breakfast'],['11:59:59','breakfast'],['12:00:00','lunch'],['15:59:59','lunch'],['16:00:00','snacks'],['16:59:59','snacks'],['17:00:00','snacks'],['19:59:59','snacks'],['20:00:00','dinner'],['23:59:59','dinner']]) assert.equal(timedMealCategory('dining',`2026-10-12T${clock}`),`dining.${category}`);
  assert.equal(timedMealCategory('dining','2026-10-12T21:00:00','Lunch ordered late'),'dining.lunch');
  for(const category of ['essentials.groceries','dining.coffee','dining.drinks','transport.cab'])assert.equal(timedMealCategory(category,'2026-10-12T21:00:00'),undefined);
  assert.equal(timedMealCategory('dining',undefined),undefined);

@@ -6,6 +6,10 @@ The latest work adds ICICI card-repayment receipts, Axis account debit/credit su
 
 The same draft also adds explicit salary-credit automation and HDFC merchant refund/reversal parsing. Only authenticated, mapped salary credits with explicit bank narration or confirmed posted card refunds can auto-log; generic credits and refund initiations remain reviewable. Previously entered salary rows are protected from duplication. No live salary/refund repair has been applied here.
 
+Latest preference update: outgoing personal UPI strictly below ₹150 uses Transport / Auto, with saved corrections and known merchants taking precedence. An equivalent user Auto category is reused; the pending migration adds a missing Auto leaf without renaming existing categories. Snacks now starts at 16:00 as specified by the master plan. These changes do not recategorize manually corrected historical entries automatically.
+
+Current outstanding requirements: apply/deploy draft PR 27 and its approved financial repairs; investigate missing bank-funding history before claiming current balances reconcile; finish historical import (the three-month backfill currently previews only), reliable subscription linking and held-out categorization evaluation. Application phone/browser push is not live: its subscription table is absent in the inspected production schema, and VAPID/device delivery remain unverified. The separate monthly ChatGPT statement reminder is already configured. Four-daily GitHub scheduling has had a verified successful run after secret/OAuth setup. Earlier baseline sections below are historical, not claims that later work never occurred.
+
 Last inspected: 2026-10-21. Baseline: `main` at `cc6f1e81653bfc5c13ff532ad185c7e0cef986eb` (PR #20 merged). GitHub's Vercel commit status is successful, linking deployment `4VnC3UGFss3NreCk5ev1TzsFKgjb`. This confirms the deployment status, not authenticated production behavior, the active production alias, or database migration execution.
 
 ## Evidence and limits
