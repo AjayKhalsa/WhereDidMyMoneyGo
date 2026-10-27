@@ -1,6 +1,6 @@
 # Frequent Gmail sync with GitHub Actions
 
-GitHub Actions calls the existing `/api/cron/gmail` endpoint four times daily.
+GitHub Actions calls the existing `/api/cron/gmail` endpoint every four hours (six times daily).
 Vercel retains its Hobby-compatible nightly `30 21 * * *` job. No new Gmail
 integration, database migration or financial write path is introduced.
 
@@ -28,7 +28,7 @@ Workflow runs: https://github.com/AjayKhalsa/WhereDidMyMoneyGo/actions/workflows
 
 ## Timing
 
-`47 3,9,15,21 * * *` is UTC and targets **03:17, 09:17, 15:17 and 21:17 IST**.
+`47 3,7,11,15,19,23 * * *` is UTC and targets **01:17, 05:17, 09:17, 13:17, 17:17 and 21:17 IST**.
 The offset avoids deliberately starting at the same time as the Vercel nightly job
 at 03:00 IST. GitHub can delay or drop scheduled dispatches under load; public
 repositories may have scheduled workflows disabled after 60 days without activity.
