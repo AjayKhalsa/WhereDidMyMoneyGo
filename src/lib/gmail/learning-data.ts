@@ -7,7 +7,7 @@ export function domainRow<T>(row:Record<string,unknown>,contexts:TransactionCont
 export function ruleRow(rule:ClassificationRule){return Object.fromEntries(Object.entries(rule).filter(([k])=>k!=='contexts').map(([k,v])=>[k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`),v]));}
 export async function learningData(db:ReturnType<typeof admin>,userId:string,history=false){
   const [saved,contexts,categories]=await Promise.all([
-    db.from('rules').select('*').eq('user_id',userId),db.from('rule_contexts').select('*').eq('user_id',userId),db.from('categories').select('id').eq('user_id',userId),
+    db.from('rules').select('*').eq('user_id',userId),db.from('rule_contexts').select('*').eq('user_id',userId),db.from('categories').select('id,name,parent_id').eq('user_id',userId),
   ]);
   for(const r of [saved,contexts,categories])if(r.error)throw r.error;
   const rules=(saved.data??[]).map(r=>domainRow<ClassificationRule>(r,(contexts.data??[]).filter(c=>c.rule_id===r.id).map(c=>({type:c.type,value:c.value}))));
@@ -29,5 +29,5 @@ export async function learningData(db:ReturnType<typeof admin>,userId:string,his
       if((page.data?.length??0)<1000)break;
     }
   }
-  return {rules,categories:(categories.data??[]) as Pick<Category,'id'>[],transactions};
+  return {rules,categories:(categories.data??[]).map(r=>domainRow<Pick<Category,'id'|'name'|'parentId'>>(r)),transactions};
 }

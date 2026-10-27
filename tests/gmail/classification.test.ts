@@ -5,7 +5,7 @@ import {parseExpenseInput} from "@/lib/engine/parser";
 import type {Alert} from "@/lib/gmail/alerts";
 import type {ClassificationRule} from "@/lib/domain/types";
 import {expense} from "../helpers/factories";
-const categories=['other','dining','dining.breakfast','dining.lunch','dining.snacks','dining.dinner','transport','transport.cab','gifts','essentials'].map(id=>({id}));
+const categories=['other','dining','dining.breakfast','dining.lunch','dining.snacks','dining.dinner','transport','transport.auto','transport.cab','gifts','essentials'].map(id=>({id}));
 const alert=(over:Partial<Alert>={}):Alert=>({bank:'HDFC',instrument:'bank',tail:'1234',amount:15000,date:'2026-10-18',merchant:'Zomato',direction:'debit',...over});
 const rule=(over:Partial<ClassificationRule>={}):ClassificationRule=>({id:'saved',pattern:'zomato',categoryId:'gifts',contexts:[],confidence:0.95,timesApplied:5,createdAt:'2026-10-01',updatedAt:'2026-10-01',...over});
 test('confident saved aliases normalize new Gmail observations without changing financial identity',()=>{
@@ -25,16 +25,24 @@ test('explicit saved mapping outranks food clocks and personal-UPI heuristics',(
  assert.equal(suggestCategory(alert({merchant:'Example Driver',paymentRail:'UPI',vpa:'driver@bank'}),[rule({pattern:'driver',categoryId:'gifts'})],categories).categoryId,'gifts');
 });
 test('all requested IST meal boundaries use reliable time; delayed email is only a suggestion',()=>{
- for(const [time,leaf] of [['00:00:00','breakfast'],['11:59:59','breakfast'],['12:00:00','lunch'],['15:59:59','lunch'],['16:00:00','lunch'],['16:59:59','lunch'],['17:00:00','snacks'],['19:59:59','snacks'],['20:00:00','dinner'],['23:59:59','dinner']])assert.equal(suggestCategory(alert({occurredAt:`2026-10-18T${time}`,timeSource:'bank',timeConfidence:'exact'}),[],categories).categoryId,`dining.${leaf}`);
+ for(const [time,leaf] of [['00:00:00','breakfast'],['11:59:59','breakfast'],['12:00:00','lunch'],['15:59:59','lunch'],['16:00:00','snacks'],['16:59:59','snacks'],['17:00:00','snacks'],['19:59:59','snacks'],['20:00:00','dinner'],['23:59:59','dinner']])assert.equal(suggestCategory(alert({occurredAt:`2026-10-18T${time}`,timeSource:'bank',timeConfidence:'exact'}),[],categories).categoryId,`dining.${leaf}`);
  assert.equal(suggestCategory(alert(),[],categories).categoryId,'dining');
  assert.equal(suggestCategory(alert({occurredAt:'2026-10-18T00:00:00',timeSource:'unknown'}),[],categories).categoryId,'dining');
  assert.equal(suggestCategory(alert({occurredAt:'2026-10-18T13:00:00',timeSource:'gmail',timeConfidence:'fallback'}),[],categories).categoryId,'dining');
  assert.notEqual(suggestCategory(alert({merchant:'Uber',occurredAt:'2026-10-18T13:00:00',timeSource:'bank'}),[],categories).source,'meal');
 });
-test('small personal UPI is a debit-only under-200 preference without inventing Cab',()=>{
- const a=alert({merchant:'Example Person',paymentRail:'UPI',vpa:'person@bank'});
- assert.equal(suggestCategory(a,[],categories).categoryId,'transport');
- for(const over of [{direction:'credit' as const},{amount:20000},{special:true},{merchant:'Example Store'},{merchant:'Self Person'},{vpa:'***@bank'},{vpa:undefined}])assert.notEqual(suggestCategory({...a,...over},[],categories,['Self Person']).source,'small-upi');
+test('personal outgoing UPI strictly below 150 uses Auto after saved mappings and merchant evidence',()=>{
+ const a=alert({merchant:'Example Person',paymentRail:'UPI',vpa:'person@bank',amount:14999});
+ assert.equal(suggestCategory(a,[],categories).categoryId,'transport.auto');
+ for(const over of [{direction:'credit' as const},{amount:15000},{amount:19999},{amount:0},{special:true},{merchant:'Example Store'},{merchant:'Self Person'},{vpa:'***@bank'},{vpa:undefined},{upiRecipientKind:'merchant' as const}])assert.notEqual(suggestCategory({...a,...over},[],categories,['Self Person']).source,'small-upi');
+ assert.equal(suggestCategory({...a,merchant:'Zomato'},[],categories).categoryId,'dining');
+ assert.notEqual(suggestCategory({...a,direction:'credit',creditKind:'refund'},[],categories).source,'small-upi');
+ assert.equal(suggestCategory(a,[rule({pattern:'example',categoryId:'gifts'})],categories).categoryId,'gifts');
+ assert.equal(suggestCategory({...a,vpa:undefined,upiRecipientKind:'person'},[],categories).categoryId,'transport.auto');
+ const custom=[{id:'transport',name:'Transport'},{id:'my-auto',name:'Auto / Cab',parentId:'transport'},{id:'other',name:'Other'}];
+ assert.equal(suggestCategory(a,[],custom).categoryId,'my-auto');
+ assert.equal(suggestCategory(a,[],categories.filter(c=>c.id!=='transport.auto')).needsReview,true);
+ assert.equal(suggestCategory(a,[],[...custom,{id:'other-auto',name:'Auto',parentId:'transport'}]).needsReview,true);
 });
 test('conflicting patterns abstain and fresh weak rules remain reviewable',()=>{
  assert.equal(suggestCategory(alert(),[rule(),rule({id:'second',categoryId:'dining'})],categories).source,'unknown');
