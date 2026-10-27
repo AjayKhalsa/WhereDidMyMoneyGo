@@ -1,5 +1,13 @@
 # Finance automation handoff
 
+## Current verified status — 2026-10-27
+
+This section supersedes historical baseline notes below. PRs 27 and 28 are merged. Migrations 0022 and 0023 are applied; the under-₹150 personal-UPI Auto rule and 16:00 Snacks boundary are on main. The exact, separately approved payment/refund repair batch has been applied atomically after a private backup and dry run. Two missing financial events were recorded, four receipts now reference three canonical transactions, and the existing card repayment was checked unchanged field-for-field. Salary was already linked and was left unchanged. No balancing adjustment was inserted. These checks verify the approved repair, not complete statement coverage after the existing reconciliation date.
+
+Migration 0021 is now applied. Push subscriptions are encrypted and server-only: RLS is enabled, authenticated clients cannot read the table or execute registration directly, and the service role can register. No device is subscribed. Vercel team access is required to inspect/configure VAPID deployment settings; real device permission and delivery remain unverified. The monthly statement reminder is already configured separately. Recent GitHub Gmail sync runs completed successfully; this does not imply all review cases are resolved.
+
+The current branch adds explicit historical-preview refresh for parser/sender updates and a read-only temporal holdout evaluator. Neither changes existing categories or imports historical money. The latest completed preview still contains proposed imports and unresolved cases, so three-month import and reliable recurring links remain unfinished. Refresh the dry run against current ledger/statement evidence before proposing another financial mutation batch. See `learning-evaluation.md` and `gmail-backfill.md`.
+
 ## Receipt matching follow-up — 2026-10-27
 
 The latest work adds ICICI card-repayment receipts, Axis account debit/credit summaries and authenticated CRED successful-payment receipts; shared-reference matching runs before financial-purpose review. Parser-version metadata permits bounded retry of unresolved review formats while preserving dismissals and canonical ledger fields. Partial repayments default to transfers, with the paying account requiring confirmation. See `gmail-payment-receipts.md` for safeguards and validation. PR 27 was merged; required migration 0022 was subsequently backed up, applied and schema/permissions verified with explicit approval. The service-only credit helper, matcher, parser metadata and RLS are verified. No existing ledger rows were changed by these database updates. Historical financial repairs still require separate approval. Existing statement reconciliation is preserved.
