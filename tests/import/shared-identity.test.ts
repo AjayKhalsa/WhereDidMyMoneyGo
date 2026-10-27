@@ -8,6 +8,7 @@ test("only explicit bank-reference contexts identify an event", () => {
   assert.equal(bankReference("phone 9991234567 VPA 9876543210@upi account 123456789012"), undefined);
   assert.equal(bankReference("Gmail bank alert; reference 0000123456789012"), "123456789012");
   assert.equal(bankReference("UPI/123456789012/PERSON"), "123456789012");
+  assert.equal(bankReference("UPI/P2A/123456789012/PERSON"), "123456789012");
   assert.equal(normalizeBankReference("  icicr9202610012345 "), "ICICR9202610012345");
   assert.equal(normalizeBankReference("None"), undefined);
   assert.equal(normalizeBankReference("00000000000000"), undefined);

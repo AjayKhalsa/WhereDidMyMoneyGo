@@ -1,7 +1,7 @@
 import type { Category, ClassificationRule, Transaction, TransactionContext } from "@/lib/domain/types";
 import { deriveRulePattern, learnFromEntry } from "@/lib/engine/learning";
 import { parseExpenseInput } from "@/lib/engine/parser";
-import { merchantKey } from "@/lib/engine/merchant-identity";
+import { merchantKey, merchantPayee } from "@/lib/engine/merchant-identity";
 import { MERCHANTS } from "@/lib/engine/lexicon";
 import { ruleConditionsMatch, timedMealCategory } from "@/lib/engine/time-rules";
 import { validWallTime } from "@/lib/domain/transaction-time";
@@ -50,7 +50,7 @@ export function suggestCategory(a: Alert, rules: ClassificationRule[], categorie
   };
   const unknown=(reason:string):CategorySuggestion=>({categoryId:"other",confidence:0,source:"unknown",reason,needsReview:true,contexts:[]});
   if(a.direction!=="debit"||a.special)return unknown("Confirm the financial purpose before categorizing.");
-  const words=a.merchant.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim().split(/\s+/);
+  const words=merchantPayee(a.merchant).toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim().split(/\s+/);
   const applicable=rules.filter(r=>valid.has(r.categoryId)&&` ${words.join(" ")} `.includes(` ${r.pattern.toLowerCase()} `)&&ruleConditionsMatch(r,a.merchant,actualTime)&&(!r.learningEvidence||r.learningEvidence.merchantKey===key));
   const scoped=applicable.filter(r=>['gmail-correction','manual-correction'].includes(r.learningEvidence?.source??''));
   const conditional=applicable.filter(r=>r.conditions);

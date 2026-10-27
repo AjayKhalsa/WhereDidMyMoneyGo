@@ -6,6 +6,10 @@ import { NextResponse, type NextRequest } from "next/server";
 export class GmailError extends Error {
   constructor(message: string, public status = 400) { super(message); }
 }
+/** HTTP status only; never retain Google's response body or request token. */
+export class GoogleRequestError extends GmailError {
+  constructor(public upstreamStatus:number) { super('Google could not complete the request. Try again later.',502); }
+}
 export function configured(): boolean {
   return ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GMAIL_TOKEN_KEY", "APP_ORIGIN", "CRON_SECRET"].every(k => !!process.env[k])
     && /^[a-f0-9]{64}$/i.test(process.env.GMAIL_TOKEN_KEY ?? "");
@@ -66,7 +70,7 @@ export async function google<T>(url: string, init: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(10000) });
   if (!response.ok) {
     if (response.status === 401 || response.status === 400 && url.includes("/token")) throw new GmailError("Reconnect Gmail: Google authorization expired or was revoked.", 401);
-    throw new GmailError("Google could not complete the request. Try again later.", 502);
+    throw new GoogleRequestError(response.status);
   }
   return response.json() as Promise<T>;
 }

@@ -1,5 +1,9 @@
 # Finance automation handoff
 
+## Expense reliability follow-up — 2026-10-28
+
+PR 29 now also addresses expired Gmail paging cursors, Axis contact-footer parsing, P2A reference extraction and statement routing-bank names being mistaken for merchants. It includes a read-only private expense audit CLI. No historical financial records or manually assigned categories were changed. The new parser retry applies only after source deployment; no migration is required. See `expense-quality.md` for observed review/Other coverage and outstanding work. PR 29 remains unmerged; production behavior is unchanged by this source follow-up.
+
 ## Current verified status — 2026-10-27
 
 This section supersedes historical baseline notes below. PRs 27 and 28 are merged. Migrations 0022 and 0023 are applied; the under-₹150 personal-UPI Auto rule and 16:00 Snacks boundary are on main. The exact, separately approved payment/refund repair batch has been applied atomically after a private backup and dry run. Two missing financial events were recorded, four receipts now reference three canonical transactions, and the existing card repayment was checked unchanged field-for-field. Salary was already linked and was left unchanged. No balancing adjustment was inserted. These checks verify the approved repair, not complete statement coverage after the existing reconciliation date.

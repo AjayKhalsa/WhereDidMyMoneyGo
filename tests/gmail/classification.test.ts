@@ -8,6 +8,16 @@ import {expense} from "../helpers/factories";
 const categories=['other','dining','dining.breakfast','dining.lunch','dining.snacks','dining.dinner','transport','transport.auto','transport.cab','gifts','essentials'].map(id=>({id}));
 const alert=(over:Partial<Alert>={}):Alert=>({bank:'HDFC',instrument:'bank',tail:'1234',amount:15000,date:'2026-10-18',merchant:'Zomato',direction:'debit',...over});
 const rule=(over:Partial<ClassificationRule>={}):ClassificationRule=>({id:'saved',pattern:'zomato',categoryId:'gifts',contexts:[],confidence:0.95,timesApplied:5,createdAt:'2026-10-01',updatedAt:'2026-10-01',...over});
+test('UPI routing banks do not imply mobile recharges, while real telecom payees still match',()=>{
+ const cats=[...categories,{id:'bills.mobile'}];
+ for(const bank of ['AIRTEL PAY','JIO PAYMEN']){
+  const merchant=`UPI/Example Person/example@upi/UPI/${bank}/123456789012`;
+  const suggestion=suggestCategory(alert({merchant}),[],cats);
+  assert.equal(suggestion.needsReview,true);assert.equal(suggestion.categoryId,'other');
+  assert.equal(suggestCategory(alert({merchant}),[rule({pattern:'airtel',categoryId:'bills.mobile'})],cats).categoryId,'other');
+ }
+ assert.equal(suggestCategory(alert({merchant:'UPI/Airtel/example@upi/UPI/OTHER BANK/123456789012'}),[],cats).categoryId,'bills.mobile');
+});
 test('confident saved aliases normalize new Gmail observations without changing financial identity',()=>{
  const a=alert({merchant:'ETERNAL LIM',reference:'123456789012',occurredAt:'2026-10-18T13:00:00',timeSource:'bank'});
  const rules=[rule({pattern:'eternal',categoryId:'dining',merchant:'Zomato',confidence:1})];

@@ -12,6 +12,7 @@ import { CONTEXT_DEFINITIONS } from "@/lib/domain/contexts";
 import { levenshteinDistance } from "@/lib/engine/fuzzy-match";
 import { cleanBankNarration } from "@/lib/engine/narration";
 import { matchAccountMentions } from "@/lib/engine/account-match";
+import {merchantKey} from '@/lib/engine/merchant-identity';
 
 import { makeAccount, makeCard } from "../helpers/factories";
 
@@ -24,6 +25,12 @@ import { makeAccount, makeCard } from "../helpers/factories";
 
 const categoryIds = new Set(buildCategorySeed().map((c) => c.id));
 const contextValues = new Set(CONTEXT_DEFINITIONS.map((c) => c.value));
+test('statement routing banks cannot replace the recipient merchant',()=>{
+ const raw='UPI/Example Person/example@upi/UPI/AIRTEL PAY/123456789012';
+ assert.equal(cleanBankNarration(raw).cleaned,'Example Person');
+ assert.equal(merchantKey(raw),'example person');
+ assert.equal(cleanBankNarration('UPI/Airtel/airtel@upi/UPI/BANK/123456789012').cleaned,'Airtel');
+});
 
 describe("merchant lexicon", () => {
   test("every merchant routes to a category that exists", () => {
