@@ -60,5 +60,40 @@ begin
 end $$;
 revoke all on function public.gmail_match_recorded(uuid,text,boolean) from public,anon,authenticated;
 grant execute on function public.gmail_match_recorded(uuid,text,boolean) to service_role;
+
+-- Explicit salary and posted card refunds are financial credits. Never use
+-- this path for generic incoming transfers, card repayments or initiations.
+create function public.gmail_commit_identified_credit(p_user uuid,p_message text,p_authenticated boolean default false)
+returns text language plpgsql set search_path='' as $$
+declare m public.gmail_messages;a jsonb;account public.accounts;result text;category text;refund boolean:=false;t public.transactions;
+begin
+ perform pg_advisory_xact_lock(hashtextextended(p_user::text,0));
+ select * into m from public.gmail_messages where user_id=p_user and message_id=p_message for update;
+ if not found then raise exception 'Message not found';end if;
+ if m.status<>'review' then return m.status;end if;
+ if not p_authenticated then return 'review';end if;
+ a:=m.candidate;
+ select * into account from public.accounts where id=a->>'accountId' and user_id=p_user and is_active;
+ if not found or a->>'direction' is distinct from 'credit' or (a->>'date')::date>(now() at time zone 'Asia/Kolkata')::date
+   or not exists(select 1 from public.gmail_connections where user_id=p_user and start_date<=(a->>'date')::date) then return 'review';end if;
+ if a->>'incomeKind'='salary' and a->>'creditKind'='income' and a->>'instrument'='bank' and account.type='BANK'
+   and a->>'merchant' ~* '(^|[-/:[:space:]])SAL(ARY)?[[:space:]]+(FOR[[:space:]]+)?(JAN(UARY)?|FEB(RUARY)?|MAR(CH)?|APR(IL)?|MAY|JUN(E)?|JUL(Y)?|AUG(UST)?|SEP(TEMBER)?|OCT(OBER)?|NOV(EMBER)?|DEC(EMBER)?)[[:space:]]+(20[0-9]{2}|[0-9]{2})\M'
+   and a->>'merchant' !~* '\m(refund|reversal|cashback|loan|self[ -]?transfer|own[ -]?transfer)\M' then
+  result:=public.gmail_commit(p_user,p_message,'INCOME',account.id,null,null,false,true,false);
+ elsif a->>'creditKind'='refund' and a->>'refundStatus'='posted' and a->>'instrument'='credit_card' and account.type='CREDIT_CARD' then
+  category:=a->>'categoryId';
+  if not exists(select 1 from public.categories where id=category and user_id=p_user) then return 'review';end if;
+  refund:=true;
+  result:=public.gmail_commit(p_user,p_message,'INCOME',account.id,null,category,true,true,false);
+ else return 'review';end if;
+ if result='logged' and refund and coalesce((a#>>'{classification,needsReview}')::boolean,true) then
+  select * into t from public.transactions where user_id=p_user and id='gmail_'||replace(p_user::text,'-','')||'_'||p_message;
+  if not found then raise exception 'Canonical refund missing';end if;
+  update public.gmail_messages set category_review=true,category_review_snapshot=to_jsonb(t),reason='Refund is in your card balance; choose its original spending category.' where user_id=p_user and message_id=p_message;
+ end if;
+ return result;
+end $$;
+revoke all on function public.gmail_commit_identified_credit(uuid,text,boolean) from public,anon,authenticated;
+grant execute on function public.gmail_commit_identified_credit(uuid,text,boolean) to service_role;
 notify pgrst, 'reload schema';
 commit;

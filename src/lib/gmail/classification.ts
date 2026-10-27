@@ -6,6 +6,7 @@ import { MERCHANTS } from "@/lib/engine/lexicon";
 import { ruleConditionsMatch, timedMealCategory } from "@/lib/engine/time-rules";
 import { validWallTime } from "@/lib/domain/transaction-time";
 import type { Alert } from "./alerts";
+import { isSalaryAlert } from './alerts';
 
 export interface CategorySuggestion {
   categoryId: string;
@@ -27,6 +28,11 @@ export function classifiedAlert(a:Alert,rules:ClassificationRule[],categories:Pi
   return {...a,classification,categoryId:categories.some(c=>c.id===categoryId)?categoryId:undefined,merchant:useAlias?alias:a.merchant};
 }
 export function suggestCategory(a: Alert, rules: ClassificationRule[], categories: Pick<Category,"id">[], selfNames: string[] = [], conflictingPayees:string[]=[]): CategorySuggestion {
+  if (isSalaryAlert(a)) return {categoryId:'other',confidence:0.98,source:'vocabulary',reason:'Salary explicitly identified in the bank credit narration; use the actual credited amount.',needsReview:false,contexts:[]};
+  if (a.direction==='credit' && a.creditKind==='refund') {
+    const suggestion=suggestCategory({...a,direction:'debit',special:false,occurredAt:undefined,timeSource:'unknown',timeConfidence:'unknown'},rules,categories,selfNames,conflictingPayees);
+    return {...suggestion,contexts:[],reason:`Refund category suggestion: ${suggestion.reason}`};
+  }
   const valid = new Set(categories.map(c=>c.id)), key=merchantKey(a.merchant);
   const actualTime = a.timeConfidence === "exact" && ["bank", "payment"].includes(a.timeSource ?? "") && a.occurredAt && validWallTime(a.occurredAt) && a.occurredAt.slice(0,10) === a.date ? a.occurredAt : undefined;
   const mealSuggestion = (categoryId: string): CategorySuggestion | undefined => {

@@ -46,7 +46,7 @@ export function GmailPanel() {
   }
   return <Section title="Gmail transaction alerts" description="Let bank emails keep your ledger up to date.">
     <Card className="space-y-4 p-4 sm:p-5">
-      <p className="text-sm text-ink-secondary">Uses your saved category rules and consistent past corrections. Food orders can use bank time in IST; email-time suggestions are labelled. Confirmed debits with uncertain categories still affect balances and appear here for category review. Credits, transfers and possible duplicates need their financial details confirmed. Statements are still needed to verify balances.</p>
+      <p className="text-sm text-ink-secondary">Uses your saved category rules and consistent past corrections. Food orders can use bank time in IST; email-time suggestions are labelled. Confirmed debits, explicit salary credits and posted card refunds can log automatically. Uncertain categories remain reviewable. Unknown credits, repayment origins and possible duplicates need confirmation. Statements are still needed to verify balances.</p>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {notice && <p role="status" className="text-sm text-ink-secondary">{notice}</p>}
       {!status && !error && <p className="text-sm">Checking connection…</p>}
@@ -55,7 +55,7 @@ export function GmailPanel() {
         <label className="block text-sm">Import alerts from
           <input className="ml-3 rounded-lg border border-line bg-surface p-2" type="date" value={startDate} max={new Date().toISOString().slice(0, 10)} onChange={e => setStartDate(e.target.value)} />
         </label>
-        <p className="text-xs text-ink-tertiary">Google grants read-only access to your mailbox. This app fetches only supported bank senders, keeps extracted transaction details, and does not send, delete or mark emails read. No email bodies are sent to AI.</p>
+        <p className="text-xs text-ink-tertiary">Google grants read-only access to your mailbox. This app fetches supported bank alerts and payment confirmations, keeps extracted transaction details, and does not send, delete or mark emails read. No email bodies are sent to AI.</p>
         <Button disabled={busy || !startDate} onClick={() => void run(async () => { const result = await api("/connect", "POST", { startDate }); window.location.assign(result.url); })}>Connect Gmail</Button>
       </>}
       {status?.connection && <>
@@ -96,6 +96,7 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
   const [existingTransactionId, setExistingTransactionId] = useState("");
   const [remember, setRemember] = useState(false);
   const [learnCategory, setLearnCategory] = useState(true);
+  const [refundPosted, setRefundPosted] = useState(false);
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
   const inputClass = "rounded-lg border border-line bg-surface p-2 text-sm";
   const matchingAccountId = a?.accountId || (a?.direction === "credit" && kind === "TRANSFER" ? toAccountId : accountId);
@@ -104,7 +105,7 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
     setBusy(true); setError("");
     try {
       if (action === "log" && remember) await api("/mapping", "POST", { messageId: mail.message_id, accountId });
-      await api("/review", "POST", { action, messageId: mail.message_id, accountId: action === "match" ? matchingAccountId : accountId, categoryId, type: kind === "REFUND" ? "INCOME" : kind, isRefund: kind === "REFUND", toAccountId, allowDuplicate, existingTransactionId,learnCategory });
+      await api("/review", "POST", { action, messageId: mail.message_id, accountId: action === "match" ? matchingAccountId : accountId, categoryId, type: kind === "REFUND" ? "INCOME" : kind, isRefund: kind === "REFUND", toAccountId, allowDuplicate, existingTransactionId,learnCategory,refundPosted });
       await onSaved();
     } catch (e) { setError(e instanceof Error ? e.message : "Could not save."); }
     finally { setBusy(false); }
@@ -114,6 +115,10 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
     {a && <p className="text-xs text-ink-tertiary">{a.bank} {a.instrument.replace("_", " ")} ending {a.tail} · {alertTimeLabel({timeSource: a.timeSource ?? "unknown", timeConfidence: a.timeConfidence ?? "unknown", occurredAt: a.occurredAt})}</p>}
     <p className="text-sm text-ink-secondary">{mail.reason || "Check these details before adding."}</p>
     {a?.creditKind === 'repayment' && <p className="text-xs text-ink-secondary">Payment received: {formatMoney(a.amount)}. This can be a partial payment. It reduces the card balance by this amount; it is not new spending or income.</p>}
+    {a?.refundStatus === 'initiated' && !mail.category_review && <>
+      {a.refundInitiatedAt && <p className="text-xs text-ink-tertiary">Refund initiated {a.refundInitiatedAt.replace('T',' ')} IST. Posting time is unknown.</p>}
+      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={refundPosted} onChange={e=>setRefundPosted(e.target.checked)}/>I confirmed this refund is posted to my card with transaction date {a.date}.</label>
+    </>}
     {mail.category_review&&<p className="text-xs text-ink-secondary">Already in your ledger and included in balances. Saving a category will not add another transaction.</p>}
     {a?.classification&&<p className="text-xs text-ink-tertiary">{a.classification.reason}</p>}
     <a className="text-sm underline" target="_blank" rel="noreferrer" href={`https://mail.google.com/mail/u/?authuser=${encodeURIComponent(email ?? "")}#all/${mail.message_id}`}>View original email</a>
@@ -137,6 +142,6 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
       </div>}
     </>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    <div className="flex gap-2">{a && <Button size="sm" disabled={disabled || busy || !accountId || !kind || (kind === 'TRANSFER' && (!toAccountId || accountId === toAccountId))} onClick={() => void submit("log")}>{mail.category_review?'Save category':'Add to ledger'}</Button>}<Button size="sm" variant="quiet" disabled={disabled || busy} onClick={() => void submit("ignore")}>{mail.category_review?'Keep current entry':'Dismiss email'}</Button></div>
+    <div className="flex gap-2">{a && <Button size="sm" disabled={disabled || busy || !accountId || !kind || (kind === 'TRANSFER' && (!toAccountId || accountId === toAccountId)) || (!mail.category_review && a.refundStatus === 'initiated' && !refundPosted)} onClick={() => void submit("log")}>{mail.category_review?'Save category':'Add to ledger'}</Button>}<Button size="sm" variant="quiet" disabled={disabled || busy} onClick={() => void submit("ignore")}>{mail.category_review?'Keep current entry':'Dismiss email'}</Button></div>
   </div>;
 }

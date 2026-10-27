@@ -18,7 +18,7 @@ export function alertTime(body: string, rawDay: string, day: string, receivedAt?
   // Anchor to the transaction's parsed date, not a footer or an available-balance timestamp.
   // A statement-style header can repeat the day before the actual labelled
   // transaction timestamp. Prefer that label rather than the first occurrence.
-  const labelled = /Date\s*&\s*Time:\s*/ig;
+  const labelled = /Date\s*(?:&\s*)?Time:\s*/ig;
   let dateStart = body.indexOf(rawDay);
   for (const match of body.matchAll(labelled)) {
     const start = match.index! + match[0].length;

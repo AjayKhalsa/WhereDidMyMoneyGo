@@ -241,3 +241,46 @@ test('automatic matching stays server-only and cannot restore dismissed or remov
  assert.equal((await db.query<{r:string}>("select gmail_match_recorded($1,'removed-match',true) r",[user])).rows[0]!.r,'duplicate');
  for(const role of ['anon','authenticated']){await db.exec(`set role ${role}`);try{await assert.rejects(db.query("select gmail_match_recorded($1,'removed-match',true)",[user]),/permission denied/);}finally{await db.exec('reset role');}}
 });
+
+test('authenticated explicit salary credits increase cash once without using expected salary or expense categories',async()=>{
+ await message('automatic-salary',12034567,'bank');
+ await db.query("update gmail_messages set candidate=candidate||$1 where message_id='automatic-salary'",[{direction:'credit',creditKind:'income',incomeKind:'salary',instrument:'bank',merchant:'NEFT Cr-BANK0000104-SAL OCT 26 EXAMPLE EMPLOYER',reference:'821234567890'}]);
+ const amount=async()=>Number((await db.query<{n:string}>("select coalesce(sum(amount),0)::text n from transactions where type='INCOME' and account_id='bank' and not is_refund")).rows[0]!.n);
+ const before=await amount();
+ assert.equal((await db.query<{r:string}>("select gmail_commit_identified_credit($1,'automatic-salary',false) r",[user])).rows[0]!.r,'review');
+ assert.equal((await db.query<{r:string}>("select gmail_commit_identified_credit($1,'automatic-salary',true) r",[user])).rows[0]!.r,'logged');
+ assert.equal(await amount()-before,12034567);
+ await db.query("select gmail_commit_identified_credit($1,'automatic-salary',true)",[user]);assert.equal(await amount()-before,12034567);
+ const t=(await db.query<{is_refund:boolean;category_id:string|null}>("select is_refund,category_id from transactions where amount=12034567")).rows[0]!;
+ assert.equal(t.is_refund,false);assert.equal(t.category_id,null);
+});
+
+test('an already entered salary is not inserted twice and generic incoming credits remain reviewable',async()=>{
+ await message('salary-already-entered',12034567,'bank');
+ await db.query("update gmail_messages set candidate=candidate||$1 where message_id='salary-already-entered'",[{direction:'credit',creditKind:'income',incomeKind:'salary',instrument:'bank',merchant:'NEFT Cr-BANK0000104-SAL OCT 26 EXAMPLE EMPLOYER'}]);
+ assert.equal((await db.query<{r:string}>("select gmail_commit_identified_credit($1,'salary-already-entered',true) r",[user])).rows[0]!.r,'review');
+ assert.equal((await db.query<{n:number}>("select count(*)::int n from transactions where amount=12034567")).rows[0]!.n,1);
+ for(const [id,merchant,kind] of [['ordinary-credit','NEFT Cr-SELF TRANSFER','unknown'],['interest-credit','Int.Pd:30-09-2026','income'],['false-salary','SALARY ACCOUNT TRANSFER','income']] as const){
+  await message(id,12004567,'bank');await db.query("update gmail_messages set candidate=candidate||$1 where message_id=$2",[{direction:'credit',creditKind:kind,incomeKind:'salary',instrument:'bank',merchant},id]);
+  assert.equal((await db.query<{r:string}>("select gmail_commit_identified_credit($1,$2,true) r",[user,id])).rows[0]!.r,'review');
+ }
+});
+
+test('initiated refunds do not alter liabilities; posted refunds reduce debt and consumption once, never earned income',async()=>{
+ const a={direction:'credit',creditKind:'refund',refundStatus:'initiated',instrument:'credit_card',merchant:'EXAMPLE SHOP',categoryId:'other',reference:'831234567890',classification:{needsReview:true}};
+ await message('card-refund',239900,'card');await db.query("update gmail_messages set candidate=candidate||$1 where message_id='card-refund'",[a]);
+ assert.equal((await db.query<{r:string}>("select gmail_commit_identified_credit($1,'card-refund',true) r",[user])).rows[0]!.r,'review');
+ assert.equal((await db.query<{n:number}>("select count(*)::int n from transactions where amount=239900")).rows[0]!.n,0);
+ const totals=async()=>(await db.query<{liability:string;spent:string;earned:string}>("select coalesce(sum(case when account_id='card' and type in ('EXPENSE','INVESTMENT','TRANSFER') then amount when account_id='card' and type='INCOME' then -amount when to_account_id='card' and type='TRANSFER' then -amount else 0 end),0)::text liability,coalesce(sum(case when type='EXPENSE' then amount when type='INCOME' and is_refund then -amount else 0 end),0)::text spent,coalesce(sum(case when type='INCOME' and not is_refund then amount else 0 end),0)::text earned from transactions")).rows[0]!;
+ const before=await totals();
+ await db.query("update gmail_messages set candidate=candidate||$1 where message_id='card-refund'",[{refundStatus:'posted'}]);
+ assert.equal((await db.query<{r:string}>("select gmail_commit_identified_credit($1,'card-refund',true) r",[user])).rows[0]!.r,'logged');
+ const t=(await db.query<{type:string;is_refund:boolean;account_id:string}>("select type,is_refund,account_id from transactions where amount=239900")).rows[0]!;
+ assert.equal(t.type,'INCOME');assert.equal(t.is_refund,true);assert.equal(t.account_id,'card');
+ const after=await totals();assert.equal(Number(after.liability)-Number(before.liability),-239900);assert.equal(Number(after.spent)-Number(before.spent),-239900);assert.equal(after.earned,before.earned);
+ assert.equal((await db.query<{category_review:boolean}>("select category_review from gmail_messages where message_id='card-refund'")).rows[0]!.category_review,true);
+ await db.query("select gmail_commit_identified_credit($1,'card-refund',true)",[user]);
+ assert.deepEqual(await totals(),after);
+ assert.equal((await db.query<{n:number}>("select count(*)::int n from transactions where amount=239900")).rows[0]!.n,1);
+ await db.exec('set role authenticated');try{await assert.rejects(db.query("select gmail_commit_identified_credit($1,'card-refund',true)",[user]),/permission denied/);}finally{await db.exec('reset role');}
+});

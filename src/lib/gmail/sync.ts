@@ -100,7 +100,9 @@ export async function syncMailbox(userId: string, deadline = Date.now() + 45000)
         if (existing.data === "duplicate") { await finish(); continue; }
       }
       if (candidate && !reason) {
-        const result = await db.rpc("gmail_commit_classified", { p_user: userId, p_message: item.message_id });
+        const result = candidate.direction === 'credit'
+          ? await db.rpc('gmail_commit_identified_credit',{ p_user:userId,p_message:item.message_id,p_authenticated:authenticated })
+          : await db.rpc("gmail_commit_classified", { p_user: userId, p_message: item.message_id });
         if (result.error) throw result.error;
         if (result.data === "logged") logged++; else if (result.data === "matched") matched++; else reviewed++;
       } else reviewed++;

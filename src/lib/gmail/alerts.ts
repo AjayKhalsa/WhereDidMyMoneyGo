@@ -32,6 +32,9 @@ export interface Alert extends Partial<AlertTime> {
   vpa?: string;
   paymentRail?: "UPI" | "NEFT" | "IMPS";
   creditKind?: "refund" | "income" | "repayment" | "unknown";
+  incomeKind?: "salary";
+  refundStatus?: "initiated" | "posted";
+  refundInitiatedAt?: string;
   providerReference?: string;
   classification?: import("./classification").CategorySuggestion;
 }
@@ -80,6 +83,17 @@ export function alertDate(raw: string): string | undefined {
   return date.toISOString().slice(0, 10);
 }
 
+/** Explicit bank narration, not a payee containing 'Salary' or an estimate. */
+export function isSalaryNarration(text: string): boolean {
+  return !/\b(?:refund|reversal|cashback|loan|self[ -]?transfer|own[ -]?transfer)\b/i.test(text)
+    && /(?:^|[-/:\s])SAL(?:ARY)?\s+(?:FOR\s+)?(?:JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUN(?:E)?|JUL(?:Y)?|AUG(?:UST)?|SEP(?:TEMBER)?|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)\s+(?:20\d{2}|\d{2})\b/i.test(text);
+}
+
+export function isSalaryAlert(alert: Alert): boolean {
+  return alert.direction === 'credit' && alert.instrument === 'bank' && alert.creditKind === 'income'
+    && alert.incomeKind === 'salary' && isSalaryNarration(alert.merchant);
+}
+
 /** Exact known alert layouts only. No language model sees mailbox contents. */
 export function parseAlert(from: string, subject: string, text: string, receivedAt?: string | number): Alert | null {
   let bank = BANK_SENDERS[senderAddress(from)];
@@ -88,6 +102,7 @@ export function parseAlert(from: string, subject: string, text: string, received
   let amount: string | undefined, tail: string | undefined, date: string | undefined, merchant: string | undefined;
   let instrument: Alert["instrument"] = "credit_card", direction: Alert["direction"] = "debit";
   let repayment = false, providerReference: string | undefined;
+  let refundStatus: Alert['refundStatus'];
   const match = bank === "HSBC" ? /credit card\s+x+(\d{4})\s+was used for a transaction of INR\s+([\d,.]+)\s+at\s+(.+?)\s+on\s+(\d{2}\/\d{2}\/\d{2,4})/i.exec(body) : null;
   if (match) [, tail, amount, merchant, date] = match;
   else if (bank === "HSBC") {
@@ -102,8 +117,10 @@ export function parseAlert(from: string, subject: string, text: string, received
     else if (acct) { tail = acct[1]; direction = acct[2]!.toLowerCase() === "credited" ? "credit" : "debit"; amount = acct[3]; date = acct[4]; merchant = acct[5]; instrument = "bank"; }
     else if (payment) { [, amount, tail, date] = payment; merchant = "ICICI card repayment"; direction = "credit"; repayment = true; }
   } else if (bank === "HDFC") {
+    const reversal = /A transaction reversal of Rs\.?\s*([\d,.]+)\s+has been\s+(initiated|credited|posted)\s+to your HDFC Bank Credit Card ending\s+(\d{4})\s+From Merchant:\s*(.+?)\s+Date\s*(?:&\s*)?Time:\s*(\d{1,2}\s+[A-Za-z]{3},\s*\d{4})\s+at\s+\d{1,2}:\d{2}(?::\d{2})?/i.exec(body);
     const hdfc = /Rs\.?\s*([\d,.]+)\s+(?:is|has been)\s+(debited|credited)\s+(?:from|to)\s+your\s+(?:HDFC Bank\s+)?(Credit Card|Debit Card|account)\s+ending\s+(\d{4})\s+(?:at|towards|by)\s+(.+?)\s+on\s+(\d{1,2}(?:-[\d]{1,2}-\d{2,4}| [A-Za-z]{3}, \d{4}))/i.exec(body);
-    if (hdfc) { [, amount, , , tail, merchant, date] = hdfc; direction = hdfc[2]!.toLowerCase() === "credited" ? "credit" : "debit"; instrument = hdfc[3]!.toLowerCase() === "account" ? "bank" : hdfc[3]!.toLowerCase() === "debit card" ? "debit_card" : "credit_card"; }
+    if (reversal) { [, amount, , tail, merchant, date] = reversal; direction = 'credit'; refundStatus = reversal[2]!.toLowerCase() === 'initiated' || /allow\s+(?:up to\s+)?\d+\s+hours/i.test(body) ? 'initiated' : 'posted'; }
+    else if (hdfc) { [, amount, , , tail, merchant, date] = hdfc; direction = hdfc[2]!.toLowerCase() === "credited" ? "credit" : "debit"; instrument = hdfc[3]!.toLowerCase() === "account" ? "bank" : hdfc[3]!.toLowerCase() === "debit card" ? "debit_card" : "credit_card"; if (direction==='credit' && instrument==='credit_card' && /refund|reversal/i.test(merchant!)) refundStatus='posted'; }
     else {
       const credit = /Rs\.?\s*([\d,.]+)\s+has been successfully credited to your HDFC Bank account ending in\s+(\d{4})\.\s*Transaction Details:\s*a\.\s*Date:\s*(\d{1,2}-\d{1,2}-\d{2,4})\s*b\.\s*Sender:\s*(.+?)\s*c\.\s*UPI Reference No\.?\s*:\s*\d+/i.exec(body);
       const deposit = /You have received a credit in your HDFC Bank account\.\s*Details of the transaction:\s*Amount received:\s*INR\s*([\d,.]+)\s*Account:\s*X+(\d{4})\s*Date:\s*(\d{1,2}-[A-Za-z]{3}-\d{4})\s*Reference Details:\s*(.+?)\s*Available Balance:/i.exec(body);
@@ -130,15 +147,19 @@ export function parseAlert(from: string, subject: string, text: string, received
   const reference = normalizeBankReference(merchant.match(/^UPI[-/](?:P2[MP]\/)?(\d{10,})[-/]/i)?.[1] ?? body.match(/UPI (?:transaction )?reference no\.?\s*:\s*(\d{10,})/i)?.[1]);
   const vpa = merchant.match(/\bVPA:?\s+(\S+@[^\s)]+)/i)?.[1];
   const paymentRail = /\bUPI\b/i.test(body) ? "UPI" : /\bNEFT\b/i.test(merchant) ? "NEFT" : /\bIMPS\b/i.test(merchant) ? "IMPS" : undefined;
-  const time = alertTime(body, date!, day, receivedAt);
+  const parsedTime = alertTime(body, date!, day, receivedAt);
+  const refundInitiatedAt = refundStatus === 'initiated' && parsedTime.timeSource === 'bank' ? parsedTime.occurredAt : undefined;
+  // A reversal's initiation clock is not proof of its eventual posting clock.
+  const time = refundStatus === 'initiated' ? {timeSource:'unknown' as const,timeConfidence:'unknown' as const} : parsedTime;
   const transactionDay = time.timeSource === "bank" || time.timeSource === "payment" ? time.occurredAt!.slice(0, 10) : day;
-  const creditKind = direction !== "credit" ? undefined : repayment ? "repayment" : /refund|reversal|cashback/i.test(merchant) ? "refund" : /\bSAL(?:ARY)?\b|Int\.Pd|interest paid/i.test(merchant) ? "income" : "unknown";
+  const creditKind = direction !== "credit" ? undefined : repayment ? "repayment" : refundStatus || /refund|reversal|cashback/i.test(merchant) ? "refund" : /\bSAL(?:ARY)?\b|Int\.Pd|interest paid/i.test(merchant) ? "income" : "unknown";
+  const incomeKind = direction === 'credit' && instrument === 'bank' && creditKind === 'income' && isSalaryNarration(merchant) ? 'salary' : undefined;
   merchant = merchant.replace(/^UPI-\d+-/i, "").replace(/^VPA\s+\S+\s+\((.+)\)$/i, "$1").trim().slice(0, 180);
-  const special = repayment || /refund|reversal|cashback|billpay|card payment|\bcred\b|dreamplug|neft|imps|zerodha|mutual fund|mandate/i.test(merchant);
+  const special = repayment || !!refundStatus || /refund|reversal|cashback|billpay|card payment|\bcred\b|dreamplug|neft|imps|zerodha|mutual fund|mandate/i.test(merchant);
   const words = merchant.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/);
   const matches = MERCHANTS.filter(m => m.aliases.some(a => words.includes(a)));
   const categoryId = new Set(matches.map(m => m.categoryId)).size === 1 ? matches[0]?.categoryId : undefined;
-  return { bank, instrument, tail, amount: paise, date: transactionDay, merchant, direction, reference, providerReference, categoryId, special, vpa, paymentRail, creditKind, ...time };
+  return { bank, instrument, tail, amount: paise, date: transactionDay, merchant, direction, reference, providerReference, categoryId, special, vpa, paymentRail, creditKind, incomeKind, refundStatus, refundInitiatedAt, ...time };
 }
 
 export function accountForAlert(alert: Alert, accounts: Pick<Account, "id" | "name" | "type" | "hint" | "isActive">[], aliases: Record<string, string>): string | undefined {
@@ -154,8 +175,10 @@ export function accountForAlert(alert: Alert, accounts: Pick<Account, "id" | "na
 export function automaticReason(alert: Alert, authenticated: boolean, startDate: string): string | null {
   if (!authenticated) return "Sender authentication could not be verified.";
   if (alert.date < startDate) return "Transaction predates the selected import start date.";
-  if (alert.date > new Date(Date.now() + 86400000).toISOString().slice(0, 10)) return "Transaction date is in the future.";
+  if (alert.date > new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)) return "Transaction date is in the future.";
   if (!alert.accountId) return "Match this card or account once before importing.";
+  if (alert.refundStatus === 'initiated') return "Refund initiated; the bank says it may take up to 48 hours to appear. Confirm it is posted to your card before recording it.";
+  if (isSalaryAlert(alert) || (alert.direction === 'credit' && alert.instrument === 'credit_card' && alert.creditKind === 'refund' && alert.refundStatus === 'posted')) return null;
   if (alert.creditKind === "repayment") return "Card repayment received. Link the existing transfer, or choose the paying account. This is not income or new spending.";
   if (alert.direction === "credit" || alert.special) return "Confirm whether this is income, a refund, or a transfer.";
   if (!alert.categoryId) return "Choose a category for this merchant.";
