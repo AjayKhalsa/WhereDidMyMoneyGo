@@ -10,7 +10,7 @@ test('receipt migration adds Auto once and preserves equivalent user categories 
   const dir=new URL('../../supabase/migrations/',import.meta.url);
   const first='11111111-1111-4111-8111-111111111111',second='22222222-2222-4222-8222-222222222222',third='33333333-3333-4333-8333-333333333333';
   for(const file of (await readdir(dir)).filter(f=>f.endsWith('.sql')).sort()){
-   if(file==='0022_gmail_receipt_matching.sql'){
+   if(file==='0023_auto_transport_category.sql'){
     await db.query('insert into auth.users values($1),($2),($3)',[first,second,third]);
     await db.query("insert into categories(id,user_id,name,parent_id,\"order\",system) values('transport',$1,'Transport',null,2,true),('transport.cab',$1,'Cab','transport',0,true),('other-transport',$2,'Transport',null,7,false),('custom-auto',$2,'Auto / Cab','other-transport',3,false)",[first,second]);
     await db.query("insert into categories(id,user_id,name,parent_id) values('transport',$1,'Transport',null)",[third]);
