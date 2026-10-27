@@ -23,6 +23,9 @@ export async function POST(request: NextRequest) {
       return json({ status: result.data });
     }
     if (body.action !== "log" || !["EXPENSE", "INCOME", "TRANSFER"].includes(body.type) || typeof body.accountId !== "string") throw new GmailError("Choose the transaction type and account.");
+    const receipt=await db.from('gmail_messages').select('candidate,category_review').eq('user_id',user.id).eq('message_id',body.messageId).maybeSingle();
+    if(receipt.error)throw receipt.error;
+    if(receipt.data?.candidate?.refundStatus==='initiated'&&!receipt.data.category_review&&body.refundPosted!==true)throw new GmailError('Confirm that this initiated refund is posted to your card before recording it.');
     let ruleChange=null;
     if(body.learnCategory===true&&body.type==='EXPENSE'&&body.isRefund!==true&&typeof body.categoryId==='string'){
       const mail=await db.from('gmail_messages').select('candidate').eq('user_id',user.id).eq('message_id',body.messageId).maybeSingle();if(mail.error)throw mail.error;

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Account, RecurringTransaction, Transaction } from '@/lib/domain/types';
-import { accountForAlert,authenticatedSender,BANK_SENDERS,header,mailText,parseAlert,type MailPart } from './alerts';
+import { accountForAlert,authenticatedSender,financialSendersQuery,header,mailText,parseAlert,type MailPart } from './alerts';
 import { admin,GmailError,google,tokenRequest,unseal } from './server';
 import { domainRow,learningData } from './learning-data';
 import { classifiedAlert } from './classification';
@@ -40,7 +40,7 @@ export async function scanBackfill(user:string,input?:{start:string;end:string})
    if(previous.data&&(!input||(input.start===previous.data.start_date&&input.end===previous.data.end_date)))return await backfillReport(user);
    if(!input)throw new GmailError('Choose the historical date range.');
    let bounds;try{bounds=backfillRange(input.start,input.end);}catch{throw new GmailError('Choose a historical range of at most 100 days.');}
-   const query=`after:${bounds.after} before:${bounds.before} -in:spam -in:trash -subject:OTP -subject:statement {${Object.keys(BANK_SENDERS).map(s=>`from:${s}`).join(' ')}}`;
+   const query=`after:${bounds.after} before:${bounds.before} -in:spam -in:trash -subject:OTP -subject:statement ${financialSendersQuery()}`;
    const inserted=await db.from('gmail_backfill_runs').insert({id:randomUUID(),user_id:user,start_date:input.start,end_date:input.end,query}).select('*').single();if(inserted.error)throw inserted.error;found=inserted;
   }else if(input&&(input.start!==found.data.start_date||input.end!==found.data.end_date))throw new GmailError('Finish the current preview before choosing another range.',409);
   const run=found.data!;runId=run.id;

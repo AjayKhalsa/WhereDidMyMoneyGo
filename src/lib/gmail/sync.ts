@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Account } from "@/lib/domain/types";
-import { accountForAlert, authenticatedSender, automaticReason, BANK_SENDERS, header, mailText, parseAlert, type MailPart } from "./alerts";
+import { accountForAlert, authenticatedSender, automaticReason, financialSendersQuery, ALERT_PARSER_VERSION, header, mailText, parseAlert, type MailPart } from "./alerts";
 import { admin, GmailError, google, tokenRequest, unseal } from "./server";
 import { historicalRules, classifiedAlert } from "./classification";
 import { learningData, ruleRow } from "./learning-data";
@@ -24,7 +24,7 @@ export async function syncMailbox(userId: string, deadline = Date.now() + 45000)
     // Fixed query for the lifetime of a paginated scan. Overlap handles delayed alerts.
     const scanStarted = connection.scan_started_at ?? new Date().toISOString();
     const after = connection.scan_after ?? Math.floor(Math.max(start - 86400000, connection.last_synced_at ? new Date(connection.last_synced_at).getTime() - 7 * 86400000 : 0) / 1000);
-    const q = `after:${after} before:${Math.ceil(new Date(scanStarted).getTime()/1000)} -in:spam -in:trash -subject:OTP -subject:statement {${Object.keys(BANK_SENDERS).map(s => `from:${s}`).join(" ")}}`;
+    const q = `after:${after} before:${Math.ceil(new Date(scanStarted).getTime()/1000)} -in:spam -in:trash -subject:OTP -subject:statement ${financialSendersQuery()}`;
     const params = new URLSearchParams({ q, maxResults: "25" });
     if (connection.page_token) params.set("pageToken", connection.page_token);
     const page = await google<{ messages?: { id: string }[]; nextPageToken?: string }>(`${base}/messages?${params}`, { headers });
@@ -40,7 +40,7 @@ export async function syncMailbox(userId: string, deadline = Date.now() + 45000)
     const [accountResult, categoryResult, inboxResult] = await Promise.all([
       db.from("accounts").select("id,name,type,hint,is_active").eq("user_id", userId),
       db.from("categories").select("id").eq("user_id", userId),
-      db.from("gmail_messages").select("message_id").eq("user_id", userId).eq("status", "pending").order("created_at").limit(25),
+      db.from("gmail_messages").select("message_id").eq("user_id", userId).or(`status.eq.pending,and(status.eq.review,parser_version.lt.${ALERT_PARSER_VERSION})`).order("created_at").limit(25),
     ]);
     for (const result of [accountResult, categoryResult, inboxResult]) if (result.error) throw result.error;
     const accounts = (accountResult.data ?? []).map(a => ({ ...a, isActive: a.is_active })) as Pick<Account, "id" | "name" | "type" | "hint" | "isActive">[];
@@ -65,11 +65,15 @@ export async function syncMailbox(userId: string, deadline = Date.now() + 45000)
         Object.assign(candidate,classifiedAlert(candidate,learned.rules,learned.categories,selfName?[selfName]:[],trained.conflicts));
         if (!categoryResult.data?.some(c => c.id === candidate.categoryId)) candidate.categoryId = undefined;
       }
-      const reason = candidate ? automaticReason(candidate, authenticatedSender(mail.payload), connection.start_date) : "Unrecognized alert format. Check the email before entering it manually.";
+      const authenticated = authenticatedSender(mail.payload);
+      const reason = candidate ? automaticReason(candidate, authenticated, connection.start_date) : "Unrecognized alert format. Check the email before entering it manually.";
       // Reference dedup is independent of message id. No reference means review
       // on a ledger amount/date collision, never silently drop a real purchase.
       const eventKey = candidate?.reference ? createHash("sha256").update([candidate.bank, candidate.instrument, candidate.tail, candidate.direction, candidate.reference, candidate.amount].join("|")).digest("hex") : null;
-      const saved = await db.from("gmail_messages").update({ subject, candidate, status: "review", reason, event_key: eventKey }).eq("user_id", userId).eq("message_id", item.message_id).eq("status", "pending");
+      // Mark the parser version only after matching/committing succeeds. A
+      // transient failure must leave this review receipt eligible for retry.
+      const saved = await db.from("gmail_messages").update({ subject, candidate, status: "review", reason, event_key: eventKey }).eq("user_id", userId).eq("message_id", item.message_id).in("status", ["pending", "review"]).select("message_id").maybeSingle();
+      if (!saved.error && !saved.data) continue; // User resolved/dismissed it during this pass.
       if (saved.error?.code === "23505") {
         const original = await db.from("gmail_messages").select("status,transaction_id").eq("user_id", userId).eq("event_key", eventKey).maybeSingle();
         if (original.error) throw original.error;
@@ -77,21 +81,34 @@ export async function syncMailbox(userId: string, deadline = Date.now() + 45000)
           ? await db.from("transactions").select("id").eq("user_id", userId).eq("id", original.data.transaction_id).maybeSingle() : null;
         if (originalTransaction?.error) throw originalTransaction.error;
         if (original.data?.status !== "logged" || !originalTransaction?.data) {
-          const duplicate = await db.from("gmail_messages").update({ subject, status: "duplicate", reason: "Another alert for this reference is already dismissed or awaiting review." }).eq("user_id", userId).eq("message_id", item.message_id);
+          const duplicate = await db.from("gmail_messages").update({ subject, status: "duplicate", reason: "Another alert for this reference is already dismissed or awaiting review.", parser_version: ALERT_PARSER_VERSION }).eq("user_id", userId).eq("message_id", item.message_id).in("status", ["pending", "review"]);
           if (duplicate.error) throw duplicate.error;
           continue;
         }
-        const pendingMatch = await db.from("gmail_messages").update({ subject, candidate, status: "review", reason, event_key: null }).eq("user_id", userId).eq("message_id", item.message_id).eq("status", "pending");
+        const pendingMatch = await db.from("gmail_messages").update({ subject, candidate, status: "review", reason, event_key: null }).eq("user_id", userId).eq("message_id", item.message_id).in("status", ["pending", "review"]);
         if (pendingMatch.error) throw pendingMatch.error;
       }
       if (saved.error && saved.error.code !== "23505") throw saved.error;
+      const finish = async () => {
+        const done = await db.from('gmail_messages').update({ parser_version: ALERT_PARSER_VERSION }).eq('user_id',userId).eq('message_id',item.message_id);
+        if (done.error) throw done.error;
+      };
+      if (candidate && authenticated) {
+        const existing = await db.rpc("gmail_match_recorded", { p_user: userId, p_message: item.message_id, p_authenticated: true });
+        if (existing.error) throw existing.error;
+        if (existing.data === "matched") { await finish(); matched++; continue; }
+        if (existing.data === "duplicate") { await finish(); continue; }
+      }
       if (candidate && !reason) {
-        const result = await db.rpc("gmail_commit_classified", { p_user: userId, p_message: item.message_id });
+        const result = candidate.direction === 'credit'
+          ? await db.rpc('gmail_commit_identified_credit',{ p_user:userId,p_message:item.message_id,p_authenticated:authenticated })
+          : await db.rpc("gmail_commit_classified", { p_user: userId, p_message: item.message_id });
         if (result.error) throw result.error;
         if (result.data === "logged") logged++; else if (result.data === "matched") matched++; else reviewed++;
       } else reviewed++;
+      await finish();
     }
-    const pending = await db.from("gmail_messages").select("message_id", { count: "exact", head: true }).eq("user_id", userId).eq("status", "pending");
+    const pending = await db.from("gmail_messages").select("message_id", { count: "exact", head: true }).eq("user_id", userId).or(`status.eq.pending,and(status.eq.review,parser_version.lt.${ALERT_PARSER_VERSION})`);
     if (pending.error) throw pending.error;
     const cleared = await db.from("gmail_connections").update({ last_error: null }).eq("user_id", userId).eq("lease_id", lease);
     if (cleared.error) throw cleared.error;

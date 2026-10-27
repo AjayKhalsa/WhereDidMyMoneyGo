@@ -16,7 +16,15 @@ function clock(raw: string): string | undefined {
 
 export function alertTime(body: string, rawDay: string, day: string, receivedAt?: string | number): AlertTime {
   // Anchor to the transaction's parsed date, not a footer or an available-balance timestamp.
-  const tail = body.slice(body.indexOf(rawDay) + rawDay.length);
+  // A statement-style header can repeat the day before the actual labelled
+  // transaction timestamp. Prefer that label rather than the first occurrence.
+  const labelled = /Date\s*(?:&\s*)?Time:\s*/ig;
+  let dateStart = body.indexOf(rawDay);
+  for (const match of body.matchAll(labelled)) {
+    const start = match.index! + match[0].length;
+    if (body.slice(start, start + rawDay.length) === rawDay) { dateStart = start; break; }
+  }
+  const tail = body.slice(dateStart + rawDay.length);
   const raw = /^\s*(?:,?\s*(?:at|Time:)?\s*)(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)(?:\s*(IST|UTC|GMT|[+-]\d{2}:?\d{2}))?(?=[\s.,]|$)/i.exec(tail);
   const time = raw && clock(raw[1]!);
   if (time) {

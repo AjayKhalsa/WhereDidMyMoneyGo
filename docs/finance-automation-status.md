@@ -1,5 +1,11 @@
 # Finance automation handoff
 
+## Receipt matching follow-up — 2026-10-27
+
+The latest work adds ICICI card-repayment receipts, Axis account debit/credit summaries and authenticated CRED successful-payment receipts; shared-reference matching runs before financial-purpose review. Parser-version metadata permits bounded retry of unresolved review formats while preserving dismissals and canonical ledger fields. Partial repayments default to transfers, with the paying account requiring confirmation. See `gmail-payment-receipts.md` for deployment order, safeguards and validation. The migration and code are prepared; production application and any historical payment repair require separate verification and approval. Existing statement reconciliation is preserved.
+
+The same draft also adds explicit salary-credit automation and HDFC merchant refund/reversal parsing. Only authenticated, mapped salary credits with explicit bank narration or confirmed posted card refunds can auto-log; generic credits and refund initiations remain reviewable. Previously entered salary rows are protected from duplication. No live salary/refund repair has been applied here.
+
 Last inspected: 2026-10-21. Baseline: `main` at `cc6f1e81653bfc5c13ff532ad185c7e0cef986eb` (PR #20 merged). GitHub's Vercel commit status is successful, linking deployment `4VnC3UGFss3NreCk5ev1TzsFKgjb`. This confirms the deployment status, not authenticated production behavior, the active production alias, or database migration execution.
 
 ## Evidence and limits
