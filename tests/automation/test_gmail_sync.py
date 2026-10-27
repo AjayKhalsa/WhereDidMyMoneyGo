@@ -95,12 +95,13 @@ class SyncJobTests(unittest.TestCase):
         self.assertNotIn(SECRET, str(caught.exception))
         self.assertNotIn("bank@example.com", str(caught.exception))
 
-    def test_workflow_runs_four_times_in_ist_and_retains_nightly_vercel_fallback(self):
+    def test_workflow_runs_every_four_hours_in_ist_and_retains_nightly_vercel_fallback(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github/workflows/gmail-sync.yml").read_text()
         minute, hours = re.search(r"cron: '([0-9]+) ([0-9,]+) ", workflow).groups()
         times = sorted((int(hour) * 60 + int(minute) + 330) % 1440 for hour in hours.split(","))
-        self.assertEqual(times, [197, 557, 917, 1277])
+        self.assertEqual(times, [77, 317, 557, 797, 1037, 1277])
+        self.assertTrue(all((times[(i + 1) % len(times)] - t) % 1440 == 240 for i, t in enumerate(times)))
         self.assertIn('"schedule": "30 21 * * *"', (root / "vercel.json").read_text())
         self.assertNotIn("pull_request", workflow)
 
