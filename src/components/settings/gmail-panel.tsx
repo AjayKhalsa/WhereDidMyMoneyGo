@@ -9,6 +9,7 @@ import { Button, Card, Section } from "@/components/ui/primitives";
 import { possibleExistingTransactions } from "@/lib/import/identity";
 import { alertTimeLabel } from "@/lib/gmail/alert-time";
 import { GmailBackfill } from './gmail-backfill';
+import { reviewDefaults } from '@/lib/gmail/review-defaults';
 
 interface ReviewMail { message_id: string; subject: string; reason?: string; candidate?: Alert; category_review?: boolean }
 interface Status {
@@ -79,17 +80,18 @@ export function GmailPanel() {
       </>}
       {status?.connection&&<GmailBackfill/>}
       {!!status?.reviewCount && <p className="text-sm font-medium">{status.reviewCount} alerts need review{status.reviewCount > 50 ? " — showing the first 50" : ""}</p>}
-      {status?.messages.map(mail => <ReviewRow key={mail.message_id} mail={mail} email={status.connection?.email} disabled={busy} onSaved={async () => { await load(); await refreshDatabase(); }} />)}
+      {status?.messages.map(mail => <ReviewRow key={`${mail.message_id}:${mail.candidate?.accountId ?? ''}:${mail.candidate?.creditKind ?? ''}`} mail={mail} email={status.connection?.email} disabled={busy} onSaved={async () => { await load(); await refreshDatabase(); }} />)}
     </Card>
   </Section>;
 }
 
 function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email?: string; disabled: boolean; onSaved: () => Promise<void> }) {
   const { db } = useFinance(); const a = mail.candidate;
-  const [accountId, setAccountId] = useState(a?.accountId ?? "");
+  const defaults = reviewDefaults(a);
+  const [accountId, setAccountId] = useState(defaults.accountId);
   const [categoryId, setCategoryId] = useState(a?.classification?.categoryId ?? a?.categoryId ?? "");
-  const [kind, setKind] = useState(a?.direction === "credit" ? "" : "EXPENSE");
-  const [toAccountId, setToAccountId] = useState("");
+  const [kind, setKind] = useState(defaults.kind);
+  const [toAccountId, setToAccountId] = useState(defaults.toAccountId);
   const [allowDuplicate, setAllowDuplicate] = useState(false);
   const [existingTransactionId, setExistingTransactionId] = useState("");
   const [remember, setRemember] = useState(false);
@@ -111,6 +113,7 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
     <p className="text-sm font-medium">{a ? `${a.merchant} · ${formatMoney(a.amount)} · ${a.date}` : mail.subject}</p>
     {a && <p className="text-xs text-ink-tertiary">{a.bank} {a.instrument.replace("_", " ")} ending {a.tail} · {alertTimeLabel({timeSource: a.timeSource ?? "unknown", timeConfidence: a.timeConfidence ?? "unknown", occurredAt: a.occurredAt})}</p>}
     <p className="text-sm text-ink-secondary">{mail.reason || "Check these details before adding."}</p>
+    {a?.creditKind === 'repayment' && <p className="text-xs text-ink-secondary">Payment received: {formatMoney(a.amount)}. This can be a partial payment. It reduces the card balance by this amount; it is not new spending or income.</p>}
     {mail.category_review&&<p className="text-xs text-ink-secondary">Already in your ledger and included in balances. Saving a category will not add another transaction.</p>}
     {a?.classification&&<p className="text-xs text-ink-tertiary">{a.classification.reason}</p>}
     <a className="text-sm underline" target="_blank" rel="noreferrer" href={`https://mail.google.com/mail/u/?authuser=${encodeURIComponent(email ?? "")}#all/${mail.message_id}`}>View original email</a>
@@ -124,6 +127,7 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
       {!mail.category_review&&kind !== "TRANSFER" && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />Remember this card/account match for future alerts</label>}
       {!mail.category_review&&<label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={allowDuplicate} onChange={e => setAllowDuplicate(e.target.checked)} />I checked the ledger: this is a separate transaction even if the amount and date match.</label>}
       {!mail.category_review&&!!candidates.length && <div className="flex flex-wrap gap-2">
+        <p className="w-full text-xs text-ink-secondary">{candidates.length === 1 ? 'A saved entry may already cover this email.' : 'Several saved entries may match this email.'} Link the correct entry instead of adding it again. Amount and date alone do not prove a duplicate.</p>
         <select aria-label="Existing ledger entry" className={inputClass} value={existingTransactionId} onChange={e => setExistingTransactionId(e.target.value)}>
           <option value="">Choose an existing entry to link</option>
           {candidates.map(t => <option key={t.id} value={t.id}>{t.description} · {t.date.slice(0, 10)} · {formatMoney(t.amount)}</option>)}
@@ -133,6 +137,6 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
       </div>}
     </>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    <div className="flex gap-2">{a && <Button size="sm" disabled={disabled || busy || !accountId || !kind} onClick={() => void submit("log")}>{mail.category_review?'Save category':'Add to ledger'}</Button>}<Button size="sm" variant="quiet" disabled={disabled || busy} onClick={() => void submit("ignore")}>{mail.category_review?'Keep current entry':'Already recorded / dismiss'}</Button></div>
+    <div className="flex gap-2">{a && <Button size="sm" disabled={disabled || busy || !accountId || !kind || (kind === 'TRANSFER' && (!toAccountId || accountId === toAccountId))} onClick={() => void submit("log")}>{mail.category_review?'Save category':'Add to ledger'}</Button>}<Button size="sm" variant="quiet" disabled={disabled || busy} onClick={() => void submit("ignore")}>{mail.category_review?'Keep current entry':'Dismiss email'}</Button></div>
   </div>;
 }

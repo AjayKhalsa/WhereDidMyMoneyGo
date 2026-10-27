@@ -25,7 +25,7 @@ export function normalizeBankReference(value: string | undefined): string | unde
 /** Never interpret arbitrary account/VPA/phone digits as a bank reference. */
 export function bankReference(text: string): string | undefined {
   return normalizeBankReference(text.match(/\b(?:reference|rrn|utr|ref)(?:\s*[:#]\s*|\s+)([A-Z0-9]{8,64})\b/i)?.[1]
-    ?? text.match(/\bUPI[-/](\d{10,30})[-/]/i)?.[1]);
+    ?? text.match(/\bUPI[-/](?:P2[MP]\/)?(\d{10,30})[-/]/i)?.[1]);
 }
 
 export function eventDirection(transaction: Transaction, accountId: string): EventDirection | undefined {

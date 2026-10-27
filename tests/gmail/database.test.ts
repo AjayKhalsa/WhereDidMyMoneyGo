@@ -171,3 +171,73 @@ test('learning failure rolls category approval back and new RPCs remain server-o
  assert.equal((await db.query<{category_id:string}>("select category_id from transactions where amount=90521")).rows[0]!.category_id,'other');
  await db.exec('set role authenticated');try{await assert.rejects(db.query("select gmail_commit_classified($1,'category-atomic')",[user]),/permission denied/);await assert.rejects(db.query("select gmail_seed_rules($1,'[]')",[user]),/permission denied/);}finally{await db.exec('reset role');}
 });
+
+test('strong-reference matching precedes financial-purpose review and preserves every manual field',async()=>{
+ const amount=6234567,ref='761234567890';
+ await db.query("insert into transactions(id,user_id,type,amount,description,date,account_id,to_account_id,notes,source) values('manual-repayment',$1,'TRANSFER',$2,'My partial card payment','2026-10-15T09:17:21','bank','card',$3,'manual')",[user,amount,`My note; reference ${ref}`]);
+ const original=(await db.query("select to_jsonb(t) as row from transactions t where id='manual-repayment'")).rows[0];
+ await message('repayment-credit-match',amount,'card');
+ await db.query("update gmail_messages set candidate=candidate||$1 where message_id='repayment-credit-match'",[{direction:'credit',special:true,creditKind:'repayment',reference:ref}]);
+ const match=async(auth=true)=>(await db.query<{r:string}>("select gmail_match_recorded($1,'repayment-credit-match',$2) r",[user,auth])).rows[0]!.r;
+ assert.equal(await match(false),'review'); assert.equal(await match(),'matched');
+ assert.equal(await match(),'logged');
+ assert.deepEqual((await db.query("select to_jsonb(t) as row from transactions t where id='manual-repayment'")).rows[0],original);
+ assert.equal((await db.query<{n:number}>("select count(*)::int n from transactions where amount=$1",[amount])).rows[0]!.n,1);
+ assert.equal((await db.query<{category_review:boolean}>("select category_review from gmail_messages where message_id='repayment-credit-match'")).rows[0]!.category_review,false);
+});
+
+test('same amount/date without a shared reference stays review; user can link an ICICI-style receipt once',async()=>{
+ const amount=6234567;
+ await message('receipt-no-reference',amount,'card');
+ await db.query("update gmail_messages set candidate=candidate||$1 where message_id='receipt-no-reference'",[{direction:'credit',special:true,creditKind:'repayment'}]);
+ assert.equal((await db.query<{r:string}>("select gmail_match_recorded($1,'receipt-no-reference',true) r",[user])).rows[0]!.r,'review');
+ assert.equal((await db.query<{r:string}>("select gmail_match_existing($1,'receipt-no-reference','card','manual-repayment') r",[user])).rows[0]!.r,'matched');
+ assert.equal((await db.query<{n:number}>("select count(*)::int n from transactions where amount=$1",[amount])).rows[0]!.n,1);
+});
+
+test('repeated CRED order identity links to its confirmed transfer, never another amount/date-only payment',async()=>{
+ await message('provider-first',6234567,'card');
+ const data={direction:'credit',special:true,creditKind:'repayment',providerReference:'CRED:ORDER123456'};
+ await db.query("update gmail_messages set candidate=candidate||$1 where message_id='provider-first'",[data]);
+ await db.query("select gmail_match_existing($1,'provider-first','card','manual-repayment')",[user]);
+ await message('provider-repeated',6234567,'card');await db.query("update gmail_messages set candidate=candidate||$1 where message_id='provider-repeated'",[data]);
+ assert.equal((await db.query<{r:string}>("select gmail_match_recorded($1,'provider-repeated',true) r",[user])).rows[0]!.r,'matched');
+ await message('different-provider-order',6234567,'card');await db.query("update gmail_messages set candidate=candidate||$1 where message_id='different-provider-order'",[{...data,providerReference:'CRED:OTHER123456'}]);
+ assert.equal((await db.query<{r:string}>("select gmail_match_recorded($1,'different-provider-order',true) r",[user])).rows[0]!.r,'review');
+ assert.equal((await db.query<{n:number}>("select count(*)::int n from transactions where amount=6234567")).rows[0]!.n,1);
+});
+
+test('ambiguous bank references never merge legitimate repeated payments',async()=>{
+ const amount=7234567,ref='771234567890';
+ await db.query("insert into transactions(id,user_id,type,amount,description,date,account_id,notes,source) values('repeat-one',$1,'EXPENSE',$2,'One','2026-10-15','bank',$3,'manual'),('repeat-two',$1,'EXPENSE',$2,'Two','2026-10-15','bank',$3,'manual')",[user,amount,`reference ${ref}`]);
+ await message('ambiguous-reference',amount,'bank');await db.query("update gmail_messages set candidate=candidate||$1 where message_id='ambiguous-reference'",[{reference:ref}]);
+ assert.equal((await db.query<{r:string}>("select gmail_match_recorded($1,'ambiguous-reference',true) r",[user])).rows[0]!.r,'review');
+ assert.equal((await db.query<{n:number}>("select count(*)::int n from transactions where amount=$1",[amount])).rows[0]!.n,2);
+});
+
+test('new parser version retries only unresolved receipts, preserving dismissals and completed category reviews',async()=>{
+ for(const [id,status] of [['old-format','review'],['intentional-dismissal','ignored'],['already-logged','logged']] as const){
+  await db.query("insert into gmail_messages(user_id,message_id,status) values($1,$2,$3)",[user,id,status]);
+ }
+ const queue=async()=>(await db.query<{message_id:string}>("select message_id from gmail_messages where user_id=$1 and (status='pending' or (status='review' and parser_version<1)) and message_id in ('old-format','intentional-dismissal','already-logged')",[user])).rows.map(r=>r.message_id);
+ assert.deepEqual(await queue(),['old-format']);
+ await db.query("update gmail_messages set parser_version=1 where message_id='old-format'");assert.deepEqual(await queue(),[]);
+});
+
+test('partial card repayment changes bank cash and liability once, without a second spending expense',async()=>{
+ await message('partial-card-repayment',6400000,'card');
+ await db.query("update gmail_messages set candidate=candidate||$1 where message_id='partial-card-repayment'",[{direction:'credit',special:true,creditKind:'repayment',reference:'781234567890'}]);
+ const totals=async()=>(await db.query<{cash:string;liability:string;spending:string}>("select coalesce(sum(case when account_id='bank' then case when type='INCOME' then amount else -amount end else 0 end+case when type='TRANSFER' and to_account_id='bank' then amount else 0 end),0)::text cash, coalesce(sum(case when account_id='card' and type='EXPENSE' then amount when to_account_id='card' and type='TRANSFER' then -amount else 0 end),0)::text liability,coalesce(sum(case when type='EXPENSE' then amount else 0 end),0)::text spending from transactions")).rows[0]!;
+ const before=await totals();assert.equal(await commit('partial-card-repayment',true,false,'bank','TRANSFER','card'),'logged');
+ const after=await totals();assert.equal(Number(after.cash)-Number(before.cash),-6400000);assert.equal(Number(after.liability)-Number(before.liability),-6400000);assert.equal(after.spending,before.spending);
+ await commit('partial-card-repayment',true,false,'bank','TRANSFER','card');assert.deepEqual(await totals(),after);
+});
+
+test('automatic matching stays server-only and cannot restore dismissed or removed financial events',async()=>{
+ await message('dismissed-before-match',9934567,'bank');await db.query("update gmail_messages set status='ignored' where message_id='dismissed-before-match'");
+ assert.equal((await db.query<{r:string}>("select gmail_match_recorded($1,'dismissed-before-match',true) r",[user])).rows[0]!.r,'ignored');
+ await message('removed-match',9934567,'bank');
+ await db.query("insert into transaction_sources(user_id,source_kind,source_key,transaction_id,account_id,direction,amount,occurred_on,match_reason) values($1,'gmail','removed-match',null,'bank','debit',9934567,'2026-10-15','removed')",[user]);
+ assert.equal((await db.query<{r:string}>("select gmail_match_recorded($1,'removed-match',true) r",[user])).rows[0]!.r,'duplicate');
+ for(const role of ['anon','authenticated']){await db.exec(`set role ${role}`);try{await assert.rejects(db.query("select gmail_match_recorded($1,'removed-match',true)",[user]),/permission denied/);}finally{await db.exec('reset role');}}
+});
