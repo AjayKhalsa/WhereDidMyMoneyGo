@@ -85,8 +85,7 @@ account. Local tests cannot verify Google consent or deployed environment settin
 
 ## Optional frequent checks on Vercel Hobby
 
-Use the GitHub Actions workflow in `.github/workflows/gmail-sync.yml` for four extra
-checks per day, retaining the daily Vercel fallback. Copy the existing Vercel
+Use the GitHub Actions workflow in `.github/workflows/gmail-sync.yml` every four hours (six checks per day), retaining the daily Vercel fallback. Copy the existing Vercel
 `CRON_SECRET` to the GitHub Actions repository secret of the same name. See
 [GitHub Actions setup](github-actions-gmail-sync.md) for activation, timing and
 bounded backlog handling. No Vercel plan upgrade or mailbox credentials in GitHub
