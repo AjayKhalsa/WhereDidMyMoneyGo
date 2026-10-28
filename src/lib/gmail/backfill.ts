@@ -22,8 +22,8 @@ export async function backfillReport(user:string){
  const db=admin(),run=await db.from('gmail_backfill_runs').select('*').eq('user_id',user).order('created_at',{ascending:false}).limit(1).maybeSingle();if(run.error)throw run.error;
  if(!run.data)return {run:null,items:[],subscriptions:[]};
  const staged=await allRows(db,'gmail_backfill_items',user,'message_id',run.data.id);
- const [tx,rr,receipts]=await Promise.all([allRows(db,'transactions',user,'id'),allRows(db,'recurring',user,'id'),allRows(db,'gmail_messages',user,'message_id')]);
- const items=currentBackfillItems(staged as ({message_id:string;status:string}&Record<string,any>)[],receipts as any,new Set(tx.map(t=>String(t.id))));
+ const [tx,rr,receipts,sources]=await Promise.all([allRows(db,'transactions',user,'id'),allRows(db,'recurring',user,'id'),allRows(db,'gmail_messages',user,'message_id'),allRows(db,'transaction_sources',user,'source_key')]);
+ const items=currentBackfillItems(staged as ({message_id:string;status:string}&Record<string,any>)[],receipts as any,new Set(tx.map(t=>String(t.id))),{transactions:tx.map(r=>domainRow<Transaction>(r)),sources:sources as any});
  const rules=rr.map(r=>domainRow<RecurringTransaction>(r));
  const subscriptions=tx.filter(t=>t.date.slice(0,10)>=run.data.start_date&&t.date.slice(0,10)<=run.data.end_date).flatMap(t=>{const suggestion=subscriptionSuggestion(domainRow<Transaction>(t),rules);return suggestion?[{transactionId:t.id,merchant:t.merchant||t.description,date:t.date, ...suggestion}]:[];});
  const patterns=subscriptionPatterns(tx.filter(t=>t.date.slice(0,10)>=run.data.start_date&&t.date.slice(0,10)<=run.data.end_date).map(t=>domainRow<Transaction>(t)));
@@ -85,7 +85,7 @@ export async function scanBackfill(user:string,input?:{start:string;end:string;r
      const disposition=notice?{status:authenticated&&notice.kind==='investment-schedule'?'skipped':'review',reason:authenticated?investmentNoticeReason(notice):'Sender authentication not verified.',matched_transaction_id:undefined}:backfillDisposition(a,authenticated,existing as any,tx,sources as any,item.message_id,run.start_date,run.end_date);
      const canonical=tx.find(t=>t.id===disposition.matched_transaction_id);
      const proposed=a&&a.direction==='debit'&&!a.special&&a.accountId?({id:item.message_id,type:'EXPENSE',amount:a.amount,accountId:a.accountId,merchant:a.merchant,description:a.merchant,date:a.date} as Transaction):undefined;
-     record={...disposition,subject,candidate:a,subscription:canonical||proposed?subscriptionSuggestion((canonical??proposed)!,rules)??null:null};
+     record={...disposition,subject,candidate:a??notice,subscription:canonical||proposed?subscriptionSuggestion((canonical??proposed)!,rules)??null:null};
     }
    }catch{record={status:'failed',reason:'Message could not be processed. Retry; no ledger entry was added.'};}
    const saved=await db.from('gmail_backfill_items').update({...record,attempts:item.attempts+1}).eq('run_id',run.id).eq('user_id',user).eq('message_id',item.message_id);if(saved.error)throw saved.error;

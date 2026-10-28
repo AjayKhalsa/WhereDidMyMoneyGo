@@ -30,6 +30,30 @@ export function subscriptionPatterns(transactions:Transaction[]){
   return [{merchant:key.split('|')[1]!,accountId:sorted[0]!.accountId,transactionIds:sorted.map(t=>t.id),amounts:sorted.map(t=>t.amount),amountChanged:new Set(sorted.map(t=>t.amount)).size>1,status:'review',reason:'Three or more real monthly charges; subscription and rule creation need confirmation.'}];
  });
 }
+type FinancialSource = {source_kind:string;source_key:string;transaction_id:string|null;account_id:string;direction:string;amount:number;occurred_on?:string;bank_reference?:string|null};
+
+/** Read-only event identification. Weak amount/date/name similarities never hide a payment. */
+export function strongBackfillMatch(a:Alert,transactions:Transaction[],sources:FinancialSource[],messageId:string) {
+  const day=Date.parse(a.date+'T00:00:00Z');
+  if(!a.accountId||!Number.isSafeInteger(a.amount)||a.amount<=0||!Number.isFinite(day)||new Date(day).toISOString().slice(0,10)!==a.date)return;
+  const ref=normalizeBankReference(a.reference);
+  const sameMessage=sources.filter(s=>s.source_kind==='gmail'&&s.source_key===messageId);
+  if(sameMessage.some(s=>!s.transaction_id||s.account_id!==a.accountId||s.amount!==a.amount||s.direction!==a.direction))return {status:'review',reason:'Source identity conflicts with this email; review before linking.'};
+  const anchors=sources.filter(s=>(s.source_kind==='gmail'&&s.source_key===messageId)||(ref&&normalizeBankReference(s.bank_reference??undefined)===ref&&s.account_id===a.accountId&&s.amount===a.amount&&s.direction===a.direction));
+  if(anchors.some(s=>!s.transaction_id))return {status:'review',reason:'Source points to a removed event; retain deletion history.'};
+  const sourceIds=new Set(anchors.map(s=>s.transaction_id));
+  const provider=/^CRED:[A-Z0-9]{6,64}$/i.test(a.providerReference??'')?a.providerReference?.toUpperCase():undefined;
+  const hits=transactions.filter(t=>{
+    if(t.amount!==a.amount||eventDirection(t,a.accountId!)!==a.direction||Math.abs(Date.parse(t.date.slice(0,10))-Date.parse(a.date))>3*86400000)return false;
+    const ledgerRef=bankReference((t.notes??'')+' '+t.description);
+    const providerHit=provider&&new RegExp('(?:^|[^A-Z0-9])'+provider+'(?:$|[^A-Z0-9])','i').test(t.notes??'')&&(!ref||!ledgerRef||ref===ledgerRef);
+    return sourceIds.has(t.id)||!!(ref&&ledgerRef===ref)||!!providerHit;
+  });
+  if(sourceIds.size>1||hits.length>1)return {status:'review',reason:'Several entries share this financial identity; choose the canonical entry.'};
+  if(sourceIds.size&&!hits.length)return {status:'review',reason:'Source identity points to a missing or incompatible entry; retain deletion history.'};
+  if(hits.length===1)return {status:'matched',matched_transaction_id:hits[0]!.id,reason:'Already recorded: matching account, direction, amount, posting window and source, bank reference or provider order. No new transaction.'};
+}
+
 export function backfillDisposition(a:Alert|null,authenticated:boolean,existing:{status:string;transaction_id?:string|null;reason?:string|null}|undefined,transactions:Transaction[],sources:{source_kind:string;source_key:string;transaction_id:string;account_id:string;direction:string;amount:number;bank_reference?:string|null}[],messageId:string,start:string,end:string){
   if(existing?.status==='ignored')return {status:'ignored',reason:'Existing dismissal preserved; no receipt was reset.'};
   if(existing?.status==='duplicate')return {status:'skipped',reason:'Existing duplicate receipt retained; original review or dismissal is unchanged.'};
@@ -38,12 +62,9 @@ export function backfillDisposition(a:Alert|null,authenticated:boolean,existing:
   if(!authenticated)return {status:'review',reason:'Sender authentication not verified.'};
   if(a.date<start||a.date>end)return {status:'skipped',reason:'Transaction date outside selected range.'};
   if(!a.accountId)return {status:'review',reason:'Account or card needs confirmation.'};
-  const ref=normalizeBankReference(a.reference);
-  const sourceIds=new Set(sources.filter(s=>(s.source_kind==='gmail'&&s.source_key===messageId)||(ref&&normalizeBankReference(s.bank_reference??undefined)===ref&&s.account_id===a.accountId&&s.amount===a.amount&&s.direction===a.direction)).map(s=>s.transaction_id));
-  const hits=transactions.filter(t=>t.amount===a.amount&&eventDirection(t,a.accountId!)===a.direction&&Math.abs(Date.parse(t.date.slice(0,10))-Date.parse(a.date))<=3*86400000&&(sourceIds.has(t.id)||(ref&&bankReference((t.notes??'')+' '+t.description)===ref)));
-  if(sourceIds.size&&!hits.length)return {status:'review',reason:'Source identity points to a missing or incompatible entry; retain deletion history.'};
-  if(hits.length===1)return {status:'matched',matched_transaction_id:hits[0]!.id,reason:'Unique account, direction, amount and strong reference match; no ledger edit.'};
-  if(hits.length>1||possibleExistingTransactions(transactions,a.accountId,a.amount,a.date,a.direction,a.reference).length)return {status:'review',reason:'Possible existing entry; do not merge by amount/date alone.'};
+  const matched=strongBackfillMatch(a,transactions,sources,messageId);
+  if(matched)return matched;
+  if(possibleExistingTransactions(transactions,a.accountId,a.amount,a.date,a.direction,a.reference).length)return {status:'review',reason:'Possible existing entry; do not merge by amount/date alone.'};
   if(a.direction==='credit'||a.special||a.classification?.needsReview)return {status:'review',reason:'Financial purpose or category needs review; no import yet.'};
   return {status:'proposed',reason:'Potential missing debit. Approval required; preview has not imported it.'};
 }
@@ -53,13 +74,18 @@ export function backfillSummary(items:{status:string}[],discoveryComplete:boolea
 }
 
 /** Refresh display against current decisions without mutating the original scan. */
-export function currentBackfillItems<T extends {message_id:string;status:string;matched_transaction_id?:string|null;reason?:string}>(items:T[],receipts:{message_id:string;status:string;transaction_id?:string|null}[],transactionIds:Set<string>):T[] {
+export function currentBackfillItems<T extends {message_id:string;status:string;matched_transaction_id?:string|null;reason?:string}>(items:T[],receipts:{message_id:string;status:string;transaction_id?:string|null}[],transactionIds:Set<string>,evidence?:{transactions:Transaction[];sources:FinancialSource[]}):T[] {
   return items.map(item=>{
     const receipt=receipts.find(r=>r.message_id===item.message_id);
     if(receipt?.status==='logged'&&receipt.transaction_id&&transactionIds.has(receipt.transaction_id))return {...item,status:'matched',matched_transaction_id:receipt.transaction_id,reason:'Already recorded in the current ledger. No action needed.'};
     if(receipt?.status==='ignored')return {...item,status:'ignored',reason:'Dismissed by you; dismissal preserved.'};
     if(receipt?.status==='duplicate')return {...item,status:'skipped',reason:'Duplicate receipt already resolved; no action needed.'};
     if(item.status==='matched'&&item.matched_transaction_id&&!transactionIds.has(item.matched_transaction_id))return {...item,status:'review',reason:'The previously matched ledger entry is no longer present. Review before importing.'};
+    const a=(item as T & {candidate?:Alert}).candidate;
+    if(evidence&&['proposed','review'].includes(item.status)&&a?.accountId&&Number.isSafeInteger(a.amount)&&['debit','credit'].includes(a.direction)&&/^\d{4}-\d{2}-\d{2}$/.test(a.date)&&!/authenticat/i.test(item.reason??'')) {
+      const match=strongBackfillMatch(a,evidence.transactions,evidence.sources,item.message_id);
+      if(match)return {...item,...match};
+    }
     return item;
   });
 }

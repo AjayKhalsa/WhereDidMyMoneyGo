@@ -1,5 +1,9 @@
 # Finance automation handoff
 
+## Missing-transaction check and current review cleanup — 2026-10-28
+
+PR 31 is merged on main at `5d9d55f`; the following work is a separate source follow-up on `fix/actionable-gmail-history`. Historical checking now focuses on unresolved findings, hides recorded payments, collapses dates/technical counts, and refreshes strong matches against the current ledger. Obsolete category prompts are hidden when the existing ledger category has already been corrected. Weak unique payee matches are suggested for explicit confirmation; equal repeated payments are never guessed. See [gmail-backfill.md](gmail-backfill.md). No schema or financial data mutation is included. Merge/deployment remains pending.
+
 ## Current investigation — missing personal credit and SIPs, 2026-10-28
 
 A personal credit was correctly parsed but withheld by the financial-purpose review gate; investment-provider confirmations were excluded by the discovery query. The source fix on `fix/missing-credits-and-investment-receipts` adds narrowly scoped Groww/KFintech discovery, allocation/reminder parsing, honest review UI and safeguards against treating allocations or investment debits as consumption. It preserves distinct equal-value orders and creates no payment from a reminder. See [investment-email-capture.md](investment-email-capture.md) for verified behavior and remaining automation limits. The full 52-file suite, typecheck, production build and seven-email private replay passed. Merge/deployment remains pending. No migration or production financial mutation was made; the separate private backup and exact recovery dry run await explicit approval.

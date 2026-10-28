@@ -10,6 +10,7 @@ import { Button, Card, Section } from "@/components/ui/primitives";
 import { possibleExistingTransactions } from "@/lib/import/identity";
 import { alertTimeLabel } from "@/lib/gmail/alert-time";
 import { GmailBackfill } from './gmail-backfill';
+import { suggestedExistingEntry } from "@/lib/gmail/review-list";
 import { reviewDefaults } from '@/lib/gmail/review-defaults';
 
 interface ReviewMail { message_id: string; subject: string; reason?: string; candidate?: Alert; category_review?: boolean }
@@ -80,7 +81,7 @@ export function GmailPanel() {
         </div>
         {disconnecting && <div className="space-y-2 text-sm"><p>Stop automatic imports and revoke Google access? Your saved transactions and duplicate checks stay in the app.</p><Button variant="danger" disabled={busy} onClick={() => void run(async () => { await api("", "DELETE"); setDisconnecting(false); setNotice("Disconnected. Your saved transactions are unchanged."); })}>Disconnect Gmail</Button></div>}
       </>}
-      {status?.connection&&<GmailBackfill/>}
+      {status?.connection&&<GmailBackfill email={status.connection.email}/>}
       {!!status?.reviewCount && <p className="text-sm font-medium">{status.reviewCount} alerts need review{status.reviewCount > 50 ? " — showing the first 50" : ""}</p>}
       {status?.messages.map(mail => <ReviewItemRow key={mail.message_id} mail={mail} email={status.connection?.email} disabled={busy} onSaved={async () => { await load(); await refreshDatabase(); }} />)}
     </Card>
@@ -121,7 +122,7 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
   const [kind, setKind] = useState(defaults.kind);
   const [toAccountId, setToAccountId] = useState(defaults.toAccountId);
   const [allowDuplicate, setAllowDuplicate] = useState(false);
-  const [existingTransactionId, setExistingTransactionId] = useState("");
+  const [existingTransactionId, setExistingTransactionId] = useState(() => suggestedExistingEntry(a,db?.transactions??[]) ?? "");
   const [remember, setRemember] = useState(false);
   const [learnCategory, setLearnCategory] = useState(true);
   const [refundPosted, setRefundPosted] = useState(false);
@@ -167,8 +168,8 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
           <option value="">Choose an existing entry to link</option>
           {candidates.map(t => <option key={t.id} value={t.id}>{t.description} · {t.date.slice(0, 10)} · {formatMoney(t.amount)}</option>)}
         </select>
-        <Button size="sm" disabled={disabled || busy || !existingTransactionId} onClick={() => void submit("match")}>Link existing entry</Button>
-        <p className="text-xs text-ink-tertiary">Keeps its category, merchant, notes and tags.</p>
+        <Button size="sm" disabled={disabled || busy || !existingTransactionId} onClick={() => void submit("match")}>Confirm link to existing entry</Button>
+        <p className="text-xs text-ink-tertiary">Keeps its category, merchant, notes and tags. A unique same-day payee match may be preselected; confirm it represents this payment.</p>
       </div>}
     </>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
