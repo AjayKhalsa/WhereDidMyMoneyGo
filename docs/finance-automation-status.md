@@ -1,5 +1,11 @@
 # Finance automation handoff
 
+## Current investigation — missing personal credit and SIPs, 2026-10-28
+
+A personal credit was correctly parsed but withheld by the financial-purpose review gate; investment-provider confirmations were excluded by the discovery query. The source fix on `fix/missing-credits-and-investment-receipts` adds narrowly scoped Groww/KFintech discovery, allocation/reminder parsing, honest review UI and safeguards against treating allocations or investment debits as consumption. It preserves distinct equal-value orders and creates no payment from a reminder. See [investment-email-capture.md](investment-email-capture.md) for verified behavior and remaining automation limits. The full 52-file suite, typecheck, production build and seven-email private replay passed. Merge/deployment remains pending. No migration or production financial mutation was made; the separate private backup and exact recovery dry run await explicit approval.
+
+The data-completeness implementation is separately committed on `feat/finance-data-completeness` (`277c2a3`). It is independent of this receipt investigation and remains pending publication/deployment. PR 29 is merged into main at `41ed1eb`; older sections claiming it remains unmerged are historical.
+
 ## Latest scheduling and preview follow-up — 2026-10-28
 
 The separately requested every-four-hour workflow was merged in PR 30 and verified on main. It targets 01:17, 05:17, 09:17, 13:17, 17:17 and 21:17 IST, retaining the nightly Vercel fallback. The ten automation tests pass. GitHub dispatch can run late. This scheduling change is active independently of PR 29.

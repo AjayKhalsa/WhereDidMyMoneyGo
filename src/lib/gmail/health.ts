@@ -1,4 +1,4 @@
-import { BANK_SENDERS } from './alerts';
+import { BANK_SENDERS, INVESTMENT_SENDERS } from './alerts';
 
 export const NIGHTLY_SYNC_UTC = '30 21 * * *'; // 03:00 IST
 export function gmailHealth(input: {
@@ -9,7 +9,7 @@ export function gmailHealth(input: {
   const last = input.lastSyncedAt ? Date.parse(input.lastSyncedAt) : NaN;
   const stale = !Number.isFinite(last) || last > now || now - last > 36 * 3600000;
   const history = input.historical;
-  const historicalOutdated = !!history && Object.keys(BANK_SENDERS).some(sender => !history.query.includes(`from:${sender}`));
+  const historicalOutdated = !!history && [...Object.keys(BANK_SENDERS), ...INVESTMENT_SENDERS].some(sender => !history.query.includes(`from:${sender}`));
   return {
     state: input.error ? 'error' : input.hasNextPage || input.pending > 0 ? 'incomplete' : stale ? 'stale' : 'checked',
     stale, pending: input.pending, review: input.review,

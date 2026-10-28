@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { gmailHealth, drainMailbox, NIGHTLY_SYNC_UTC } from '../../src/lib/gmail/health';
-import { BANK_SENDERS } from '../../src/lib/gmail/alerts';
+import { BANK_SENDERS, INVESTMENT_SENDERS } from '../../src/lib/gmail/alerts';
 import fs from 'node:fs';
 const now = Date.parse('2026-10-19T06:00:00Z');
 const current = { lastSyncedAt: new Date(now).toISOString(), hasNextPage: false, pending: 0, review: 0 };
@@ -16,8 +16,9 @@ test('health distinguishes discovery, processing, stale checks and review; never
   assert.equal(gmailHealth({ ...current, review: 7 }, now).review, 7);
 });
 test('completed historical scan with omitted new sender is explicitly outdated', () => {
-  const history = { query: Object.keys(BANK_SENDERS).map(s => `from:${s}`).join(' '), status: 'complete', discovery_complete: true };
+  const history = { query: [...Object.keys(BANK_SENDERS), ...INVESTMENT_SENDERS].map(s => `from:${s}`).join(' '), status: 'complete', discovery_complete: true };
   assert.equal(gmailHealth({ ...current, historical: history }, now).historicalDiscoveryComplete, true);
+  assert.equal(gmailHealth({ ...current, historical: { ...history, query: history.query.replace('from:noreply@groww.in', '') } }, now).historicalOutdated, true);
   const old = gmailHealth({ ...current, historical: { ...history, query: history.query.replace('from:hsbc@hsbc.bank.in', '') } }, now);
   assert.equal(old.historicalOutdated, true); assert.equal(old.historicalDiscoveryComplete, false);
   assert.equal(gmailHealth({ ...current, historical: { ...history, status: 'scanning' } }, now).historicalDiscoveryComplete, false);

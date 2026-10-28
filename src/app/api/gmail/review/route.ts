@@ -2,7 +2,8 @@ import type { NextRequest } from "next/server";
 import { admin, checkOrigin, failure, GmailError, json, userFor } from "@/lib/gmail/server";
 import { correctedRule } from "@/lib/gmail/classification";
 import { learningData, ruleRow } from "@/lib/gmail/learning-data";
-import type { Alert } from "@/lib/gmail/alerts";
+import { isInvestmentNotice } from "@/lib/gmail/investment-notices";
+import { isInvestmentDebit, type Alert } from "@/lib/gmail/alerts";
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,12 +17,16 @@ export async function POST(request: NextRequest) {
       if (result.error) throw result.error;
       return json({ status: "ignored" });
     }
+    const candidateCheck = await db.from('gmail_messages').select('candidate').eq('user_id', user.id).eq('message_id', body.messageId).maybeSingle();
+    if (candidateCheck.error) throw candidateCheck.error;
+    if (isInvestmentNotice(candidateCheck.data?.candidate)) throw new GmailError("This confirms investment units, not a bank debit. Verify the cash payment before recording or linking it.");
     if (body.action === "match" && typeof body.existingTransactionId === "string" && typeof body.accountId === "string") {
       const result = await db.rpc("gmail_match_existing", { p_user: user.id, p_message: body.messageId,
         p_account: body.accountId, p_transaction: body.existingTransactionId });
       if (result.error || result.data === "review") throw new GmailError("The chosen entry does not match this alert. Check the account, direction, date and amount.", 409);
       return json({ status: result.data });
     }
+    if (body.action === "log" && candidateCheck.data?.candidate && isInvestmentDebit(candidateCheck.data.candidate as Alert)) throw new GmailError("This bank debit is investment-related. Record it as Invested and link that entry; do not log it as consumption.");
     if (body.action !== "log" || !["EXPENSE", "INCOME", "TRANSFER"].includes(body.type) || typeof body.accountId !== "string") throw new GmailError("Choose the transaction type and account.");
     const receipt=await db.from('gmail_messages').select('candidate,category_review').eq('user_id',user.id).eq('message_id',body.messageId).maybeSingle();
     if(receipt.error)throw receipt.error;
