@@ -1,3 +1,4 @@
+import { investmentNoticeReason, parseInvestmentNotice } from "./investment-notices";
 import { randomUUID } from 'node:crypto';
 import type { Account, RecurringTransaction, Transaction } from '@/lib/domain/types';
 import { accountForAlert,authenticatedSender,financialSendersQuery,header,mailText,parseAlert,type MailPart } from './alerts';
@@ -79,7 +80,9 @@ export async function scanBackfill(user:string,input?:{start:string;end:string;r
      const mail=await google<{payload:MailPart;internalDate?:string}>(`${base}/messages/${encodeURIComponent(item.message_id)}?format=full`,{headers});
      const subject=header(mail.payload,'Subject').slice(0,250),a=parseAlert(header(mail.payload,'From'),subject,mailText(mail.payload),mail.internalDate?Number(mail.internalDate):undefined);
      if(a){a.accountId=accountForAlert(a,accounts.map(r=>domainRow<Account>(r)),c.data.aliases??{});const self=merchantKey(profile.data.name);if(self.length>=3&&merchantKey(a.merchant).includes(self))a.special=true;Object.assign(a,classifiedAlert(a,learned.rules,learned.categories,[profile.data.name]));}
-     const disposition=backfillDisposition(a,authenticatedSender(mail.payload),existing as any,tx,sources as any,item.message_id,run.start_date,run.end_date);
+     const notice=a?null:parseInvestmentNotice(header(mail.payload,'From'),subject,mailText(mail.payload));
+     const authenticated=authenticatedSender(mail.payload);
+     const disposition=notice?{status:authenticated&&notice.kind==='investment-schedule'?'skipped':'review',reason:authenticated?investmentNoticeReason(notice):'Sender authentication not verified.',matched_transaction_id:undefined}:backfillDisposition(a,authenticated,existing as any,tx,sources as any,item.message_id,run.start_date,run.end_date);
      const canonical=tx.find(t=>t.id===disposition.matched_transaction_id);
      const proposed=a&&a.direction==='debit'&&!a.special&&a.accountId?({id:item.message_id,type:'EXPENSE',amount:a.amount,accountId:a.accountId,merchant:a.merchant,description:a.merchant,date:a.date} as Transaction):undefined;
      record={...disposition,subject,candidate:a,subscription:canonical||proposed?subscriptionSuggestion((canonical??proposed)!,rules)??null:null};

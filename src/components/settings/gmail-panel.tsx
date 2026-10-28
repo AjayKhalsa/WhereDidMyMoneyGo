@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Alert } from "@/lib/gmail/alerts";
+import { isInvestmentNotice, type InvestmentNotice } from "@/lib/gmail/investment-notices";
+import { isInvestmentDebit, type Alert } from "@/lib/gmail/alerts";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { refreshDatabase } from "@/lib/data/store";
 import { formatMoney } from "@/lib/domain/money";
@@ -12,10 +13,11 @@ import { GmailBackfill } from './gmail-backfill';
 import { reviewDefaults } from '@/lib/gmail/review-defaults';
 
 interface ReviewMail { message_id: string; subject: string; reason?: string; candidate?: Alert; category_review?: boolean }
+type ReviewItem = Omit<ReviewMail, "candidate"> & { candidate?: Alert | InvestmentNotice };
 interface Status {
   configured: boolean;
   connection: { email: string; start_date: string; last_synced_at?: string; last_error?: string; more: boolean } | null;
-  messages: ReviewMail[];
+  messages: ReviewItem[];
   reviewCount: number;
   health?: { state: string; stale: boolean; pending: number; review: number; historicalOutdated: boolean; historicalDiscoveryComplete: boolean; schedule: string };
 }
@@ -64,7 +66,7 @@ export function GmailPanel() {
         {status.health && <div className="space-y-1 text-xs text-ink-secondary" aria-label="Gmail sync health">
           <p>{status.health.schedule}. {status.health.state === 'error' ? 'Sync needs attention.' : status.health.state === 'incomplete' ? 'Mailbox scan unfinished.' : status.health.stale ? 'No recent completed mailbox check.' : 'Recent incremental discovery finished.'} {status.health.pending} queued · {status.health.review} need review.</p>
           {status.health.historicalOutdated && <p className="text-danger">Historical coverage uses an older bank sender list. Run a new historical preview with an updated date range.</p>}
-          <p>Coverage is supported bank alerts only; skipped formats, dismissals and review items are not confirmed ledger imports. A completed scan does not verify account balances.</p>
+          <p>Coverage includes supported bank alerts and investment confirmations; skipped formats, dismissals and review items are not confirmed ledger imports. A completed scan does not verify account balances.</p>
         </div>}
         <div className="flex flex-wrap gap-2">
           <Button disabled={busy} onClick={() => void run(async () => {
@@ -80,9 +82,35 @@ export function GmailPanel() {
       </>}
       {status?.connection&&<GmailBackfill/>}
       {!!status?.reviewCount && <p className="text-sm font-medium">{status.reviewCount} alerts need review{status.reviewCount > 50 ? " — showing the first 50" : ""}</p>}
-      {status?.messages.map(mail => <ReviewRow key={`${mail.message_id}:${mail.candidate?.accountId ?? ''}:${mail.candidate?.creditKind ?? ''}`} mail={mail} email={status.connection?.email} disabled={busy} onSaved={async () => { await load(); await refreshDatabase(); }} />)}
+      {status?.messages.map(mail => <ReviewItemRow key={mail.message_id} mail={mail} email={status.connection?.email} disabled={busy} onSaved={async () => { await load(); await refreshDatabase(); }} />)}
     </Card>
   </Section>;
+}
+
+function ReviewItemRow({ mail, email, disabled, onSaved }: { mail: ReviewItem; email?: string; disabled: boolean; onSaved: () => Promise<void> }) {
+  if (isInvestmentNotice(mail.candidate)) return <InvestmentReviewRow mail={mail} notice={mail.candidate} email={email} disabled={disabled} onSaved={onSaved} />;
+  const candidate = mail.candidate;
+  return <ReviewRow key={`${mail.message_id}:${candidate?.accountId ?? ''}:${candidate?.creditKind ?? ''}`} mail={{...mail, candidate}} email={email} disabled={disabled} onSaved={onSaved} />;
+}
+
+function InvestmentReviewRow({ mail, notice, email, disabled, onSaved }: { mail: ReviewItem; notice: InvestmentNotice; email?: string; disabled: boolean; onSaved: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return <div className="space-y-3 border-t border-line pt-4">
+    <p className="text-sm font-medium">{notice.scheme}</p>
+    <p className="text-xs text-ink-tertiary">{notice.provider} · {notice.kind === "investment-allocation" ? "Allocation confirmation" : "Upcoming SIP"}</p>
+    {notice.netAmount !== undefined && <p className="text-sm">Allocated value: {formatMoney(notice.netAmount)}{notice.units ? ` · ${notice.units} units` : ""}</p>}
+    {notice.orderId && <p className="break-all text-xs text-ink-tertiary">Order: {notice.orderId}</p>}
+    <p className="text-sm text-ink-secondary">{mail.reason}</p>
+    <p className="text-xs text-ink-tertiary">This is investment evidence, not a second expense. Verify or link the corresponding bank debit; do not enter the allocation as another payment.</p>
+    <a className="text-sm underline" target="_blank" rel="noreferrer" href={`https://mail.google.com/mail/u/?authuser=${encodeURIComponent(email ?? "")}#all/${mail.message_id}`}>View original email</a>
+    {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+    <div><Button size="sm" variant="quiet" disabled={disabled || busy} onClick={() => {
+      setBusy(true); setError("");
+      void api("/review", "POST", { action: "ignore", messageId: mail.message_id }).then(onSaved)
+        .catch(e => setError(e instanceof Error ? e.message : "Could not save.")).finally(() => setBusy(false));
+    }}>Already recorded / dismiss</Button></div>
+  </div>;
 }
 
 function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email?: string; disabled: boolean; onSaved: () => Promise<void> }) {
@@ -114,12 +142,14 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
     <p className="text-sm font-medium">{a ? `${a.merchant} · ${formatMoney(a.amount)} · ${a.date}` : mail.subject}</p>
     {a && <p className="text-xs text-ink-tertiary">{a.bank} {a.instrument.replace("_", " ")} ending {a.tail} · {alertTimeLabel({timeSource: a.timeSource ?? "unknown", timeConfidence: a.timeConfidence ?? "unknown", occurredAt: a.occurredAt})}</p>}
     <p className="text-sm text-ink-secondary">{mail.reason || "Check these details before adding."}</p>
+    {a?.direction === 'credit' && a.instrument === 'bank' && !mail.category_review && <p className="text-sm text-warning">Incoming bank credit awaiting a ledger decision. It has not been added by this email yet. Check the existing-entry matches or choose its financial purpose.</p>}
     {a?.creditKind === 'repayment' && <p className="text-xs text-ink-secondary">Payment received: {formatMoney(a.amount)}. This can be a partial payment. It reduces the card balance by this amount; it is not new spending or income.</p>}
     {a?.refundStatus === 'initiated' && !mail.category_review && <>
       {a.refundInitiatedAt && <p className="text-xs text-ink-tertiary">Refund initiated {a.refundInitiatedAt.replace('T',' ')} IST. Posting time is unknown.</p>}
       <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={refundPosted} onChange={e=>setRefundPosted(e.target.checked)}/>I confirmed this refund is posted to my card with transaction date {a.date}.</label>
     </>}
     {mail.category_review&&<p className="text-xs text-ink-secondary">Already in your ledger and included in balances. Saving a category will not add another transaction.</p>}
+    {a && isInvestmentDebit(a) && <p className="text-xs text-ink-secondary">Record this using Invested in the transaction editor, then link its existing entry here. It must not be logged as an expense or card repayment.</p>}
     {a?.classification&&<p className="text-xs text-ink-tertiary">{a.classification.reason}</p>}
     <a className="text-sm underline" target="_blank" rel="noreferrer" href={`https://mail.google.com/mail/u/?authuser=${encodeURIComponent(email ?? "")}#all/${mail.message_id}`}>View original email</a>
     {a && <>
@@ -142,6 +172,6 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
       </div>}
     </>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    <div className="flex gap-2">{a && <Button size="sm" disabled={disabled || busy || !accountId || !kind || (kind === 'TRANSFER' && (!toAccountId || accountId === toAccountId)) || (!mail.category_review && a.refundStatus === 'initiated' && !refundPosted)} onClick={() => void submit("log")}>{mail.category_review?'Save category':'Add to ledger'}</Button>}<Button size="sm" variant="quiet" disabled={disabled || busy} onClick={() => void submit("ignore")}>{mail.category_review?'Keep current entry':'Dismiss email'}</Button></div>
+    <div className="flex gap-2">{a && !isInvestmentDebit(a) && <Button size="sm" disabled={disabled || busy || !accountId || !kind || (kind === 'TRANSFER' && (!toAccountId || accountId === toAccountId)) || (!mail.category_review && a.refundStatus === 'initiated' && !refundPosted)} onClick={() => void submit("log")}>{mail.category_review?'Save category':'Add to ledger'}</Button>}<Button size="sm" variant="quiet" disabled={disabled || busy} onClick={() => void submit("ignore")}>{mail.category_review?'Keep current entry':'Dismiss email'}</Button></div>
   </div>;
 }

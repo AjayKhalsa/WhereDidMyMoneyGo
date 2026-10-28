@@ -12,10 +12,11 @@ export const BANK_SENDERS: Record<string, string> = {
   "hsbc@hsbc.bank.in": "HSBC",
   "protect@cred.club": "CRED",
 };
+export const INVESTMENT_SENDERS = ["noreply@groww.in", "mfservice@kfintech.com"];
 // Bump only when review receipts need another deterministic parsing attempt.
-export const ALERT_PARSER_VERSION = 3;
+export const ALERT_PARSER_VERSION = 4;
 export function financialSendersQuery(): string {
-  return `(${Object.keys(BANK_SENDERS).filter(sender => sender !== 'protect@cred.club').map(sender => `from:${sender}`).join(' OR ')} OR (from:protect@cred.club subject:"your credit card bill payment was successful"))`;
+  return `(${Object.keys(BANK_SENDERS).filter(sender => sender !== 'protect@cred.club').map(sender => `from:${sender}`).join(' OR ')} OR (from:protect@cred.club subject:"your credit card bill payment was successful") OR (from:noreply@groww.in (subject:"SIP: Units allocated" OR subject:"SIP: Instalment due")) OR (from:mfservice@kfintech.com subject:"Purchase Confirmation"))`;
 }
 export interface Alert extends Partial<AlertTime> {
   bank: string;
@@ -158,7 +159,7 @@ export function parseAlert(from: string, subject: string, text: string, received
   const creditKind = direction !== "credit" ? undefined : repayment ? "repayment" : refundStatus || /refund|reversal|cashback/i.test(merchant) ? "refund" : /\bSAL(?:ARY)?\b|Int\.Pd|interest paid/i.test(merchant) ? "income" : "unknown";
   const incomeKind = direction === 'credit' && instrument === 'bank' && creditKind === 'income' && isSalaryNarration(merchant) ? 'salary' : undefined;
   merchant = merchant.replace(/^UPI(?:\/P2[MPA])?[-/]\d+[-/]/i, "").replace(/^VPA\s+\S+\s+\((.+)\)$/i, "$1").trim().slice(0, 180);
-  const special = repayment || !!refundStatus || /refund|reversal|cashback|billpay|card payment|\bcred\b|dreamplug|neft|imps|zerodha|mutual fund|mandate/i.test(merchant);
+  const special = repayment || !!refundStatus || /refund|reversal|cashback|billpay|card payment|\bcred\b|dreamplug|neft|imps|zerodha|\bgroww\b|mutual fund|mandate/i.test(merchant);
   const words = merchant.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/);
   const matches = MERCHANTS.filter(m => m.aliases.some(a => words.includes(a)));
   const categoryId = new Set(matches.map(m => m.categoryId)).size === 1 ? matches[0]?.categoryId : undefined;
@@ -175,6 +176,9 @@ export function accountForAlert(alert: Alert, accounts: Pick<Account, "id" | "na
   const hits = active.filter(a => a.name.toLowerCase().includes(alert.bank.toLowerCase()) && a.hint?.replace(/\D/g, "").endsWith(alert.tail));
   return hits.length === 1 ? hits[0]!.id : undefined;
 }
+export function isInvestmentDebit(alert: Alert): boolean {
+  return alert.direction === "debit" && alert.instrument === "bank" && /\bgroww\b|\bmutual funds?\b/i.test(alert.merchant);
+}
 export function automaticReason(alert: Alert, authenticated: boolean, startDate: string): string | null {
   if (!authenticated) return "Sender authentication could not be verified.";
   if (alert.date < startDate) return "Transaction predates the selected import start date.";
@@ -182,6 +186,7 @@ export function automaticReason(alert: Alert, authenticated: boolean, startDate:
   if (!alert.accountId) return "Match this card or account once before importing.";
   if (alert.refundStatus === 'initiated') return "Refund initiated; the bank says it may take up to 48 hours to appear. Confirm it is posted to your card before recording it.";
   if (isSalaryAlert(alert) || (alert.direction === 'credit' && alert.instrument === 'credit_card' && alert.creditKind === 'refund' && alert.refundStatus === 'posted')) return null;
+  if (isInvestmentDebit(alert)) return "Investment-related bank debit. Match an existing investment contribution or verify it as Invested; it must not become a consumption expense.";
   if (alert.creditKind === "repayment") return "Card repayment received. Link the existing transfer, or choose the paying account. This is not income or new spending.";
   if (alert.direction === "credit" || alert.special) return "Confirm whether this is income, a refund, or a transfer.";
   if (!alert.categoryId) return "Choose a category for this merchant.";
@@ -190,7 +195,7 @@ export function automaticReason(alert: Alert, authenticated: boolean, startDate:
 
 export function authenticatedSender(part: MailPart): boolean {
   const address = senderAddress(header(part, "From"));
-  if (!BANK_SENDERS[address]) return false;
+  if (!BANK_SENDERS[address] && !INVESTMENT_SENDERS.includes(address)) return false;
   // Use Google's first Authentication-Results, not a body claim or ARC from the sender.
   const auth = part.headers?.find(h => h.name.toLowerCase() === "authentication-results")?.value ?? "";
   const domain = address.split("@")[1] ?? "";
