@@ -1,3 +1,7 @@
+import { completeLoad } from "@/lib/data/complete-load";
+import { actionableGmailReviews } from "@/lib/gmail/review-list";
+import { domainRow } from "@/lib/gmail/learning-data";
+import type { Transaction } from "@/lib/domain/types";
 import type { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import { admin, checkOrigin, configured, failure, GmailError, json, unseal, userFor } from "@/lib/gmail/server";
@@ -8,16 +12,22 @@ export async function GET(request: NextRequest) {
     const session = json({}); const user = await userFor(request, session);
     if (!configured()) return json({ configured: false, connection: null, messages: [] });
     const db = admin();
-    const [connection, messages, count, pending, historical] = await Promise.all([
+    const [connection, messages, pending, historical, ledger, sources, categories] = await Promise.all([
       db.from("gmail_connections").select("email,start_date,last_synced_at,last_error,page_token").eq("user_id", user.id).maybeSingle(),
-      db.from("gmail_messages").select("message_id,subject,candidate,reason,status,category_review,transaction_id").eq("user_id", user.id).or("status.eq.review,category_review.eq.true").order("created_at").limit(50),
-      db.from("gmail_messages").select("message_id", { count: "exact", head: true }).eq("user_id", user.id).or("status.eq.review,category_review.eq.true"),
+      completeLoad<Record<string, any>>((from,to)=>db.from("gmail_messages").select("message_id,subject,candidate,reason,status,category_review,transaction_id,category_review_snapshot",{count:"exact"}).eq("user_id",user.id).or("status.eq.review,category_review.eq.true").order("message_id").range(from,to),row=>row.message_id),
       db.from("gmail_messages").select("message_id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending"),
       db.from("gmail_backfill_runs").select("query,status,discovery_complete").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      completeLoad<Record<string, any>>((from,to)=>db.from("transactions").select("id,type,amount,date,description,notes,account_id,to_account_id,category_id",{count:"exact"}).eq("user_id",user.id).order("id").range(from,to),row=>row.id),
+      completeLoad<Record<string, any>>((from,to)=>db.from("transaction_sources").select("source_kind,source_key,transaction_id,account_id,direction,amount,bank_reference",{count:"exact"}).eq("user_id",user.id).order("source_key").order("source_kind").range(from,to),row=>JSON.stringify([row.source_kind,row.source_key])),
+      completeLoad<Record<string, any>>((from,to)=>db.from("categories").select("id",{count:"exact"}).eq("user_id",user.id).order("id").range(from,to),row=>row.id),
     ]);
-    for (const result of [connection, messages, count, pending, historical]) if (result.error) throw result.error;
-    const health = gmailHealth({ lastSyncedAt: connection.data?.last_synced_at, error: connection.data?.last_error, hasNextPage: !!connection.data?.page_token, pending: pending.count ?? 0, review: count.count ?? 0, historical: historical.data });
-    const response = json({ configured: true, connection: connection.data ? { ...connection.data, page_token: undefined, more: !!connection.data.page_token } : null, messages: messages.data, reviewCount: count.count, health });
+    for (const result of [connection, pending, historical]) if (result.error) throw result.error;
+    const actionable = actionableGmailReviews(messages.data as any,ledger.data.map(row=>domainRow<Transaction>(row)),sources.data as any,new Set(categories.data.map(row=>String(row.id))));
+    const financialReviewCount = actionable.filter(row=>row.status==='review').length;
+    const categoryReviewCount = actionable.filter(row=>row.status==='logged'&&row.category_review).length;
+    const health = gmailHealth({ lastSyncedAt: connection.data?.last_synced_at, error: connection.data?.last_error, hasNextPage: !!connection.data?.page_token, pending: pending.count ?? 0, review: actionable.length, historical: historical.data });
+    const response = json({ configured: true, connection: connection.data ? { ...connection.data, page_token: undefined, more: !!connection.data.page_token } : null,
+      messages: actionable.slice(0,50).map(({category_review_snapshot:_snapshot,...row})=>row), reviewCount:actionable.length, financialReviewCount, categoryReviewCount, health });
     for (const cookie of session.cookies.getAll()) response.cookies.set(cookie);
     return response;
   } catch (e) { return failure(e); }
