@@ -1,3 +1,4 @@
+import { recognizedMerchants } from "./merchant-recognition";
 import { groupIdOf, UNCATEGORISED_ID } from "@/lib/domain/categories";
 import { DERIVED_CONTEXT_VALUES, makeContext, normaliseContexts } from "@/lib/domain/contexts";
 import { parseAmountInput } from "@/lib/domain/money";
@@ -125,13 +126,8 @@ interface LexiconHit {
 }
 
 function findMerchant(tokens: Token[]) {
-  for (const token of tokens) {
-    for (const merchant of MERCHANTS) {
-      if (merchant.aliases.includes(token.clean)) {
-        return { merchant, matchedWord: token.clean, fuzzy: false };
-      }
-    }
-  }
+  const matches = recognizedMerchants(tokens.map(t => t.clean).join(' '));
+  if (matches.length === 1) return {merchant: matches[0]!, matchedWord: matches[0]!.name.toLowerCase(), fuzzy:false};
   return null;
 }
 
