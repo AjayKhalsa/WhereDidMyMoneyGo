@@ -1,5 +1,12 @@
 # Finance automation handoff
 
+## Weak legacy food-rule repair — 29 October 2026
+
+Live investigation found weak legacy Swiggy/Zomato rules suppressing reliable new merchant evidence, resulting in Other. Gmail now falls through weak legacy same-food-family defaults when deterministic subcategory evidence exists. Explicit correction evidence, conditional rules, strong saved mappings and contradictory historical evidence stay protected. District Dining has explicit restaurant evidence; District event mappings are preserved.
+
+After exact user approval and a private row backup, three untouched Other rows were changed only in category_id (Swiggy→delivery, District Dining→restaurant, Zomato→delivery). Independent row comparison verified all other fields unchanged. Already corrected historical entries remain intact. Full59-file suite and productionbuild pass. No schema migration.
+
+
 ## Upcoming-payment phase — 29 October 2026
 
 Money now has a read-only next-30-days agenda: recurring bills/subscriptions, dated investment rules, expected net income and remaining card-statement dues (including overdue). Only an explicitly linked, same-date, matching-type ledger payment is shown as recorded. This deliberately does not guess links for differently dated payments. Weekly schedules repeat; yearly anniversary month remains inferred by the existing model and is labelled estimated. Undated investment holdings do not gain invented SIP dates. Forecasts never create ledger rows or change balances. No migration or production data mutation.

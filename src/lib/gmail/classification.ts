@@ -52,7 +52,9 @@ export function suggestCategory(a: Alert, rules: ClassificationRule[], categorie
   const unknown=(reason:string):CategorySuggestion=>({categoryId:"other",confidence:0,source:"unknown",reason,needsReview:true,contexts:[]});
   if(a.direction!=="debit"||a.special)return unknown("Confirm the financial purpose before categorizing.");
   const words=merchantPayee(a.merchant).toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim().split(/\s+/);
-  const applicable=rules.filter(r=>valid.has(r.categoryId)&&` ${words.join(" ")} `.includes(` ${r.pattern.toLowerCase()} `)&&ruleConditionsMatch(r,a.merchant,actualTime)&&(!r.learningEvidence||r.learningEvidence.merchantKey===key));
+  const reliableFood = automaticSubcategory(merchantPayee(a.merchant));
+  const legacyFallback = (r:ClassificationRule) => !r.learningEvidence && !r.conditions && r.confidence < 0.85 && reliableFood && (r.categoryId.split('.')[0]===reliableFood.parentId || (r.pattern==='district' && reliableFood.categoryId==='dining.restaurant'));
+  const applicable=rules.filter(r=>!legacyFallback(r)&&valid.has(r.categoryId)&&` ${words.join(" ")} `.includes(` ${r.pattern.toLowerCase()} `)&&ruleConditionsMatch(r,a.merchant,actualTime)&&(!r.learningEvidence||r.learningEvidence.merchantKey===key));
   const scoped=applicable.filter(r=>['gmail-correction','manual-correction'].includes(r.learningEvidence?.source??''));
   const conditional=applicable.filter(r=>r.conditions);
   const candidates=conditional.length?conditional:scoped.length?scoped:applicable;

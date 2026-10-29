@@ -32,3 +32,15 @@ test('meal clock refines food orders only; refreshment/grocery specificity survi
  }
  assert.equal(suggestCategory({...alert('Zomato'),occurredAt:'2026-10-29T00:00:00',timeSource:'unknown'},[],categories).categoryId,'dining.delivery');
 });
+
+test('weak legacy food defaults do not trap recognised merchants in Other',()=>{
+ const legacy=(pattern:string,categoryId:string)=>({id:'old',pattern,categoryId,contexts:[],confidence:0.6,timesApplied:1,createdAt:'2026-08-01',updatedAt:'2026-08-01'});
+ for(const [merchant,pattern,old,expected] of [['Swiggy Limited','swiggy','dining.other','dining.delivery'],['SWIGGY INSTAMART PRIVATE LIMITED','swiggy','dining.other','dining.groceries'],['ZOMATO L','zomato','dining.dinner','dining.delivery'],['District Dining','district','entertainment.event','dining.restaurant']]) {
+  const result=suggestCategory(alert(merchant!),[legacy(pattern!,old!)],categories);
+  assert.equal(result.categoryId,expected);assert.equal(result.needsReview,false);
+ }
+ const saved={...legacy('swiggy','gifts'),confidence:0.95};
+ assert.equal(suggestCategory(alert('Swiggy Limited'),[saved],categories).categoryId,'gifts');
+ const explicit={...legacy('swiggy','dining.other'),learningEvidence:{source:'manual-correction' as const,merchantKey:'swiggy',exampleIds:[],support:1}};
+ assert.equal(suggestCategory(alert('Swiggy Limited'),[explicit],categories).categoryId,'dining.other');
+});
