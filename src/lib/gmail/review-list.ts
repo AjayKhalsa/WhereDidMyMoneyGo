@@ -46,3 +46,15 @@ export function suggestedExistingEntry(alert: Alert | undefined, transactions: T
     .filter(t=>t.date.slice(0,10)===alert.date&&merchantKey(t.merchant||t.description)===key);
   return candidates.length===1?candidates[0]!.id:undefined;
 }
+
+/** Existing-entry housekeeping must never look like another missing payment. */
+export function groupGmailReviews<T extends ReviewReceipt>(receipts:T[],transactions:Transaction[]) {
+  const ids=new Set(transactions.map(t=>t.id));
+  const category:T[]=[],possibleExisting:T[]=[],financial:T[]=[];
+  for(const receipt of receipts){
+    if(receipt.status==='logged'&&receipt.category_review&&receipt.transaction_id&&ids.has(receipt.transaction_id))category.push(receipt);
+    else if(receipt.status==='review'&&!/authenticat/i.test(receipt.reason??'')&&suggestedExistingEntry(receipt.candidate??undefined,transactions))possibleExisting.push(receipt);
+    else financial.push(receipt);
+  }
+  return {category,possibleExisting,financial};
+}
