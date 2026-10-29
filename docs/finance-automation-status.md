@@ -1,5 +1,12 @@
 # Finance automation handoff
 
+## Food receipt evidence preview — 29 October 2026
+
+Settings → Gmail adds a bounded read-only preview of recent Swiggy/Zomato completed-order receipts. The authenticated, origin-checked endpoint reads eight receipts per batch with explicit continuation. DMARC alignment is required; paid amount and order ID must come from supported completed-order templates. Zomato restaurant/outlet evidence is extracted only from a bounded restaurant section; delivery addresses and inferred payment times are excluded. Swiggy address stays unknown for unsupported layouts.
+
+Potential existing payments use exact amount, platform and a one-day email-received-date window as suggestions only: repeated equal payments remain ambiguous, no automatic linkage or financial insert occurs. This is not yet scheduled receipt enrichment, persisted metadata or historical apply. No database migration or production mutation. Full60-file suite, typecheck/build, two private real-receipt replays and320/390/768/1024 browser privacy checks passed.
+
+
 ## Weak legacy food-rule repair — 29 October 2026
 
 Live investigation found weak legacy Swiggy/Zomato rules suppressing reliable new merchant evidence, resulting in Other. Gmail now falls through weak legacy same-food-family defaults when deterministic subcategory evidence exists. Explicit correction evidence, conditional rules, strong saved mappings and contradictory historical evidence stay protected. District Dining has explicit restaurant evidence; District event mappings are preserved.
