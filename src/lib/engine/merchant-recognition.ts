@@ -20,7 +20,8 @@ export function recognizedMerchants(text: string): MerchantEntry[] {
   const matches = [...MERCHANTS, ...LOCAL_DINING].filter(merchant =>
     [...merchant.aliases, merchant.name].some(alias => haystack.includes(` ${normalized(alias)} `)));
   // Explicit parent/sub-brand combination; retain the more specific merchant.
-  return matches.some(m => m.name === 'Instamart') ? matches.filter(m => m.name !== 'Swiggy') : matches;
+  return matches.filter(m => !(m.name === 'Swiggy' && matches.some(v => v.name === 'Instamart'))
+    && !(m.name === 'YouTube Premium' && matches.some(v => v.name === 'YouTube Music')));
 }
 
 /** Clear food-business descriptors; ambiguous bar/hotel/social alone are insufficient. */

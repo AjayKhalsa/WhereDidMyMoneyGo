@@ -1,5 +1,12 @@
 # Finance automation handoff
 
+## Category coverage and trends — 29 October 2026
+
+Live audit found 64 category entries including Medicine, Personal and Subscription. User chose to keep 12 proposed additions pending; proposals are isolated in `category-additions.ts` and are not part of the active seed, database or automatic startup. No category or transaction database writes are included. Existing-category defaults now distinguish recognised pharmacies, personal care and explicit gaming subscriptions. Search aliases find Pharmacy, Personal care and common subscription names without renaming saved IDs.
+
+Spending Explorer adds a cumulative category-flow chart aligned by cycle day, previous-period comparison and daily transaction drilldown. Credits/refunds lower the curve; transfers/investments are excluded by existing report semantics. Date-only records work without invented clocks. Privacy mode removes chart geometry and masks amounts. No forecast or completeness guarantee is implied. Full 57-file suite and mobile browser checks pass; release status is tracked in the private handoff.
+
+
 ## Category browser phase — 29 October 2026
 
 Merchant recognition PR 33 is verified READY on production at `48722b6`. The next UI-only phase replaces flat category chips with grouped icon rows, recent category shortcuts and subcategory-aware search. Existing category IDs, manual labels and transaction amounts are unchanged. Custom categories remain visible under Your categories. Browser validation passed at 320/390/768/1024px; temporary synthetic harness removed before build. No migration is required. Deployment verification will be recorded after release.
