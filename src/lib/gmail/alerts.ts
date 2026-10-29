@@ -14,7 +14,7 @@ export const BANK_SENDERS: Record<string, string> = {
 };
 export const INVESTMENT_SENDERS = ["noreply@groww.in", "mfservice@kfintech.com"];
 // Bump only when review receipts need another deterministic parsing attempt.
-export const ALERT_PARSER_VERSION = 4;
+export const ALERT_PARSER_VERSION = 5;
 export function financialSendersQuery(): string {
   return `(${Object.keys(BANK_SENDERS).filter(sender => sender !== 'protect@cred.club').map(sender => `from:${sender}`).join(' OR ')} OR (from:protect@cred.club subject:"your credit card bill payment was successful") OR (from:noreply@groww.in (subject:"SIP: Units allocated" OR subject:"SIP: Instalment due")) OR (from:mfservice@kfintech.com subject:"Purchase Confirmation"))`;
 }
@@ -134,6 +134,8 @@ export function parseAlert(from: string, subject: string, text: string, received
       if (axis) [, amount, merchant, tail, date] = axis;
     } else {
       const account = /Amount\s+(Debited|Credited):\s*INR\s*([\d,.]+)\s+Account Number:\s*X+(\d{4})\s+Date\s*&\s*Time:\s*(\d{2}-\d{2}-\d{2,4}),?\s+\d{1,2}:\d{2}(?::\d{2})?\s+IST\s+Transaction Info:\s*(.+?)(?=\s+(?:If this transaction|Available Balance|Regards|Feel free to connect with us|Call us at:|Always open to help)|$)/i.exec(body);
+      const sentence = /your A\/c no\.\s*X+(\d{4})\s+has been (credited|debited) with INR\s+([\d,.]+)\s+on\s+(\d{2}-\d{2}-\d{4})\s+at\s+\d{1,2}:\d{2}(?::\d{2})?\s+IST\s+by\s+(.+?)(?=\s+To check your|\s+Should you|$)/i.exec(body);
+      if(sentence){tail=sentence[1];direction=sentence[2]!.toLowerCase()==='credited'?'credit':'debit';amount=sentence[3];date=sentence[4];merchant=sentence[5];instrument='bank';}
       if (account) { [, , amount, tail, date, merchant] = account; direction = account[1]!.toLowerCase() === "credited" ? "credit" : "debit"; instrument = "bank"; }
     }
   } else if (bank === "CRED" && /^your credit card bill payment was successful\s*$/i.test(subject.trim())) {

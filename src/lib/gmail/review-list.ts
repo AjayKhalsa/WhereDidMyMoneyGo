@@ -13,6 +13,7 @@ interface ReviewReceipt {
   category_review_snapshot?: { category_id?: string | null } | null;
   candidate?: Alert | null;
   reason?: string | null;
+  suppress_suggested_match?: boolean;
 }
 
 /** Presentation only: never reset receipts or overwrite a saved correction. */
@@ -50,10 +51,20 @@ export function suggestedExistingEntry(alert: Alert | undefined, transactions: T
 /** Existing-entry housekeeping must never look like another missing payment. */
 export function groupGmailReviews<T extends ReviewReceipt>(receipts:T[],transactions:Transaction[]) {
   const ids=new Set(transactions.map(t=>t.id));
-  const category:T[]=[],possibleExisting:T[]=[],financial:T[]=[];
+  const category:T[]=[],possibleExisting:T[]=[];
+  const financial:Array<T & {suppress_suggested_match?:boolean}>=[];
+  const suggestions=new Map<string,string>();
+  const competing=new Map<string,number>();
+  for(const receipt of receipts)if(receipt.status==='review'&&!/authenticat/i.test(receipt.reason??'')){
+    const target=suggestedExistingEntry(receipt.candidate??undefined,transactions);
+    if(target){suggestions.set(receipt.message_id,target);competing.set(target,(competing.get(target)??0)+1);}
+  }
   for(const receipt of receipts){
     if(receipt.status==='logged'&&receipt.category_review&&receipt.transaction_id&&ids.has(receipt.transaction_id))category.push(receipt);
-    else if(receipt.status==='review'&&!/authenticat/i.test(receipt.reason??'')&&suggestedExistingEntry(receipt.candidate??undefined,transactions))possibleExisting.push(receipt);
+    else if(suggestions.has(receipt.message_id)){
+      if(competing.get(suggestions.get(receipt.message_id)!)===1)possibleExisting.push(receipt);
+      else financial.push({...receipt,suppress_suggested_match:true,reason:'Several emails could refer to the same ledger payment. Verify separate payments versus duplicate alerts before linking.'});
+    }
     else financial.push(receipt);
   }
   return {category,possibleExisting,financial};

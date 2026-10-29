@@ -1,3 +1,4 @@
+import { nonPaymentNotice } from "./bank-notices";
 import { createHash, randomUUID } from "node:crypto";
 import type { Account } from "@/lib/domain/types";
 import { accountForAlert, authenticatedSender, automaticReason, financialSendersQuery, ALERT_PARSER_VERSION, header, mailText, parseAlert, type MailPart } from "./alerts";
@@ -80,13 +81,14 @@ export async function syncMailbox(userId: string, deadline = Date.now() + 45000)
       }
       const notice = candidate ? null : parseInvestmentNotice(header(mail.payload, "From"), subject, mailText(mail.payload));
       const authenticated = authenticatedSender(mail.payload);
-      const reason = candidate ? automaticReason(candidate, authenticated, connection.start_date) : notice ? (authenticated ? investmentNoticeReason(notice) : "Sender authentication could not be verified.") : "Unrecognized alert format. Check the email before entering it manually.";
+      const informational = !candidate && !notice && authenticated ? nonPaymentNotice(header(mail.payload,"From"),subject,mailText(mail.payload)) : undefined;
+      const reason = informational ?? (candidate ? automaticReason(candidate, authenticated, connection.start_date) : notice ? (authenticated ? investmentNoticeReason(notice) : "Sender authentication could not be verified.") : "Unrecognized alert format. Check the email before entering it manually.");
       // Reference dedup is independent of message id. No reference means review
       // on a ledger amount/date collision, never silently drop a real purchase.
       const eventKey = candidate?.reference ? createHash("sha256").update([candidate.bank, candidate.instrument, candidate.tail, candidate.direction, candidate.reference, candidate.amount].join("|")).digest("hex") : null;
       // Mark the parser version only after matching/committing succeeds. A
       // transient failure must leave this review receipt eligible for retry.
-      const saved = await db.from("gmail_messages").update({ subject, candidate: candidate ?? notice, status: notice?.kind === "investment-schedule" && authenticated ? "ignored" : "review", reason, event_key: eventKey }).eq("user_id", userId).eq("message_id", item.message_id).in("status", ["pending", "review"]).select("message_id").maybeSingle();
+      const saved = await db.from("gmail_messages").update({ subject, candidate: candidate ?? notice, status: informational || notice?.kind === "investment-schedule" && authenticated ? "ignored" : "review", reason, event_key: eventKey }).eq("user_id", userId).eq("message_id", item.message_id).in("status", ["pending", "review"]).select("message_id").maybeSingle();
       if (!saved.error && !saved.data) continue; // User resolved/dismissed it during this pass.
       if (saved.error?.code === "23505") {
         const original = await db.from("gmail_messages").select("status,transaction_id").eq("user_id", userId).eq("event_key", eventKey).maybeSingle();
@@ -107,7 +109,7 @@ export async function syncMailbox(userId: string, deadline = Date.now() + 45000)
         const done = await db.from('gmail_messages').update({ parser_version: ALERT_PARSER_VERSION }).eq('user_id',userId).eq('message_id',item.message_id);
         if (done.error) throw done.error;
       };
-      if (notice?.kind === "investment-schedule" && authenticated) { await finish(); continue; }
+      if (informational || notice?.kind === "investment-schedule" && authenticated) { await finish(); continue; }
       if (candidate && authenticated) {
         const existing = await db.rpc("gmail_match_recorded", { p_user: userId, p_message: item.message_id, p_authenticated: true });
         if (existing.error) throw existing.error;
