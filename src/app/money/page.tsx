@@ -1,4 +1,5 @@
 "use client";
+import { PaymentCalendar } from "@/components/money/payment-calendar";
 
 import { useMoneyText } from "@/lib/hooks/use-privacy";
 import {
@@ -109,6 +110,8 @@ export default function MoneyPage() {
           detail="Includes card credit; investments use last recorded values"
         />
       </div>
+
+      <PaymentCalendar />
 
       {creditCards.length > 0 && (
         <Section title="Cards">
