@@ -1,5 +1,10 @@
 # Finance automation handoff
 
+## Category browser phase — 29 October 2026
+
+Merchant recognition PR 33 is verified READY on production at `48722b6`. The next UI-only phase replaces flat category chips with grouped icon rows, recent category shortcuts and subcategory-aware search. Existing category IDs, manual labels and transaction amounts are unchanged. Custom categories remain visible under Your categories. Browser validation passed at 320/390/768/1024px; temporary synthetic harness removed before build. No migration is required. Deployment verification will be recorded after release.
+
+
 ## Missing-transaction check and current review cleanup — 2026-10-28
 
 PR 31 is merged on main at `5d9d55f`; the following work is a separate source follow-up on `fix/actionable-gmail-history`. Historical checking now focuses on unresolved findings, hides recorded payments, collapses dates/technical counts, and refreshes strong matches against the current ledger. Obsolete category prompts are hidden when the existing ledger category has already been corrected. Weak unique payee matches are suggested for explicit confirmation; equal repeated payments are never guessed. See [gmail-backfill.md](gmail-backfill.md). No schema or financial data mutation is included. Merge/deployment remains pending.
