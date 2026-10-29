@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Search } from "lucide-react";
+import { CategoryBrowser } from "./category-browser";
+import { Check } from "lucide-react";
 import {
   contextDefinition,
   contextLabel,
@@ -35,46 +36,17 @@ export function CategoryPicker({
   onChange: (categoryId: string) => void;
   className?: string;
 }) {
-  const { categories } = useFinance();
-  const [query, setQuery] = useState("");
-
-  const results = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return categories.groups;
-    return categories.groups.filter((c) => c.name.toLowerCase().includes(needle));
-  }, [categories, query]);
-
-  return (
-    <div className={cn("space-y-4", className)}>
-      <TextField
-        placeholder="Search categories"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        prefix={<Search className="h-4 w-4" strokeWidth={1.75} />}
-        aria-label="Search categories"
-      />
-
-      <div className="flex flex-wrap gap-1.5">
-        {results.map((category) => (
-          <SelectableChip
-            key={category.id}
-            selected={category.id === value}
-            onClick={() => onChange(category.id)}
-          >
-            {category.id === value && (
-              <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-            )}
-            {category.name}
-          </SelectableChip>
-        ))}
-      </div>
-      {results.length === 0 && (
-        <p className="py-4 text-center text-sm text-ink-tertiary">
-          No category matches &ldquo;{query}&rdquo;
-        </p>
-      )}
-    </div>
-  );
+  const { categories, db } = useFinance();
+  const recentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of [...(db?.transactions ?? [])].sort((a,b) => b.date.localeCompare(a.date))) {
+      const group = categories.groupOf(row.categoryId ?? "");
+      if (group && !['other','adjustment'].includes(group.id)) ids.add(group.id);
+      if (ids.size === 4) break;
+    }
+    return [...ids];
+  }, [db?.transactions, categories]);
+  return <CategoryBrowser categories={categories} recentIds={recentIds} value={value} onChange={onChange} className={className} />;
 }
 
 /**
