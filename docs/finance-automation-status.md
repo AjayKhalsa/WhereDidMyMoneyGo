@@ -1,5 +1,10 @@
 # Finance automation handoff
 
+## Upcoming-payment phase — 29 October 2026
+
+Money now has a read-only next-30-days agenda: recurring bills/subscriptions, dated investment rules, expected net income and remaining card-statement dues (including overdue). Only an explicitly linked, same-date, matching-type ledger payment is shown as recorded. This deliberately does not guess links for differently dated payments. Weekly schedules repeat; yearly anniversary month remains inferred by the existing model and is labelled estimated. Undated investment holdings do not gain invented SIP dates. Forecasts never create ledger rows or change balances. No migration or production data mutation.
+
+
 ## Automatic subcategory tagging — 29 October 2026
 
 The user approved the previously pending 12 additions. A fresh private category backup and repeat-safe SQL rehearsal preceded a scoped atomic insert. Production now has 76 entries; all original 64 category rows, ledger fingerprint and saved-rule fingerprint were independently verified unchanged. This is a category-data update, not a schema migration.
