@@ -2,7 +2,7 @@ import type { Category, ClassificationRule, Transaction, TransactionContext } fr
 import { deriveRulePattern, learnFromEntry } from "@/lib/engine/learning";
 import { parseExpenseInput } from "@/lib/engine/parser";
 import { merchantKey, merchantPayee } from "@/lib/engine/merchant-identity";
-import { recognizedMerchants, diningBusiness } from "@/lib/engine/merchant-recognition";
+import { recognizedMerchants, diningBusiness, mealEligibleMerchant } from "@/lib/engine/merchant-recognition";
 import { ruleConditionsMatch, timedMealCategory } from "@/lib/engine/time-rules";
 import { validWallTime } from "@/lib/domain/transaction-time";
 import type { Alert } from "./alerts";
@@ -45,7 +45,7 @@ export function suggestCategory(a: Alert, rules: ClassificationRule[], categorie
   const valid = new Set(categories.map(c=>c.id)), key=merchantKey(a.merchant);
   const actualTime = a.timeConfidence === "exact" && ["bank", "payment"].includes(a.timeSource ?? "") && a.occurredAt && validWallTime(a.occurredAt) && a.occurredAt.slice(0,10) === a.date ? a.occurredAt : undefined;
   const mealSuggestion = (categoryId: string): CategorySuggestion | undefined => {
-    const meal = timedMealCategory(categoryId, actualTime);
+    const meal = mealEligibleMerchant(merchantPayee(a.merchant)) ? timedMealCategory(categoryId, actualTime) : undefined;
     if (meal && valid.has(meal)) return { categoryId: meal, confidence: 0.95, source: "meal", reason: `Actual transaction time ${actualTime!.slice(11,16)} IST: breakfast before noon, lunch until 16:00, snacks until 20:00, then dinner.`, needsReview: false, contexts: [] };
   };
   const unknown=(reason:string):CategorySuggestion=>({categoryId:"other",confidence:0,source:"unknown",reason,needsReview:true,contexts:[]});

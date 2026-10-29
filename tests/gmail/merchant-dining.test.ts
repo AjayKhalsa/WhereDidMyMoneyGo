@@ -29,5 +29,29 @@ test('saved corrections, financial purpose and absent categories remain protecte
  assert.equal(suggestCategory({...alert('Tea Post'),special:true},[],categories).needsReview,true);
  assert.equal(suggestCategory(alert('Tea Post'),[],[{id:'other'}]).needsReview,true);
  assert.equal(suggestCategory(alert('Tea Post'),[],categories,[],['tea post']).needsReview,true);
- assert.equal(suggestCategory(alert('SWIGGY INSTAMART'),[],categories).needsReview,true);
+ assert.equal(suggestCategory(alert('SWIGGY INSTAMART'),[],categories).categoryId,'dining');
+});
+
+test('requested platforms default to Food & Dining in Gmail and manual logging',()=>{
+ for(const merchant of ['Swiggy','Instamart','Swiggy Instamart','Zomato','Zepto','District']) {
+  const source=alert(merchant), before=JSON.stringify(source);
+  const suggestion=suggestCategory(source,[],categories);
+  assert.equal(suggestion.categoryId,'dining',merchant);
+  assert.equal(suggestion.needsReview,false,merchant);
+  assert.equal(parseExpenseInput(`250 ${merchant}`).categoryId,'dining',merchant);
+  assert.equal(JSON.stringify(source),before);
+ }
+ assert.equal(parseExpenseInput('250 Swiggy Instamart').merchant,'Instamart');
+ const rule={id:'r',pattern:'zepto',categoryId:'essentials',contexts:[],confidence:1,timesApplied:2,createdAt:'2026-10-01',updatedAt:'2026-10-01'};
+ assert.equal(suggestCategory(alert('Zepto'),[rule],categories).categoryId,'essentials');
+ assert.equal(parseExpenseInput('250 Zepto',{rules:[rule]}).categoryId,'essentials');
+});
+
+test('platform preference does not mistake groceries or tickets for dinner',()=>{
+ const cats=[...categories,{id:'dining.dinner'}];
+ for(const merchant of ['Swiggy Instamart','Zepto','District']) {
+  assert.equal(suggestCategory({...alert(merchant),occurredAt:'2026-10-29T21:00:00',timeSource:'bank',timeConfidence:'exact'},[],cats).categoryId,'dining');
+  assert.equal(parseExpenseInput(`250 ${merchant}`,{actualTime:'2026-10-29T21:00:00'}).categoryId,'dining');
+ }
+ assert.equal(suggestCategory({...alert('Zomato'),occurredAt:'2026-10-29T21:00:00',timeSource:'bank',timeConfidence:'exact'},[],cats).categoryId,'dining.dinner');
 });

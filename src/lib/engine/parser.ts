@@ -1,4 +1,4 @@
-import { recognizedMerchants } from "./merchant-recognition";
+import { recognizedMerchants, mealEligibleMerchant } from "./merchant-recognition";
 import { groupIdOf, UNCATEGORISED_ID } from "@/lib/domain/categories";
 import { DERIVED_CONTEXT_VALUES, makeContext, normaliseContexts } from "@/lib/domain/contexts";
 import { parseAmountInput } from "@/lib/domain/money";
@@ -564,7 +564,7 @@ export function parseExpenseInput(
     reasons.push("Nothing in the description was recognisable");
   }
 
-  if (type === "EXPENSE") {
+  if (type === "EXPENSE" && mealEligibleMerchant(normalised)) {
     const meal = timedMealCategory(categoryId, options.actualTime, normalised);
     if (meal && meal !== categoryId) {
       categoryId = meal;

@@ -25,3 +25,6 @@ After that audit, add optional source-linked place evidence with role (merchant 
 ## Validation and rollout
 
 Each increment gets a separate reviewable change. First increment tests multiword names, manual entry, saved overrides, missing categories, unknown clocks, credit/special-event protection, historical conflicts and false positives. Later UI checks cover 320/390px layouts, search, privacy masking and transaction drill-downs. Financial tests must include refunds, family credits, SIPs, equal repeated payments and incomplete coverage. Production status must be reported separately from passing local checks. No historical ledger mutations without the established backed-up, approved dry run.
+
+## Platform preference
+Swiggy, Instamart (including Swiggy Instamart), Zomato, Zepto and District default to Food & Dining, as explicitly requested. Saved corrections retain precedence. Instamart, Zepto and District do not receive clock-only meal subcategories: the platform can represent groceries or tickets. No existing ledger categories are rewritten.
