@@ -2,7 +2,7 @@ import type { Category, ClassificationRule, Transaction, TransactionContext } fr
 import { deriveRulePattern, learnFromEntry } from "@/lib/engine/learning";
 import { parseExpenseInput } from "@/lib/engine/parser";
 import { merchantKey, merchantPayee } from "@/lib/engine/merchant-identity";
-import { MERCHANTS } from "@/lib/engine/lexicon";
+import { recognizedMerchants, diningBusiness, mealEligibleMerchant } from "@/lib/engine/merchant-recognition";
 import { ruleConditionsMatch, timedMealCategory } from "@/lib/engine/time-rules";
 import { validWallTime } from "@/lib/domain/transaction-time";
 import type { Alert } from "./alerts";
@@ -45,7 +45,7 @@ export function suggestCategory(a: Alert, rules: ClassificationRule[], categorie
   const valid = new Set(categories.map(c=>c.id)), key=merchantKey(a.merchant);
   const actualTime = a.timeConfidence === "exact" && ["bank", "payment"].includes(a.timeSource ?? "") && a.occurredAt && validWallTime(a.occurredAt) && a.occurredAt.slice(0,10) === a.date ? a.occurredAt : undefined;
   const mealSuggestion = (categoryId: string): CategorySuggestion | undefined => {
-    const meal = timedMealCategory(categoryId, actualTime);
+    const meal = mealEligibleMerchant(merchantPayee(a.merchant)) ? timedMealCategory(categoryId, actualTime) : undefined;
     if (meal && valid.has(meal)) return { categoryId: meal, confidence: 0.95, source: "meal", reason: `Actual transaction time ${actualTime!.slice(11,16)} IST: breakfast before noon, lunch until 16:00, snacks until 20:00, then dinner.`, needsReview: false, contexts: [] };
   };
   const unknown=(reason:string):CategorySuggestion=>({categoryId:"other",confidence:0,source:"unknown",reason,needsReview:true,contexts:[]});
@@ -67,8 +67,11 @@ export function suggestCategory(a: Alert, rules: ClassificationRule[], categorie
     return {categoryId:r.categoryId,confidence:r.confidence,source:r.learningEvidence?.source==='history'?"history":"rule",reason:`Saved category for “${r.pattern}” (${r.learningEvidence?.support??r.timesApplied} examples).`,needsReview:!high,ruleId:r.id,contexts:r.contexts};
   }
   if(conflictingPayees.includes(key))return unknown('Conflicting historical categories for this payee.');
-  const known=MERCHANTS.filter(m=>m.aliases.some(alias=>words.includes(alias)));
+  const payee=merchantPayee(a.merchant);
+  const known=recognizedMerchants(payee);
+  if(known.length>1)return unknown("Multiple merchant identities in this payee; confirm the category.");
   if(known.length===1&&valid.has(known[0]!.categoryId))return mealSuggestion(known[0]!.categoryId) ?? {categoryId:known[0]!.categoryId,confidence:0.9,source:'vocabulary',reason:'Recognized merchant vocabulary; no meal time is assumed without an actual transaction timestamp.',needsReview:false,contexts:[]};
+  if(known.length===0&&valid.has('dining')&&diningBusiness(payee)) return mealSuggestion('dining') ?? {categoryId:'dining',confidence:0.87,source:'vocabulary',reason:'Food-business descriptor in the payee name; no branch, location or meal time inferred.',needsReview:false,contexts:[]};
   const personal=a.paymentRail==='UPI'&&a.upiRecipientKind!=='merchant'&&/^[\p{L} .'-]+$/u.test(a.merchant)&&words.length<=7
     &&(a.upiRecipientKind==='person'&&key.length>=3||!!a.vpa&&!a.vpa.includes('*')&&words.length>=2);
   const excluded=/\b(?:store|shop|services|traders|enterprise|bank|club|cred|dreamplug|fund|investment|mandate|recharge|restaurant|cafe|hotel|mart|merchant)\b/i.test(a.merchant)||selfNames.some(n=>n&&key.includes(merchantKey(n)));

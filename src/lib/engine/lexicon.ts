@@ -37,10 +37,12 @@ export const MERCHANTS: MerchantEntry[] = [
   // Food delivery
   { name: "Swiggy", aliases: ["swiggy"], categoryId: "dining" },
   { name: "Zomato", aliases: ["zomato"], categoryId: "dining" },
+  // User preference: these platforms belong to Food & Dining.
+  { name: "District", aliases: ["district"], categoryId: "dining" },
   // Groceries / quick-commerce
   { name: "Blinkit", aliases: ["blinkit", "grofers"], categoryId: "essentials" },
-  { name: "Zepto", aliases: ["zepto"], categoryId: "essentials" },
-  { name: "Instamart", aliases: ["instamart"], categoryId: "essentials" },
+  { name: "Zepto", aliases: ["zepto"], categoryId: "dining" },
+  { name: "Instamart", aliases: ["instamart"], categoryId: "dining" },
   { name: "BigBasket", aliases: ["bigbasket"], categoryId: "essentials" },
   { name: "DMart", aliases: ["dmart"], categoryId: "essentials" },
   { name: "Reliance Fresh", aliases: ["reliancefresh", "reliancesmart"], categoryId: "essentials" },
