@@ -1,5 +1,14 @@
 # Finance automation handoff
 
+## Backlog investigation and prevention fixes — 29 October 2026
+
+Original review emails were replayed privately. A previously unsupported Axis sentence-format credit is now parsed with its explicit bank clock; a repeated header date no longer forces a received-time fallback. Generic deposit proceeds stay purpose-reviewable and are never automatically treated as earned income. Parser version5 permits bounded retries of unresolved formats while preserving logged entries and dismissals.
+
+Authenticated feedback surveys, future fee schedules and accepted mandate limits are identified as non-payment notices after financial parsing fails. Deposit closure notices without amounts remain reviewable. Cross-receipt suggestion cardinality now prevents multiple emails being confidently recommended against one ledger entry; those cases remain unresolved and receive no preselected link.
+
+The remaining historical linking proposal is26independent receipts→26existing entries, not an applied repair. A private backup, exact dry-run report and repeat-safe matching-RPC rehearsal exist. Production linking requires the pending exact-batch approval. Other unresolved cases include investment provenance, repeated card purchases and repayment funding. No historical financial rows were changed in this investigation.
+
+
 ## Gmail review presentation — 29 October 2026
 
 Separate unresolved financial alerts from already-saved category housekeeping and weak unique existing-payment suggestions. Only financial alerts remain in the primary list; optional category cleanup and possible-existing confirmation are collapsed. Full ledger merchant names now reach the status matcher. Each list has independent pagination limits and counts; category cleanup no longer inflates transaction-health review counts. Strong matches and resolved corrections remain hidden. No receipt statuses, dismissals, rules or ledger records are changed.

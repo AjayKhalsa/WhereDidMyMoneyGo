@@ -20,9 +20,14 @@ export function alertTime(body: string, rawDay: string, day: string, receivedAt?
   // transaction timestamp. Prefer that label rather than the first occurrence.
   const labelled = /Date\s*(?:&\s*)?Time:\s*/ig;
   let dateStart = body.indexOf(rawDay);
+  let hasLabel=false;
   for (const match of body.matchAll(labelled)) {
     const start = match.index! + match[0].length;
-    if (body.slice(start, start + rawDay.length) === rawDay) { dateStart = start; break; }
+    if (body.slice(start, start + rawDay.length) === rawDay) { dateStart = start; hasLabel=true; break; }
+  }
+  if(!hasLabel)for(const match of body.matchAll(/\bon\s+/ig)){
+    const start=match.index!+match[0].length;
+    if(body.slice(start,start+rawDay.length)===rawDay&&/^\s+at\s+\d{1,2}:\d{2}/i.test(body.slice(start+rawDay.length))){dateStart=start;break;}
   }
   const tail = body.slice(dateStart + rawDay.length);
   const raw = /^\s*(?:,?\s*(?:at|Time:)?\s*)(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)(?:\s*(IST|UTC|GMT|[+-]\d{2}:?\d{2}))?(?=[\s.,]|$)/i.exec(tail);

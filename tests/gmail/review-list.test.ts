@@ -60,3 +60,11 @@ test('saved entries and weak existing matches are separate from missing-payment 
  assert.equal(groupGmailReviews([possible],[t,{...t,id:'second'}]).financial.length,1);
  assert.equal(groupGmailReviews([{...possible,reason:'Sender authentication not verified'}],[t]).financial.length,1);
 });
+
+test('two emails competing for one saved payment cannot both get a confident suggestion',()=>{
+ const t=expense({id:'saved',accountId:'bank',merchant:'Example Person',amount:bank.amount,date:bank.date+'T00:00:00'});
+ const first={message_id:'one',status:'review',candidate:{...bank,reference:undefined}};
+ const result=groupGmailReviews([first,{...first,message_id:'two'}],[t]);
+ assert.equal(result.possibleExisting.length,0);assert.equal(result.financial.length,2);
+ assert.ok(result.financial.every(r=>r.suppress_suggested_match));
+});

@@ -14,7 +14,7 @@ import { GmailBackfill } from './gmail-backfill';
 import { suggestedExistingEntry } from "@/lib/gmail/review-list";
 import { reviewDefaults } from '@/lib/gmail/review-defaults';
 
-interface ReviewMail { message_id: string; subject: string; reason?: string; candidate?: Alert; category_review?: boolean }
+interface ReviewMail { message_id: string; subject: string; reason?: string; candidate?: Alert; category_review?: boolean; suppress_suggested_match?:boolean }
 type ReviewItem = Omit<ReviewMail, "candidate"> & { candidate?: Alert | InvestmentNotice };
 interface Status {
   configured: boolean;
@@ -130,7 +130,7 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
   const [kind, setKind] = useState(defaults.kind);
   const [toAccountId, setToAccountId] = useState(defaults.toAccountId);
   const [allowDuplicate, setAllowDuplicate] = useState(false);
-  const [existingTransactionId, setExistingTransactionId] = useState(() => suggestedExistingEntry(a,db?.transactions??[]) ?? "");
+  const [existingTransactionId, setExistingTransactionId] = useState(() => mail.suppress_suggested_match ? "" : (suggestedExistingEntry(a,db?.transactions??[]) ?? ""));
   const [remember, setRemember] = useState(false);
   const [learnCategory, setLearnCategory] = useState(true);
   const [refundPosted, setRefundPosted] = useState(false);
