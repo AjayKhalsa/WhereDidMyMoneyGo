@@ -8,6 +8,7 @@ export function automaticSubcategory(text:string):SubcategoryEvidence|undefined 
   if(known.length>1)return;
   const name=known[0]?.name;
   const result=(categoryId:string,reason:string,mealEligible=false):SubcategoryEvidence=>({categoryId,parentId:categoryId.split('.')[0]!,reason,mealEligible});
+  if(name==='District'&&/\bdistrict dining\b/.test(value))return result('dining.restaurant','District Dining explicitly identifies a dining purchase.',true);
   if(['Instamart','Zepto'].includes(name??''))return result('dining.groceries','Recognised quick-commerce merchant; your Food & Dining preference.');
   if(['Swiggy','Zomato'].includes(name??''))return result('dining.delivery','Recognised food delivery merchant.',true);
   if(['Tea Post','Nariyal Pani','Amar Juice Centre','Chaayos','Chai Point'].includes(name??'')||/\b(?:nariyal paani|coconut water|tea stall|juice centre|juice center)\b/.test(value))return result('dining.tea','Recognised tea or refreshment purchase.');
