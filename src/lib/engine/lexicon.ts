@@ -57,7 +57,7 @@ export const MERCHANTS: MerchantEntry[] = [
   { name: "Decathlon", aliases: ["decathlon"], categoryId: "shopping" },
   { name: "Ajio", aliases: ["ajio"], categoryId: "shopping" },
   { name: "Tata Cliq", aliases: ["tatacliq"], categoryId: "shopping" },
-  { name: "Nykaa", aliases: ["nykaa"], categoryId: "essentials" },
+  { name: "Nykaa", aliases: ["nykaa"], categoryId: "shopping.personal" },
   // Shopping — clothes
   { name: "Myntra", aliases: ["myntra"], categoryId: "shopping.clothing" },
   { name: "Zara", aliases: ["zara"], categoryId: "shopping.clothing" },
@@ -110,6 +110,10 @@ export const MERCHANTS: MerchantEntry[] = [
   { name: "ChatGPT", aliases: ["chatgpt", "openai"], categoryId: "bills.subscription" },
   { name: "Claude", aliases: ["claude", "anthropic"], categoryId: "bills.subscription" },
   { name: "Gemini", aliases: ["geminiapi"], categoryId: "bills.subscription" },
+  { name: "Xbox Game Pass", aliases: ["xbox game pass", "xboxgamepass"], categoryId: "bills.subscription" },
+  { name: "PlayStation Plus", aliases: ["playstation plus", "ps plus", "psplus"], categoryId: "bills.subscription" },
+  { name: "Apple Arcade", aliases: ["apple arcade", "applearcade"], categoryId: "bills.subscription" },
+  { name: "YouTube Music", aliases: ["youtube music", "youtubemusic"], categoryId: "bills.subscription" },
   // Mobile / telecom
   { name: "Jio", aliases: ["jio"], categoryId: "bills.mobile" },
   { name: "Airtel", aliases: ["airtel"], categoryId: "bills.mobile" },
@@ -165,10 +169,11 @@ export const MERCHANTS: MerchantEntry[] = [
   // Fitness
   { name: "Cult.fit", aliases: ["cult", "cultfit"], categoryId: "health.gym" },
   // Pharmacy / health
-  { name: "Apollo", aliases: ["apollo"], categoryId: "essentials" },
-  { name: "PharmEasy", aliases: ["pharmeasy", "1mg", "tata1mg"], categoryId: "essentials" },
-  { name: "Netmeds", aliases: ["netmeds"], categoryId: "essentials" },
-  { name: "MedPlus", aliases: ["medplus"], categoryId: "essentials" },
+  { name: "Apollo Pharmacy", aliases: ["apollopharmacy", "apollo pharmacy"], categoryId: "health.medicine" },
+  { name: "PharmEasy", aliases: ["pharmeasy"], categoryId: "health.medicine" },
+  { name: "Tata 1mg", aliases: ["1mg", "tata1mg"], categoryId: "health.medicine" },
+  { name: "Netmeds", aliases: ["netmeds"], categoryId: "health.medicine" },
+  { name: "MedPlus", aliases: ["medplus"], categoryId: "health.medicine" },
   { name: "Practo", aliases: ["practo"], categoryId: "health.doctor" },
   // Insurance
   { name: "LIC", aliases: ["lic"], categoryId: "bills.insurance" },
@@ -337,12 +342,12 @@ export const ACTIVITIES: ActivityEntry[] = [
   },
   {
     keywords: ["skincare", "moisturizer", "moisturiser", "sunscreen", "serum", "facewash", "toner", "cream", "lotion", "cleanser"],
-    categoryId: "essentials",
+    categoryId: "shopping.personal",
     weight: 9,
   },
   {
     keywords: ["medicine", "medicines", "pharmacy", "chemist", "tablet", "tablets", "capsule", "capsules", "syrup", "prescription", "meds"],
-    categoryId: "essentials",
+    categoryId: "health.medicine",
     weight: 9,
   },
   // Shopping

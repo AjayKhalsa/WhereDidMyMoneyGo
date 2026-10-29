@@ -1,5 +1,6 @@
 "use client";
 
+import { categorySearchMatch } from "@/lib/domain/category-search";
 import { useState } from 'react';
 import { Check, Search, Utensils, ShoppingBasket, Car, Plane, ShoppingBag, Sparkles, House, HeartPulse, GraduationCap, Gift, Shapes, ChevronRight, type LucideIcon } from 'lucide-react';
 import type { CategoryLookup } from '@/lib/domain/categories';
@@ -22,7 +23,7 @@ export function CategoryBrowser({categories, recentIds=[], value, onChange, clas
   const [query,setQuery]=useState('');
   const needle=query.trim().toLocaleLowerCase();
   const selected=categories.groupOf(value ?? "")?.id ?? value;
-  const matches=categories.groups.filter(c=>[c.name,...categories.leavesOf(c.id).map(l=>l.name)].some(name=>name.toLocaleLowerCase().includes(needle)));
+  const matches=categories.groups.filter(c=>[c,...categories.leavesOf(c.id)].some(row=>categorySearchMatch(row.id,row.name,needle)));
   const assigned=new Set(SECTIONS.flatMap(s=>s.ids));
   const sections=needle ? [{label:`Search results · ${matches.length}`, ids:matches.map(c=>c.id)}] : [
     ...SECTIONS,
@@ -41,7 +42,7 @@ export function CategoryBrowser({categories, recentIds=[], value, onChange, clas
         <h3 className="mb-2 text-xs font-semibold text-ink-secondary">{section.label}</h3>
         <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">{rows.map(category=>{
           const Icon=ICONS[category.id]??Shapes;
-          const children=categories.leavesOf(category.id).filter(c=>!needle||category.name.toLocaleLowerCase().includes(needle)||c.name.toLocaleLowerCase().includes(needle));
+          const children=categories.leavesOf(category.id).filter(c=>!needle||categorySearchMatch(category.id,category.name,needle)||categorySearchMatch(c.id,c.name,needle));
           return <button key={category.id} type="button" onClick={()=>onChange(category.id)} aria-pressed={selected===category.id} className={cn('flex min-h-16 w-full items-center gap-3 px-3 py-3 text-left hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px]', selected===category.id&&'bg-surface-sunken')}>
             <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-full',TONES[category.id]??'bg-violet-100 text-violet-800')}><Icon className="h-5 w-5" aria-hidden="true" /></span>
             <span className="min-w-0 flex-1"><span className="block break-words text-sm font-medium text-ink">{category.name}</span>{children.length>0&&<span className="mt-0.5 block truncate text-xs text-ink-secondary">{children.slice(0,3).map(c=>c.name).join(' · ')}{children.length>3?'…':''}</span>}</span>

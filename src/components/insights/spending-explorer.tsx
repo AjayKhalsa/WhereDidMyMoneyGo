@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { SpendingTrend } from "./spending-trend";
 import { contextLabel, DIMENSION_LABELS } from "@/lib/domain/contexts";
 import { savedTags } from "@/lib/domain/tags";
 import type { Transaction, TransactionContext } from "@/lib/domain/types";
@@ -160,6 +161,7 @@ export function SpendingExplorer() {
             " Current cycle includes transactions through today."}
         </p>
       </div>
+      <SpendingTrend report={report} transactions={db?.transactions ?? []} month={month} cycleStartDay={cycleStartDay} onOpen={open} />
       {!["category", "type", "merchant"].includes(dimension) && (
         <p className="text-[12px] text-ink-tertiary">
           An expense can appear under several tags. Tag rows overlap; the
