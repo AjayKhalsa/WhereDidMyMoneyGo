@@ -1,5 +1,12 @@
 # Finance automation handoff
 
+## Gmail review presentation — 29 October 2026
+
+Separate unresolved financial alerts from already-saved category housekeeping and weak unique existing-payment suggestions. Only financial alerts remain in the primary list; optional category cleanup and possible-existing confirmation are collapsed. Full ledger merchant names now reach the status matcher. Each list has independent pagination limits and counts; category cleanup no longer inflates transaction-health review counts. Strong matches and resolved corrections remain hidden. No receipt statuses, dismissals, rules or ledger records are changed.
+
+Read-only live audit:79raw flags →30resolved hidden,7saved category prompts,28possible-existing suggestions,14unresolved primary alerts. Weak suggestions are not automatic links; equal repeated payments and authentication failures remain unresolved. Fullsuite/build validation is recorded in the private handoff.
+
+
 ## Food receipt evidence preview — 29 October 2026
 
 Settings → Gmail adds a bounded read-only preview of recent Swiggy/Zomato completed-order receipts. The authenticated, origin-checked endpoint reads eight receipts per batch with explicit continuation. DMARC alignment is required; paid amount and order ID must come from supported completed-order templates. Zomato restaurant/outlet evidence is extracted only from a bounded restaurant section; delivery addresses and inferred payment times are excluded. Swiggy address stays unknown for unsupported layouts.

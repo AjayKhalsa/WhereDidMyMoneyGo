@@ -21,6 +21,10 @@ interface Status {
   connection: { email: string; start_date: string; last_synced_at?: string; last_error?: string; more: boolean } | null;
   messages: ReviewItem[];
   reviewCount: number;
+  categoryMessages?:ReviewItem[];
+  possibleExistingMessages?:ReviewItem[];
+  categoryReviewCount?:number;
+  possibleExistingCount?:number;
   health?: { state: string; stale: boolean; pending: number; review: number; historicalOutdated: boolean; historicalDiscoveryComplete: boolean; schedule: string };
 }
 async function api(path = "", method = "GET", body?: unknown) {
@@ -66,7 +70,7 @@ export function GmailPanel() {
         <div className="text-sm"><p className="font-medium">Connected: {status.connection.email}</p><p className="mt-1 text-ink-tertiary">From {status.connection.start_date} · Last mailbox check: {status.connection.last_synced_at ? new Date(status.connection.last_synced_at).toLocaleString() : "Not yet"}</p></div>
         {status.connection.last_error && <p className="text-sm text-danger">{status.connection.last_error}</p>}
         {status.health && <div className="space-y-1 text-xs text-ink-secondary" aria-label="Gmail sync health">
-          <p>{status.health.schedule}. {status.health.state === 'error' ? 'Sync needs attention.' : status.health.state === 'incomplete' ? 'Mailbox scan unfinished.' : status.health.stale ? 'No recent completed mailbox check.' : 'Recent incremental discovery finished.'} {status.health.pending} queued · {status.health.review} need review.</p>
+          <p>{status.health.schedule}. {status.health.state === 'error' ? 'Sync needs attention.' : status.health.state === 'incomplete' ? 'Mailbox scan unfinished.' : status.health.stale ? 'No recent completed mailbox check.' : 'Recent incremental discovery finished.'} {status.health.pending} queued · {status.health.review} need a transaction or link decision.</p>
           {status.health.historicalOutdated && <p className="text-danger">Historical coverage uses an older bank sender list. Run a new historical preview with an updated date range.</p>}
           <p>Coverage includes supported bank alerts and investment confirmations; skipped formats, dismissals and review items are not confirmed ledger imports. A completed scan does not verify account balances.</p>
         </div>}
@@ -85,6 +89,9 @@ export function GmailPanel() {
       {status?.connection&&<><GmailBackfill email={status.connection.email}/><FoodReceipts /></>}
       {!!status?.reviewCount && <p className="text-sm font-medium">{status.reviewCount} alerts need review{status.reviewCount > 50 ? " — showing the first 50" : ""}</p>}
       {status?.messages.map(mail => <ReviewItemRow key={mail.message_id} mail={mail} email={status.connection?.email} disabled={busy} onSaved={async () => { await load(); await refreshDatabase(); }} />)}
+      {!!status?.possibleExistingCount&&<details className="rounded-xl border border-line p-3"><summary className="cursor-pointer text-sm font-medium">{status.possibleExistingCount} possible existing payments · confirm links</summary><p className="mt-2 text-xs text-ink-secondary">These emails resemble entries already in your ledger. Confirm a link once; no second payment is created. Equal amount/date alone is insufficient.</p>{status.possibleExistingMessages?.map(mail=><ReviewItemRow key={mail.message_id} mail={mail} email={status.connection?.email} disabled={busy} onSaved={async()=>{await load();await refreshDatabase();}}/>)}</details>}
+      {!!status?.categoryReviewCount&&<details className="rounded-xl border border-line p-3"><summary className="cursor-pointer text-sm font-medium">{status.categoryReviewCount} saved entries · optional category cleanup</summary><p className="mt-2 text-xs text-ink-secondary">These payments are already in your ledger and balances. They are not missing transactions. You can also edit them directly in Transactions.</p>{status.categoryMessages?.map(mail=><ReviewItemRow key={mail.message_id} mail={mail} email={status.connection?.email} disabled={busy} onSaved={async()=>{await load();await refreshDatabase();}}/>)}</details>}
+
     </Card>
   </Section>;
 }

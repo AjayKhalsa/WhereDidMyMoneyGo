@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { actionableGmailReviews, suggestedExistingEntry } from "@/lib/gmail/review-list";
+import { actionableGmailReviews, suggestedExistingEntry, groupGmailReviews } from "@/lib/gmail/review-list";
 import { expense } from "../helpers/factories";
 import type { Alert } from "@/lib/gmail/alerts";
 
@@ -45,4 +45,18 @@ test("a unique exact-day normalized payee is suggested but equal repeated paymen
   assert.equal(suggestedExistingEntry(weak,[{...t,accountId:"different-bank"}]),undefined);
   assert.equal(suggestedExistingEntry(weak,[{...t,merchant:"Different person"}]),undefined);
   assert.equal(suggestedExistingEntry(weak,[{...t,date:"2026-10-28T00:00:00"}]),undefined);
+});
+
+test('saved entries and weak existing matches are separate from missing-payment alerts',()=>{
+ const t=expense({id:'saved',accountId:'bank',merchant:'Example Person',amount:bank.amount,date:bank.date+'T00:00:00',categoryId:'other'});
+ const category={message_id:'category',status:'logged',category_review:true,transaction_id:'saved'};
+ const possible={message_id:'possible',status:'review',candidate:{...bank,reference:undefined}};
+ const missing={message_id:'new',status:'review',candidate:{...bank,amount:100}};
+ const rows=[category,possible,missing],before=JSON.stringify({rows,t});
+ const grouped=groupGmailReviews(rows,[t]);
+ assert.deepEqual(grouped.category,[category]);assert.deepEqual(grouped.possibleExisting,[possible]);assert.deepEqual(grouped.financial,[missing]);
+ assert.equal(JSON.stringify({rows,t}),before);
+ assert.equal(groupGmailReviews([category],[]).category.length,0);
+ assert.equal(groupGmailReviews([possible],[t,{...t,id:'second'}]).financial.length,1);
+ assert.equal(groupGmailReviews([{...possible,reason:'Sender authentication not verified'}],[t]).financial.length,1);
 });
