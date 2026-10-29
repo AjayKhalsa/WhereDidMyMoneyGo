@@ -1,3 +1,4 @@
+import { automaticSubcategory } from "@/lib/engine/subcategory-recognition";
 import type { Category, ClassificationRule, Transaction, TransactionContext } from "@/lib/domain/types";
 import { deriveRulePattern, learnFromEntry } from "@/lib/engine/learning";
 import { parseExpenseInput } from "@/lib/engine/parser";
@@ -68,6 +69,11 @@ export function suggestCategory(a: Alert, rules: ClassificationRule[], categorie
   }
   if(conflictingPayees.includes(key))return unknown('Conflicting historical categories for this payee.');
   const payee=merchantPayee(a.merchant);
+  const specific=automaticSubcategory(payee);
+  if(specific&&valid.has(specific.categoryId)) {
+    const meal=specific.mealEligible?mealSuggestion(specific.parentId):undefined;
+    return meal??{categoryId:specific.categoryId,confidence:0.92,source:'vocabulary',reason:specific.reason,needsReview:false,contexts:[]};
+  }
   const known=recognizedMerchants(payee);
   if(known.length>1)return unknown("Multiple merchant identities in this payee; confirm the category.");
   if(known.length===1&&valid.has(known[0]!.categoryId))return mealSuggestion(known[0]!.categoryId) ?? {categoryId:known[0]!.categoryId,confidence:0.9,source:'vocabulary',reason:'Recognized merchant vocabulary; no meal time is assumed without an actual transaction timestamp.',needsReview:false,contexts:[]};

@@ -1,3 +1,4 @@
+import { automaticSubcategory } from "./subcategory-recognition";
 import { recognizedMerchants, mealEligibleMerchant } from "./merchant-recognition";
 import { groupIdOf, UNCATEGORISED_ID } from "@/lib/domain/categories";
 import { DERIVED_CONTEXT_VALUES, makeContext, normaliseContexts } from "@/lib/domain/contexts";
@@ -562,6 +563,16 @@ export function parseExpenseInput(
   } else {
     baseScore = 0.2;
     reasons.push("Nothing in the description was recognisable");
+  }
+
+  if (!rule && type === "EXPENSE") {
+    const specific = automaticSubcategory(normalised);
+    const explicitMeal = activityHits.some(hit => ['dining.breakfast','dining.lunch','dining.snacks','dining.dinner'].includes(hit.categoryId));
+    if (specific && !(specific.mealEligible && explicitMeal)) {
+      categoryId = (specific.mealEligible ? timedMealCategory(specific.parentId, options.actualTime, normalised) : undefined) ?? specific.categoryId;
+      baseScore = 0.92;
+      reasons.push(specific.reason);
+    }
   }
 
   if (type === "EXPENSE" && mealEligibleMerchant(normalised)) {

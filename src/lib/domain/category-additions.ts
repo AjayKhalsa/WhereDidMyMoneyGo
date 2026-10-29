@@ -1,4 +1,4 @@
-/** Additive suggestions: existing categories and labels must never be rewritten. */
+/** Approved additive subcategories. Existing categories and labels are never rewritten. */
 export const CATEGORY_ADDITIONS = [
   {id:'dining.delivery', parentId:'dining', name:'Food delivery'},
   {id:'dining.restaurant', parentId:'dining', name:'Restaurants'},

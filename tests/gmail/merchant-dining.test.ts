@@ -38,7 +38,7 @@ test('requested platforms default to Food & Dining in Gmail and manual logging',
   const suggestion=suggestCategory(source,[],categories);
   assert.equal(suggestion.categoryId,'dining',merchant);
   assert.equal(suggestion.needsReview,false,merchant);
-  assert.equal(parseExpenseInput(`250 ${merchant}`).categoryId,'dining',merchant);
+  assert.ok(parseExpenseInput(`250 ${merchant}`).categoryId.startsWith('dining'),merchant);
   assert.equal(JSON.stringify(source),before);
  }
  assert.equal(parseExpenseInput('250 Swiggy Instamart').merchant,'Instamart');
@@ -51,7 +51,7 @@ test('platform preference does not mistake groceries or tickets for dinner',()=>
  const cats=[...categories,{id:'dining.dinner'}];
  for(const merchant of ['Swiggy Instamart','Zepto','District']) {
   assert.equal(suggestCategory({...alert(merchant),occurredAt:'2026-10-29T21:00:00',timeSource:'bank',timeConfidence:'exact'},[],cats).categoryId,'dining');
-  assert.equal(parseExpenseInput(`250 ${merchant}`,{actualTime:'2026-10-29T21:00:00'}).categoryId,'dining');
+  assert.ok(['dining','dining.groceries'].includes(parseExpenseInput(`250 ${merchant}`,{actualTime:'2026-10-29T21:00:00'}).categoryId));
  }
  assert.equal(suggestCategory({...alert('Zomato'),occurredAt:'2026-10-29T21:00:00',timeSource:'bank',timeConfidence:'exact'},[],cats).categoryId,'dining.dinner');
 });

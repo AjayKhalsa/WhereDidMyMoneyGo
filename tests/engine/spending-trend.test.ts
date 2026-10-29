@@ -6,12 +6,12 @@ import { buildCategorySeed } from '@/lib/domain/categories';
 import { CATEGORY_ADDITIONS } from '@/lib/domain/category-additions';
 import { expense } from '../helpers/factories';
 
-test('pending subcategories are unique, parented and do not change the active seed',()=>{
+test('approved subcategories are unique, parented and present in the active seed',()=>{
  const rows=buildCategorySeed();assert.equal(new Set(rows.map(c=>c.id)).size,rows.length);
  for(const c of CATEGORY_ADDITIONS) assert.ok(rows.some(p=>p.id===c.parentId&&p.parentId===null));
  for(const id of ['dining','dining.dinner','bills.subscription','transport.auto']) assert.ok(rows.some(c=>c.id===id));
  assert.equal(CATEGORY_ADDITIONS.length,12);
- assert.ok(CATEGORY_ADDITIONS.every(c=>!rows.some(r=>r.id===c.id)));
+ assert.ok(CATEGORY_ADDITIONS.every(c=>rows.some(r=>r.id===c.id)));
  assert.equal(new Set(CATEGORY_ADDITIONS.map(c=>c.id)).size,12);
 });
 test('cumulative trend agrees with report including same-day repeats, refund and personal credit',()=>{
