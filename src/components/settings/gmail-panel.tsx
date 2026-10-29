@@ -9,6 +9,7 @@ import { formatMoney } from "@/lib/domain/money";
 import { Button, Card, Section } from "@/components/ui/primitives";
 import { possibleExistingTransactions } from "@/lib/import/identity";
 import { alertTimeLabel } from "@/lib/gmail/alert-time";
+import { FoodReceipts } from "./food-receipts";
 import { GmailBackfill } from './gmail-backfill';
 import { suggestedExistingEntry } from "@/lib/gmail/review-list";
 import { reviewDefaults } from '@/lib/gmail/review-defaults';
@@ -81,7 +82,7 @@ export function GmailPanel() {
         </div>
         {disconnecting && <div className="space-y-2 text-sm"><p>Stop automatic imports and revoke Google access? Your saved transactions and duplicate checks stay in the app.</p><Button variant="danger" disabled={busy} onClick={() => void run(async () => { await api("", "DELETE"); setDisconnecting(false); setNotice("Disconnected. Your saved transactions are unchanged."); })}>Disconnect Gmail</Button></div>}
       </>}
-      {status?.connection&&<GmailBackfill email={status.connection.email}/>}
+      {status?.connection&&<><GmailBackfill email={status.connection.email}/><FoodReceipts /></>}
       {!!status?.reviewCount && <p className="text-sm font-medium">{status.reviewCount} alerts need review{status.reviewCount > 50 ? " — showing the first 50" : ""}</p>}
       {status?.messages.map(mail => <ReviewItemRow key={mail.message_id} mail={mail} email={status.connection?.email} disabled={busy} onSaved={async () => { await load(); await refreshDatabase(); }} />)}
     </Card>
