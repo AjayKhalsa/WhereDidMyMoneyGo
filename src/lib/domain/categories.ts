@@ -1,3 +1,4 @@
+import { CATEGORY_ADDITIONS } from "./category-additions";
 import type { Category } from "./types";
 
 /**
@@ -151,6 +152,10 @@ export function buildCategorySeed(): Category[] {
       });
     });
   });
+  for (const addition of CATEGORY_ADDITIONS) {
+    const order = Math.max(-1, ...rows.filter(c => c.parentId === addition.parentId).map(c => c.order)) + 1;
+    rows.push({...addition, order, system: true});
+  }
   return rows;
 }
 

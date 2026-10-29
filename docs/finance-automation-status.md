@@ -1,5 +1,14 @@
 # Finance automation handoff
 
+## Automatic subcategory tagging — 29 October 2026
+
+The user approved the previously pending 12 additions. A fresh private category backup and repeat-safe SQL rehearsal preceded a scoped atomic insert. Production now has 76 entries; all original 64 category rows, ledger fingerprint and saved-rule fingerprint were independently verified unchanged. This is a category-data update, not a schema migration.
+
+The same evidence matcher now drives Gmail classification and quick entry: Instamart/Zepto → Groceries, Swiggy/Zomato → Food delivery (reliable meal time can refine), Tea Post/Nariyal Pani → Tea & refreshments, recognised restaurants → Restaurants. Explicit household, vehicle-maintenance, toll-charge, tax-payment, donation, course, bookstore and diagnostic evidence supports the other new subcategories. Saved rules and historical conflicts take priority. FASTag recharge alone is not a toll, District alone is not proof of a restaurant purchase, and no existing ledger entries are recategorised.
+
+All 58 test files and production build pass. Source release verification is recorded in the private handoff. Older pending-category notes below are superseded.
+
+
 ## Category coverage and trends — 29 October 2026
 
 Live audit found 64 category entries including Medicine, Personal and Subscription. User chose to keep 12 proposed additions pending; proposals are isolated in `category-additions.ts` and are not part of the active seed, database or automatic startup. No category or transaction database writes are included. Existing-category defaults now distinguish recognised pharmacies, personal care and explicit gaming subscriptions. Search aliases find Pharmacy, Personal care and common subscription names without renaming saved IDs.
