@@ -1,7 +1,7 @@
 import type {NextRequest} from 'next/server';
 import {admin,checkOrigin,failure,GmailError,google,json,tokenRequest,unseal,userFor} from '@/lib/gmail/server';
-import {authenticatedFoodReceipt,parseFoodReceipt,possibleFoodPayments} from '@/lib/gmail/food-receipts';
-import {header,mailText,type MailPart} from '@/lib/gmail/alerts';
+import {receiptMailText,authenticatedFoodReceipt,parseFoodReceipt,possibleFoodPayments} from '@/lib/gmail/food-receipts';
+import {header,type MailPart} from '@/lib/gmail/alerts';
 import {domainRow} from '@/lib/gmail/learning-data';
 import type {Transaction} from '@/lib/domain/types';
 export const maxDuration=60;
@@ -13,7 +13,7 @@ export async function POST(request:NextRequest){
   const token=await tokenRequest({grant_type:'refresh_token',refresh_token:unseal(connection.data.refresh_token,user.id)});
   const mail=await google<{payload:MailPart;internalDate:string}>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${body.messageId}?format=full`,{headers:{Authorization:`Bearer ${token.access_token}`}});
   if(!authenticatedFoodReceipt(mail.payload))throw new GmailError('This receipt sender could not be verified.',409);
-  const receipt=parseFoodReceipt(header(mail.payload,'From'),header(mail.payload,'Subject'),mailText(mail.payload));
+  const receipt=parseFoodReceipt(header(mail.payload,'From'),header(mail.payload,'Subject'),receiptMailText(mail.payload));
   const received=new Date(Number(mail.internalDate));if(!receipt||!Number.isFinite(received.getTime()))throw new GmailError('This email is not a supported completed receipt.',409);
   const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(received);
   const target=await db.from('transactions').select('*').eq('user_id',user.id).eq('id',body.transactionId).single();

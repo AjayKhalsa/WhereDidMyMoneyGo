@@ -2,8 +2,8 @@ import type {SupabaseClient} from '@supabase/supabase-js';
 import type {Transaction} from '@/lib/domain/types';
 import {completeLoad} from '@/lib/data/complete-load';
 import {domainRow} from './learning-data';
-import {header,mailText,type MailPart} from './alerts';
-import {authenticatedFoodReceipt,exactFoodOrder,parseFoodReceipt,possibleFoodPayments} from './food-receipts';
+import {header,type MailPart} from './alerts';
+import {receiptMailText,authenticatedFoodReceipt,exactFoodOrder,parseFoodReceipt,possibleFoodPayments} from './food-receipts';
 import {GmailError,GoogleRequestError,google} from './server';
 
 // A separate cursor keeps financial discovery independent. Only IDs and scan
@@ -62,7 +62,7 @@ export async function syncFoodReceipts(input:{
     try{mail=await google<{payload:MailPart;internalDate:string}>(`${base}/messages/${encodeURIComponent(messageId)}?format=full`,{headers});}
     catch(error){if(error instanceof GoogleRequestError&&error.upstreamStatus===404)mail=null;else throw error;}
     if(mail&&authenticatedFoodReceipt(mail.payload)){
-      const receipt=parseFoodReceipt(header(mail.payload,'From'),header(mail.payload,'Subject'),mailText(mail.payload));
+      const receipt=parseFoodReceipt(header(mail.payload,'From'),header(mail.payload,'Subject'),receiptMailText(mail.payload));
       const received=new Date(Number(mail.internalDate));
       if(receipt&&Number.isFinite(received.getTime())){
         const receivedDay=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(received);

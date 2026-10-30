@@ -114,6 +114,11 @@ export const MERCHANTS: MerchantEntry[] = [
   { name: "PlayStation Plus", aliases: ["playstation plus", "ps plus", "psplus"], categoryId: "bills.subscription" },
   { name: "Apple Arcade", aliases: ["apple arcade", "applearcade"], categoryId: "bills.subscription" },
   { name: "YouTube Music", aliases: ["youtube music", "youtubemusic"], categoryId: "bills.subscription" },
+  { name: "Amazon Prime", aliases: ["amazon prime membership","amazonprime"], categoryId: "bills.subscription" },
+  { name: "Apple One", aliases: ["apple one","appleone"], categoryId: "bills.subscription" },
+  { name: "LinkedIn Premium", aliases: ["linkedin premium","linkedinpremium"], categoryId: "bills.subscription" },
+  { name: "Perplexity Pro", aliases: ["perplexity pro","perplexityai"], categoryId: "bills.subscription" },
+  { name: "GitHub Copilot", aliases: ["github copilot","githubcopilot"], categoryId: "bills.subscription" },
   // Mobile / telecom
   { name: "Jio", aliases: ["jio"], categoryId: "bills.mobile" },
   { name: "Airtel", aliases: ["airtel"], categoryId: "bills.mobile" },

@@ -1,7 +1,7 @@
 import type {NextRequest} from 'next/server';
 import {admin,checkOrigin,failure,GmailError,google,json,tokenRequest,unseal,userFor} from '@/lib/gmail/server';
-import {header,mailText,type MailPart} from '@/lib/gmail/alerts';
-import {authenticatedFoodReceipt,parseFoodReceipt,possibleFoodPayments,exactFoodOrder} from '@/lib/gmail/food-receipts';
+import {header,type MailPart} from '@/lib/gmail/alerts';
+import {receiptMailText,authenticatedFoodReceipt,parseFoodReceipt,possibleFoodPayments,exactFoodOrder} from '@/lib/gmail/food-receipts';
 import {completeLoad} from '@/lib/data/complete-load';
 import {domainRow} from '@/lib/gmail/learning-data';
 import type {Transaction} from '@/lib/domain/types';
@@ -21,7 +21,7 @@ export async function POST(request:NextRequest){
   const results=await Promise.allSettled((page.messages??[]).map(async m=>{
    const mail=await google<{payload:MailPart;internalDate:string}>(`${base}/messages/${m.id}?format=full`,{headers});
    if(!authenticatedFoodReceipt(mail.payload))return {messageId:m.id,status:'unverified' as const};
-   const receipt=parseFoodReceipt(header(mail.payload,'From'),header(mail.payload,'Subject'),mailText(mail.payload));
+   const receipt=parseFoodReceipt(header(mail.payload,'From'),header(mail.payload,'Subject'),receiptMailText(mail.payload));
    if(!receipt)return {messageId:m.id,status:'unsupported' as const};
    const received=new Date(Number(mail.internalDate));if(!Number.isFinite(received.getTime()))return {messageId:m.id,status:'unsupported' as const};
    const receivedDay=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(received);

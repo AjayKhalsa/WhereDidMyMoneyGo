@@ -1,6 +1,6 @@
 # Scheduled receipt enrichment
 
-Status: implemented and verified locally; production migration and activation await approval.
+Status: deployed and verified on 30 October 2026 in PR #48. Remote checkpoint migration version `20261030113435`; production commit `1f3029b13f71360b17d84d4b25fcec8c987f5b71`.
 
 The existing four-hour GitHub Actions job and nightly fallback call the shared mailbox pipeline. Financial discovery and processing run first. Once that queue is caught up, remaining time checks authenticated completed Swiggy/Zomato receipts. No new job, environment variable, Gmail scope, AI service or paid dependency is added.
 
@@ -25,4 +25,4 @@ An unfinished receipt queue propagates `more=true` to existing bounded continuat
 - Database tests verify an empty object default, object-only constraint and denied browser read/write. Existing receipt-linking regressions cover financial preservation, tombstones, dismissal, conflicts and RLS.
 - A private-copy migration rehearsal preserved all 642 transactions, 611 source records, receipt metadata, accounts, categories and existing connection fields. The new checkpoint is empty. No production schema changes or historical receipt attachments were applied for this phase.
 
-After explicit migration approval: refresh the scoped backup, apply only this migration, independently compare existing financial data/connection fields and grants, merge the tested release, verify the production commit and observe the existing scheduled workflow. Do not replay older migrations or claim authenticated production receipt linking has been tested before it has.
+Activation verification: the refreshed private backup and independent post-migration snapshot preserved all 642 transactions, 611 source records, accounts, categories and contexts. The new checkpoint started empty and stayed server-only. [Production workflow run](https://github.com/AjayKhalsa/WhereDidMyMoneyGo/actions/runs/41049140435) completed successfully: 18 receipts checked, zero automatic links, zero financial imports. The checkpoint completed with no connection error; a further snapshot confirmed unchanged financial data. Authenticated confirmed receipt attachments have not been exercised in production.
