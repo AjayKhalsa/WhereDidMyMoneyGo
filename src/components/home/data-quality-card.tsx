@@ -68,7 +68,7 @@ export function DataQualityCard() {
   return (
     <section aria-label="Data quality" className="space-y-2 rounded-2xl border border-line bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-medium">How complete is your picture?</h2>
+        <h2 className="text-sm font-medium">Data quality</h2>
         <Link href="/settings#gmail" className="text-sm underline">Review & sync</Link>
       </div>
       <p className="text-xs text-ink-secondary">

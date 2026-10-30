@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoButton } from "@/components/ui/info-button";
 import { DataQualityCard } from "@/components/home/data-quality-card";
 
 import { DataLoadError } from "@/components/layout/data-load-error";
@@ -58,10 +59,9 @@ export default function InsightsPage() {
       <PageHeader
         title="Insights"
         description="What's worth knowing about your money this month."
-        action={<MonthSwitcher />}
+        action={<div className="flex items-center gap-1"><InfoButton title="Data quality"><DataQualityCard /></InfoButton><MonthSwitcher /></div>}
       />
 
-      <DataQualityCard />
 
       {!monthRows.some(t => t.type === "EXPENSE" || (t.type === "INCOME" && t.isRefund)) && insights.length === 0 ? (
         <EmptyState

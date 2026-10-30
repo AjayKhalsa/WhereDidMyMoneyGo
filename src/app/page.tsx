@@ -1,6 +1,5 @@
 "use client";
 
-import { DataQualityCard } from "@/components/home/data-quality-card";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -85,7 +84,6 @@ export default function HomePage() {
   return (
     <div className="space-y-10">
       <FinancialHero />
-      <DataQualityCard />
 
       <Divider />
 
