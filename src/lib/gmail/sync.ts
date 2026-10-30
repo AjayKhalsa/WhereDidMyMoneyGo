@@ -7,6 +7,7 @@ import { historicalRules, classifiedAlert } from "./classification";
 import { learningData, ruleRow } from "./learning-data";
 import { investmentNoticeReason, parseInvestmentNotice } from "./investment-notices";
 import { merchantKey } from "@/lib/engine/merchant-identity";
+import { syncFoodReceipts } from './receipt-sync';
 
 export async function syncMailbox(userId: string, deadline = Date.now() + 45000) {
   const db = admin(), lease = randomUUID();
@@ -127,9 +128,13 @@ export async function syncMailbox(userId: string, deadline = Date.now() + 45000)
     }
     const pending = await db.from("gmail_messages").select("message_id", { count: "exact", head: true }).eq("user_id", userId).or(`status.eq.pending,and(status.eq.review,parser_version.lt.${ALERT_PARSER_VERSION})`);
     if (pending.error) throw pending.error;
+    const financialMore=!!page.nextPageToken||(pending.count??0)>0;
+    // Payment capture has priority. Receipt metadata shares this lease and the
+    // remaining deadline, but uses an independent durable discovery cursor.
+    const receipts=financialMore?undefined:await syncFoodReceipts({db,userId,lease,accessToken:tokens.access_token,state:connection.receipt_scan??{},startDate:connection.start_date,deadline});
     const cleared = await db.from("gmail_connections").update({ last_error: null }).eq("user_id", userId).eq("lease_id", lease);
     if (cleared.error) throw cleared.error;
-    return { logged, reviewed, matched, more: !!page.nextPageToken || (pending.count ?? 0) > 0 };
+    return { logged, reviewed, matched, more: financialMore||!!receipts?.more, ...(receipts?{receiptsChecked:receipts.checked,receiptsLinked:receipts.linked}:{}) };
   } catch (error) {
     await db.from("gmail_connections").update({ last_error: error instanceof GmailError ? error.message : "Sync interrupted. Retry to continue safely." }).eq("user_id", userId).eq("lease_id", lease);
     throw error;

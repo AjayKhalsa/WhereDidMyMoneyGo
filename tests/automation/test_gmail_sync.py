@@ -41,6 +41,16 @@ class SyncJobTests(unittest.TestCase):
         result, _ = self.run_results([(202, pending), (200, complete(1, 4, 0))])
         self.assertEqual(result, {"logged": 3, "matched": 4, "reviewed": 1, "requests": 2})
 
+    def test_receipt_counts_aggregate_separately_from_financial_events(self):
+        pending = {**complete(0, 0, 0), "complete": False, "more": True, "receiptsChecked": 8, "receiptsLinked": 2}
+        result, _ = self.run_results([(202, pending), (200, {**complete(0, 0, 0), "receiptsChecked": 3, "receiptsLinked": 1})])
+        self.assertEqual(result["receiptsChecked"], 11)
+        self.assertEqual(result["receiptsLinked"], 3)
+        self.assertEqual(result["logged"], 0)
+        for invalid in (True, -1, "private@example.com"):
+            with self.assertRaises(job.SyncJobError):
+                self.run_results([(200, {**complete(), "receiptsChecked": invalid})])
+
     def test_backlog_does_not_become_success_when_budget_ends(self):
         pending = {**complete(), "complete": False, "more": True}
         with self.assertRaisesRegex(job.SyncJobError, "unfinished backlog"):

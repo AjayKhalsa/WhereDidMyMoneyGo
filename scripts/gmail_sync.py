@@ -93,11 +93,19 @@ def run_sync(url, secret, fetch=request_sync, pause=time.sleep):
         if (type(complete) is not bool or type(more) is not bool or
                 complete == more or (status == 200) != complete):
             raise SyncJobError("The endpoint did not confirm a consistent backlog status. A successful HTTP request alone is not a completed sync.")
-        for field in totals:
+        for field in ("logged", "matched", "reviewed"):
             count = body.get(field)
             if type(count) is not int or count < 0:
                 raise SyncJobError("The sync response contained invalid counts.")
             totals[field] += count
+        # Optional during a rolling deployment; counts only, no receipt content.
+        for field in ("receiptsChecked", "receiptsLinked"):
+            if field in body:
+                count = body[field]
+                if type(count) is not int or count < 0:
+                    raise SyncJobError("The sync response contained invalid receipt counts.")
+                totals.setdefault(field, 0)
+                totals[field] += count
         if complete:
             return {**totals, "requests": attempt + 1}
         if attempt + 1 < MAX_REQUESTS:
@@ -111,6 +119,9 @@ def main():
         message = ("Gmail sync completed: "
                    f"{totals['logged']} imported, {totals['matched']} already matched, "
                    f"{totals['reviewed']} needing review, {totals['requests']} requests.")
+        if "receiptsChecked" in totals:
+            message += (f" Receipts: {totals['receiptsChecked']} checked, "
+                        f"{totals.get('receiptsLinked', 0)} linked automatically.")
         code = 0
     except SyncJobError as error:
         message, code = str(error), 1

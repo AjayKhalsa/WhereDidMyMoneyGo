@@ -30,6 +30,7 @@ test("three equal-value allocations stay separate, reminders create no payment a
     if (url.hostname === "oauth2.googleapis.com") return json({ access_token: "synthetic" });
     if (url.hostname === "gmail.googleapis.com") {
       if (url.pathname.endsWith("/messages")) {
+        if(url.searchParams.get('q')?.includes('noreply@zomato.com'))return json({messages:[]});
         assert.match(url.searchParams.get("q")!, /from:noreply@groww.in/);
         return json({ messages: Object.keys(rows).map(id => ({ id })) });
       }
@@ -46,7 +47,7 @@ test("three equal-value allocations stay separate, reminders create no payment a
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     if (url.pathname.endsWith("/rpc/gmail_acquire_lease")) return json(true);
     assert.ok(!url.pathname.includes("/rpc/"), "Investment notices must not call a cash-commit or bank matcher RPC");
-    if (url.pathname.endsWith("/gmail_connections")) return json(method === "GET" ? { refresh_token: seal("synthetic", user), start_date: "2026-10-01", aliases: {} } : null);
+    if (url.pathname.endsWith("/gmail_connections")) return json(method === "GET" ? { refresh_token: seal("synthetic", user), start_date: "2026-10-01", aliases: {} } : body?.receipt_scan?{user_id:user}:null);
     if (url.pathname.endsWith("/gmail_messages")) {
       if (method === "POST") { assert.match(url.searchParams.get("on_conflict")!, /user_id,message_id/); return json(null); }
       if (method === "HEAD") return new Response(null, { headers: { "content-range": "*/0" } });
@@ -61,7 +62,7 @@ test("three equal-value allocations stay separate, reminders create no payment a
     assert.equal(method, "GET", "No financial writes for provider evidence alone");
     return json(url.pathname.endsWith("/profiles") ? null : []);
   };
-  assert.deepEqual(await syncMailbox(user), { logged: 0, reviewed: 3, matched: 0, more: false });
+  assert.deepEqual(await syncMailbox(user), { logged: 0, reviewed: 3, matched: 0, more: false, receiptsChecked:0,receiptsLinked:0 });
   assert.equal(rows.reminder.status, "ignored");
   for (const id of ["allocation1", "allocation2", "allocation3"]) {
     assert.equal(rows[id].status, "review");
@@ -69,6 +70,6 @@ test("three equal-value allocations stay separate, reminders create no payment a
     assert.equal(rows[id].candidate.scheduledAmount, undefined);
   }
   const writes = calls;
-  assert.deepEqual(await syncMailbox(user), { logged: 0, reviewed: 0, matched: 0, more: false });
+  assert.deepEqual(await syncMailbox(user), { logged: 0, reviewed: 0, matched: 0, more: false, receiptsChecked:0,receiptsLinked:0 });
   assert.equal(calls, writes, "Resolved parser attempts are not repeated each sync");
 });
