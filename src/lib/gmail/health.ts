@@ -19,14 +19,16 @@ export function gmailHealth(input: {
   };
 }
 
-type Pass = { logged: number; reviewed: number; matched: number; more: boolean };
+type Pass = { logged: number; reviewed: number; matched: number; more: boolean; receiptsChecked?:number; receiptsLinked?:number };
 /** Bounded continuation; incomplete discovery never becomes a completed job. */
 export async function drainMailbox(sync: (deadline: number) => Promise<Pass>, now = Date.now) {
   const deadline = now() + 45000;
-  const result = { logged: 0, reviewed: 0, matched: 0, more: true, passes: 0 };
+  const result:Pass&{passes:number} = { logged: 0, reviewed: 0, matched: 0, more: true, passes: 0 };
   while (result.more && result.passes < 6 && deadline - now() >= 15000) {
     const pass = await sync(deadline);
     result.logged += pass.logged; result.reviewed += pass.reviewed; result.matched += pass.matched;
+    if(pass.receiptsChecked!==undefined)result.receiptsChecked=(result.receiptsChecked??0)+pass.receiptsChecked;
+    if(pass.receiptsLinked!==undefined)result.receiptsLinked=(result.receiptsLinked??0)+pass.receiptsLinked;
     result.more = pass.more; result.passes++;
   }
   return { ...result, complete: !result.more };

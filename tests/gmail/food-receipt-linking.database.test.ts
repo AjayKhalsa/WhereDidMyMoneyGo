@@ -15,6 +15,14 @@ before(async()=>{
  await db.query("insert into transaction_contexts values('payment',$1,'PEOPLE','friends')",[user]);await db.exec('grant all on all tables in schema public to service_role;');
 });
 after(async()=>{await db?.close();});
+test('background checkpoint is empty initially, object-only and inaccessible to browser roles',async()=>{
+ await db.query("insert into gmail_connections(user_id,email,refresh_token,start_date) values($1,'synthetic@example.invalid','synthetic','2026-10-01')",[user]);
+ assert.deepEqual((await db.query<{receipt_scan:object}>('select receipt_scan from gmail_connections')).rows[0]!.receipt_scan,{});
+ await assert.rejects(db.query("update gmail_connections set receipt_scan='[]'"),/check constraint/);
+ await db.exec('set role authenticated');
+ try{await assert.rejects(db.query('select receipt_scan from gmail_connections'),/permission denied/);await assert.rejects(db.query("update gmail_connections set receipt_scan='{}'"),/permission denied/);}
+ finally{await db.exec('reset role');}
+});
 test('receipt link and replay preserve the entire manually corrected financial event',async()=>{
  const before=await snapshot('payment');assert.equal(await link('aa00000001'),'linked');assert.equal(await link('aa00000001'),'already_linked');assert.deepEqual(await snapshot('payment'),before);
  assert.equal((await db.query<{n:number}>("select count(*) n from transactions where id='payment'")).rows[0]!.n,1);

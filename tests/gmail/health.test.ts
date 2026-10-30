@@ -33,6 +33,9 @@ test('scheduled continuation totals passes and exposes exhausted work budget as 
   const bounded = await drainMailbox(async () => { clock += 32000; return { logged: 0, reviewed: 0, matched: 0, more: true }; }, () => clock);
   assert.equal(bounded.passes, 1); assert.equal(bounded.complete, false);
   await assert.rejects(drainMailbox(async () => { throw Error('token expired'); }, () => now), /token expired/);
+  let receipts=0;
+  const enriched=await drainMailbox(async()=>({logged:0,reviewed:0,matched:0,receiptsChecked:8,receiptsLinked:1,more:++receipts<2}),()=>now);
+  assert.equal(enriched.receiptsChecked,16);assert.equal(enriched.receiptsLinked,2);assert.equal(enriched.complete,true);
 });
 test('deployed cron schedule is 03:00 IST', () => {
   assert.equal(JSON.parse(fs.readFileSync('vercel.json', 'utf8')).crons[0].schedule, NIGHTLY_SYNC_UTC);

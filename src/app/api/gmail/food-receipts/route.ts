@@ -5,6 +5,7 @@ import {authenticatedFoodReceipt,parseFoodReceipt,possibleFoodPayments,exactFood
 import {completeLoad} from '@/lib/data/complete-load';
 import {domainRow} from '@/lib/gmail/learning-data';
 import type {Transaction} from '@/lib/domain/types';
+import {FOOD_RECEIPT_QUERY} from '@/lib/gmail/receipt-sync';
 export const maxDuration=60;
 export async function POST(request:NextRequest){
  try{
@@ -13,7 +14,7 @@ export async function POST(request:NextRequest){
   const connection=await db.from('gmail_connections').select('refresh_token').eq('user_id',user.id).single();if(connection.error)throw new GmailError('Connect Gmail first.',409);
   const token=await tokenRequest({grant_type:'refresh_token',refresh_token:unseal(connection.data.refresh_token,user.id)});
   const headers={Authorization:`Bearer ${token.access_token}`},base='https://gmail.googleapis.com/gmail/v1/users/me';
-  const params=new URLSearchParams({q:'newer_than:30d -in:spam -in:trash ((from:noreply@zomato.com subject:"Your Zomato order from") OR (from:noreply@swiggy.in subject:"order was delivered"))',maxResults:'8'});if(body.cursor)params.set('pageToken',body.cursor);
+  const params=new URLSearchParams({q:`newer_than:30d -in:spam -in:trash ${FOOD_RECEIPT_QUERY}`,maxResults:'8'});if(body.cursor)params.set('pageToken',body.cursor);
   const page=await google<{messages?:{id:string}[];nextPageToken?:string}>(`${base}/messages?${params}`,{headers});
   const ledger=await completeLoad(async(from,to)=>await db.from('transactions').select('*',{count:'exact'}).eq('user_id',user.id).order('id').range(from,to),r=>r.id);
   const transactions=ledger.data.map(r=>domainRow<Transaction>(r));
