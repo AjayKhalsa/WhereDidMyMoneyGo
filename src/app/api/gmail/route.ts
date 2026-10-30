@@ -1,6 +1,9 @@
 import { completeLoad } from "@/lib/data/complete-load";
 import { actionableGmailReviews, groupGmailReviews } from "@/lib/gmail/review-list";
-import { domainRow } from "@/lib/gmail/learning-data";
+import { domainRow, learningData } from "@/lib/gmail/learning-data";
+import { historicalRules } from '@/lib/gmail/classification';
+import { currentCategoryReviews } from '@/lib/gmail/category-review';
+import { classificationMerchantKey } from '@/lib/engine/merchant-identity';
 import type { Transaction } from "@/lib/domain/types";
 import type { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
@@ -12,25 +15,32 @@ export async function GET(request: NextRequest) {
     const session = json({}); const user = await userFor(request, session);
     if (!configured()) return json({ configured: false, connection: null, messages: [] });
     const db = admin();
-    const [connection, messages, pending, historical, ledger, sources, categories] = await Promise.all([
+    const [connection, messages, pending, historical, ledger, sources, learned, profile] = await Promise.all([
       db.from("gmail_connections").select("email,start_date,last_synced_at,last_error,page_token,receipt_scan").eq("user_id", user.id).maybeSingle(),
       completeLoad<Record<string, any>>((from,to)=>db.from("gmail_messages").select("message_id,subject,candidate,reason,status,category_review,transaction_id,category_review_snapshot",{count:"exact"}).eq("user_id",user.id).or("status.eq.review,category_review.eq.true").order("message_id").range(from,to),row=>row.message_id),
       db.from("gmail_messages").select("message_id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending"),
       db.from("gmail_backfill_runs").select("query,status,discovery_complete").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-      completeLoad<Record<string, any>>((from,to)=>db.from("transactions").select("id,type,amount,date,description,merchant,notes,account_id,to_account_id,category_id",{count:"exact"}).eq("user_id",user.id).order("id").range(from,to),row=>row.id),
+      completeLoad<Record<string, any>>((from,to)=>db.from("transactions").select("*",{count:"exact"}).eq("user_id",user.id).order("id").range(from,to),row=>row.id),
       completeLoad<Record<string, any>>((from,to)=>db.from("transaction_sources").select("source_kind,source_key,transaction_id,account_id,direction,amount,bank_reference",{count:"exact"}).eq("user_id",user.id).order("source_key").order("source_kind").range(from,to),row=>JSON.stringify([row.source_kind,row.source_key])),
-      completeLoad<Record<string, any>>((from,to)=>db.from("categories").select("id",{count:"exact"}).eq("user_id",user.id).order("id").range(from,to),row=>row.id),
+      learningData(db,user.id,true),
+      db.from('profiles').select('name').eq('id',user.id).maybeSingle(),
     ]);
-    for (const result of [connection, pending, historical]) if (result.error) throw result.error;
-    const actionable = actionableGmailReviews(messages.data as any,ledger.data.map(row=>domainRow<Transaction>(row)),sources.data as any,new Set(categories.data.map(row=>String(row.id))));
+    for (const result of [connection, pending, historical, profile]) if (result.error) throw result.error;
+    const actionable = actionableGmailReviews(messages.data as any,ledger.data.map(row=>domainRow<Transaction>(row)),sources.data as any,new Set(learned.categories.map(row=>row.id)));
     const groups=groupGmailReviews(actionable,ledger.data.map(row=>domainRow<Transaction>(row)));
     const financialReviewCount=groups.financial.length+groups.possibleExisting.length;
     const categoryReviewCount=groups.category.length;
+    // Preview current classification without seeding rules or changing receipts.
+    const trained=historicalRules(learned.transactions,learned.rules);
+    const currentRules=[...learned.rules,...trained.rules].filter(rule=>rule.learningEvidence?.source!=='history'
+      || !trained.conflicts.includes(classificationMerchantKey(rule.learningEvidence.merchantKey)));
+    const categoryReviews=currentCategoryReviews(groups.category,ledger.data,currentRules,learned.categories,
+      profile.data?.name?[profile.data.name]:[],trained.conflicts);
     const clean=(rows:typeof actionable)=>rows.slice(0,50).map(({category_review_snapshot:_snapshot,...row})=>row);
     const receiptWork=!!connection.data?.receipt_scan?.before;
     const health = gmailHealth({ lastSyncedAt: connection.data?.last_synced_at, error: connection.data?.last_error, hasNextPage: !!connection.data?.page_token,hasReceiptWork:receiptWork, pending: pending.count ?? 0, review: financialReviewCount, historical: historical.data });
     const response = json({ configured: true, connection: connection.data ? { ...connection.data, page_token: undefined,receipt_scan:undefined, more: !!connection.data.page_token||receiptWork } : null,
-      messages:clean(groups.financial),categoryMessages:clean(groups.category),possibleExistingMessages:clean(groups.possibleExisting),
+      messages:clean(groups.financial),categoryMessages:clean(categoryReviews),possibleExistingMessages:clean(groups.possibleExisting),
       reviewCount:groups.financial.length,financialReviewCount,categoryReviewCount,possibleExistingCount:groups.possibleExisting.length,health });
     for (const cookie of session.cookies.getAll()) response.cookies.set(cookie);
     return response;

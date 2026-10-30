@@ -13,8 +13,9 @@ import { FoodReceipts } from "./food-receipts";
 import { GmailBackfill } from './gmail-backfill';
 import { suggestedExistingEntry } from "@/lib/gmail/review-list";
 import { reviewDefaults } from '@/lib/gmail/review-defaults';
+import type { CategoryReviewState } from '@/lib/gmail/category-review';
 
-interface ReviewMail { message_id: string; subject: string; reason?: string; candidate?: Alert; category_review?: boolean; suppress_suggested_match?:boolean }
+interface ReviewMail extends CategoryReviewState { message_id: string; subject: string; reason?: string; candidate?: Alert; category_review?: boolean; suppress_suggested_match?:boolean }
 type ReviewItem = Omit<ReviewMail, "candidate"> & { candidate?: Alert | InvestmentNotice };
 interface Status {
   configured: boolean;
@@ -128,7 +129,10 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
   const { db } = useFinance(); const a = mail.candidate;
   const defaults = reviewDefaults(a);
   const [accountId, setAccountId] = useState(defaults.accountId);
-  const [categoryId, setCategoryId] = useState(a?.classification?.categoryId ?? a?.categoryId ?? "");
+  const [chosenCategory, setCategoryId] = useState<string>();
+  const categoryId = chosenCategory ?? mail.categorySuggestion?.categoryId ?? a?.classification?.categoryId ?? a?.categoryId ?? "";
+  const suggestedCategory = db?.categories.find(category=>category.id===mail.categorySuggestion?.categoryId);
+  const suggestedParent = db?.categories.find(category=>category.id===suggestedCategory?.parentId);
   const [kind, setKind] = useState(defaults.kind);
   const [toAccountId, setToAccountId] = useState(defaults.toAccountId);
   const [allowDuplicate, setAllowDuplicate] = useState(false);
@@ -137,7 +141,7 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
   const [learnCategory, setLearnCategory] = useState(true);
   const [refundPosted, setRefundPosted] = useState(false);
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
-  const inputClass = "rounded-lg border border-line bg-surface p-2 text-sm";
+  const inputClass = "min-w-0 max-w-full rounded-lg border border-line bg-surface p-2 text-sm";
   const matchingAccountId = a?.accountId || (a?.direction === "credit" && kind === "TRANSFER" ? toAccountId : accountId);
   const candidates = a && matchingAccountId ? possibleExistingTransactions(db?.transactions ?? [], matchingAccountId, a.amount, a.date, a.direction, a.reference) : [];
   async function submit(action: "log" | "ignore" | "match") {
@@ -152,7 +156,7 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
   return <div className="space-y-3 border-t border-line pt-4">
     <p className="text-sm font-medium">{a ? `${a.merchant} · ${formatMoney(a.amount)} · ${a.date}` : mail.subject}</p>
     {a && <p className="text-xs text-ink-tertiary">{a.bank} {a.instrument.replace("_", " ")} ending {a.tail} · {alertTimeLabel({timeSource: a.timeSource ?? "unknown", timeConfidence: a.timeConfidence ?? "unknown", occurredAt: a.occurredAt})}</p>}
-    <p className="text-sm text-ink-secondary">{mail.reason || "Check these details before adding."}</p>
+    <p className="text-sm text-ink-secondary">{mail.entryChanged ? 'This ledger entry changed after the original review. Check it in Transactions before changing its category.' : suggestedCategory ? `Suggested: ${suggestedParent?`${suggestedParent.name} / `:''}${suggestedCategory.name}` : mail.reason || "Check these details before adding."}</p>
     {a?.direction === 'credit' && a.instrument === 'bank' && !mail.category_review && <p className="text-sm text-warning">Incoming bank credit awaiting a ledger decision. It has not been added by this email yet. Check the existing-entry matches or choose its financial purpose.</p>}
     {a?.creditKind === 'repayment' && <p className="text-xs text-ink-secondary">Payment received: {formatMoney(a.amount)}. This can be a partial payment. It reduces the card balance by this amount; it is not new spending or income.</p>}
     {a?.refundStatus === 'initiated' && !mail.category_review && <>
@@ -161,7 +165,9 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
     </>}
     {mail.category_review&&<p className="text-xs text-ink-secondary">Already in your ledger and included in balances. Saving a category will not add another transaction.</p>}
     {a && isInvestmentDebit(a) && <p className="text-xs text-ink-secondary">Record this using Invested in the transaction editor, then link its existing entry here. It must not be logged as an expense or card repayment.</p>}
-    {a?.classification&&<p className="text-xs text-ink-tertiary">{a.classification.reason}</p>}
+    {mail.categorySuggestion&&<details className="text-xs text-ink-tertiary"><summary className="cursor-pointer">Why this category?</summary><p className="mt-1">{mail.categorySuggestion.reason}</p></details>}
+    {!mail.category_review&&a?.classification&&<p className="text-xs text-ink-tertiary">{a.classification.reason}</p>}
+    {mail.entryChanged&&<a className="text-sm underline" href="/transactions">Check ledger</a>}
     <a className="text-sm underline" target="_blank" rel="noreferrer" href={`https://mail.google.com/mail/u/?authuser=${encodeURIComponent(email ?? "")}#all/${mail.message_id}`}>View original email</a>
     {a && <>
       <div className="flex flex-wrap gap-2">
@@ -183,6 +189,6 @@ function ReviewRow({ mail, email, disabled, onSaved }: { mail: ReviewMail; email
       </div>}
     </>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    <div className="flex gap-2">{a && !isInvestmentDebit(a) && <Button size="sm" disabled={disabled || busy || !accountId || !kind || (kind === 'TRANSFER' && (!toAccountId || accountId === toAccountId)) || (!mail.category_review && a.refundStatus === 'initiated' && !refundPosted)} onClick={() => void submit("log")}>{mail.category_review?'Save category':'Add to ledger'}</Button>}<Button size="sm" variant="quiet" disabled={disabled || busy} onClick={() => void submit("ignore")}>{mail.category_review?'Keep current entry':'Dismiss email'}</Button></div>
+    <div className="flex flex-wrap gap-2">{a && !isInvestmentDebit(a) && <Button size="sm" disabled={disabled || busy || mail.entryChanged || !accountId || !kind || (['EXPENSE','REFUND'].includes(kind)&&!categoryId) || (kind === 'TRANSFER' && (!toAccountId || accountId === toAccountId)) || (!mail.category_review && a.refundStatus === 'initiated' && !refundPosted)} onClick={() => void submit("log")}>{mail.category_review?(mail.categorySuggestion?.categoryId===categoryId?'Apply suggested category':'Save category'):'Add to ledger'}</Button>}<Button size="sm" variant="quiet" disabled={disabled || busy} onClick={() => void submit("ignore")}>{mail.category_review?'Keep current entry':'Dismiss email'}</Button></div>
   </div>;
 }
