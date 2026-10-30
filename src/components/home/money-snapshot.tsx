@@ -1,7 +1,7 @@
 "use client";
 
-import { investmentRate } from "@/lib/engine/analytics";
 import { percentOf } from "@/lib/domain/money";
+import { useMoneyText } from "@/lib/hooks/use-privacy";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { Amount } from "@/components/ui/amount";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
  */
 
 export function MoneySnapshot() {
+  const money = useMoneyText();
   const { totals, safeToSpend } = useFinance();
 
   const items = [
@@ -27,10 +28,10 @@ export function MoneySnapshot() {
     {
       id: "invested",
       label: "Invested",
-      value: totals.invested,
+      value: totals.investmentContributions,
       sub:
         totals.income > 0
-          ? `${investmentRate(totals).toFixed(0)}%`
+          ? `${percentOf(totals.investmentContributions, totals.income).toFixed(0)}%`
           : null,
     },
     {
@@ -63,7 +64,7 @@ export function MoneySnapshot() {
           )}
         >
           <dt className="text-[12.5px] text-ink-secondary">{item.label}</dt>
-          <dd className="mt-1 flex items-baseline gap-1.5">
+          <dd className="mt-1 flex flex-wrap items-baseline gap-1.5">
             <Amount value={item.value} size="md" />
             {item.sub && (
               <span className="text-[12.5px] text-ink-tertiary tnum">
@@ -71,6 +72,11 @@ export function MoneySnapshot() {
               </span>
             )}
           </dd>
+          {item.id === "invested" && totals.investmentWithdrawals > 0 && (
+            <p className="mt-1 text-[12px] text-ink-tertiary">
+              {money(totals.investmentWithdrawals)} withdrawn · {money(totals.invested)} net flow
+            </p>
+          )}
         </div>
       ))}
     </dl>

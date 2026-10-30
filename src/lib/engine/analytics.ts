@@ -72,7 +72,10 @@ export interface MonthTotals {
   key: MonthKey;
   income: Paise;
   spent: Paise;
+  /** Net contributions minus explicitly linked withdrawals. */
   invested: Paise;
+  investmentContributions: Paise;
+  investmentWithdrawals: Paise;
   /** Money moved between accounts. Shown nowhere as spending — by design. */
   transferred: Paise;
   expenseCount: number;
@@ -86,6 +89,8 @@ export function monthTotals(
   let income = 0;
   let spent = 0;
   let invested = 0;
+  let investmentContributions = 0;
+  let investmentWithdrawals = 0;
   let transferred = 0;
   let expenseCount = 0;
   const metadata = spendingAttribution(transactions);
@@ -112,15 +117,17 @@ export function monthTotals(
         break;
       case "INVESTMENT":
         invested += investmentMovement(t);
+        investmentContributions += t.amount;
         break;
       case "TRANSFER":
         invested += investmentMovement(t);
+        investmentWithdrawals -= investmentMovement(t);
         transferred += t.amount;
         break;
     }
   }
 
-  return { key, income, spent, invested, transferred, expenseCount };
+  return { key, income, spent, invested, investmentContributions, investmentWithdrawals, transferred, expenseCount };
 }
 
 // ---------------------------------------------------------------------------
@@ -561,7 +568,7 @@ export function lensTotals(
 // Rates
 // ---------------------------------------------------------------------------
 
-/** Share of income put into investments, 0–100. */
+/** Net investment flow as a share of income; can be negative or exceed 100%. */
 export function investmentRate(totals: MonthTotals): number {
   if (totals.income <= 0) return 0;
   return (totals.invested / totals.income) * 100;

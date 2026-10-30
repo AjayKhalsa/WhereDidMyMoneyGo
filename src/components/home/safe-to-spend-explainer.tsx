@@ -21,8 +21,8 @@ import { cn } from "@/lib/utils";
  *
  * "This month" follows, and always shows its two endpoints. That figure is a
  * *change* in position over the cycle, so it can exceed the cash on hand
- * whenever card debt was paid down — printing it alone invites exactly the
- * "how is my surplus bigger than my bank balance?" confusion it caused once.
+ * when opening positions were negative. Asset redemptions are shown separately
+ * from income; card repayments do not count as earnings or wealth gains.
  */
 
 export function SafeToSpendExplainer() {
@@ -35,6 +35,7 @@ export function SafeToSpendExplainer() {
     monthlySurplus,
     positionAtCycleStart,
     positionNow,
+    positionDifference,
     cardDebtCleared,
     dailyAllowance,
     remainingDays,
@@ -70,15 +71,14 @@ export function SafeToSpendExplainer() {
           This month
         </h3>
         <p className="mb-1 text-[13px] leading-relaxed text-ink-secondary">
-          A different question: how much did this cycle move you forward? This
-          is a change, not a balance — so it can be larger than your bank
-          balance.
+          Income plus returned investment principal, minus contributions and spending.
+          This is a change in cash and card position, not investment gains or net worth.
         </p>
         <BreakdownList lines={monthlySurplusBreakdown} />
         <div className="mt-3 rounded-xl bg-surface-sunken p-4">
           <div className="flex items-baseline justify-between gap-4">
             <span className="text-[14.5px] font-medium text-ink">
-              {monthlySurplus >= 0 ? "Better off by" : "Worse off by"}
+              {monthlySurplus >= 0 ? "Cash/card position improved by" : "Cash/card position fell by"}
             </span>
             <Amount value={Math.abs(monthlySurplus)} size="lg" />
           </div>
@@ -86,7 +86,7 @@ export function SafeToSpendExplainer() {
             <Line
               label="Where you started"
               value={money(positionAtCycleStart)}
-              hint="Cash minus card debt when this cycle began"
+              hint="Cash plus card credits, minus card debt when this cycle began"
             />
             <Line
               label="Where you are now"
@@ -94,11 +94,16 @@ export function SafeToSpendExplainer() {
               emphasis
             />
           </div>
+          {positionDifference !== 0 && (
+            <p role="alert" className="mt-3 text-[12.5px] text-warning">
+              Recorded flows differ from the cash/card position change by {money(positionDifference)}.
+              Review adjustments and account coverage before relying on this change.
+            </p>
+          )}
           {cardDebtCleared > 0 && (
             <p className="mt-3 text-[12.5px] leading-relaxed text-ink-secondary">
-              {money(cardDebtCleared)} of this went to clearing card debt
-              rather than building up in your account — which is why it&rsquo;s
-              larger than your bank balance.
+              Card debt fell by {money(cardDebtCleared)} during this cycle.
+              Repayments reduce bank cash and card debt together; they do not create income or gains.
             </p>
           )}
         </div>

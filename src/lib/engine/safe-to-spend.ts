@@ -45,9 +45,10 @@ import {
  *
  * `monthlySurplus` — *change over the cycle*. Income received minus what was
  * spent and invested. Crucially this is a delta, not a balance: it equals
- * the operating change in `position` (cash minus card debt), including
- * explicitly linked investment redemptions, which is why it can legitimately exceed the cash on hand — clearing
- * card debt improves your position without putting anything in the bank.
+ * the operating change in `position` (cash plus card credits minus card debt),
+ * including explicitly linked investment redemptions. This is not a wealth
+ * change: selling an asset moves existing wealth into cash, while paying a
+ * card reduces cash and debt together.
  * `positionAtCycleStart`/`positionNow` are surfaced alongside it so the UI can
  * compare the ledger's actual position change rather than present a delta as
  * money. Strictly retrospective: no expected-but-unreceived income, no
@@ -91,7 +92,9 @@ export interface SafeToSpendResult {
   positionAtCycleStart: Paise;
   /** Cash − card debt right now. `monthlySurplus` is the difference. */
   positionNow: Paise;
-  /** How much of the surplus cleared card debt rather than building cash. */
+  /** Nonzero when operating flows do not explain the recorded cash/card change. */
+  positionDifference: Paise;
+  /** Reduction in outstanding card debt during the selected cycle, independent of surplus. */
   cardDebtCleared: Paise;
   /** `safeAmount` spread over the days that remain, including today. */
   dailyAllowance: Paise;
@@ -363,7 +366,7 @@ export function calculateSafeToSpend(
   const positionNow = netPosition(accounts, positionRows);
   const cardDebtCleared = Math.max(
     0,
-    cardDebtOf(accounts, priorTransactions) - cardOutstanding,
+    cardDebtOf(accounts, priorTransactions) - cardDebtOf(accounts, positionRows),
   );
 
   const remainingDays = remainingDaysInMonth(now, month, cycleStartDay);
@@ -423,7 +426,7 @@ export function calculateSafeToSpend(
     });
   }
 
-  // Three lines only, all backward-looking, mirroring `monthlySurplus`
+  // Separate contributions and principal returned, mirroring `monthlySurplus`
   // term for term so the arithmetic on screen is the arithmetic in code.
   const monthlySurplusBreakdown: BreakdownLine[] = [
     {
@@ -435,11 +438,18 @@ export function calculateSafeToSpend(
     },
     {
       id: "invested",
-      label: totals.invested < 0 ? "Net investment withdrawals" : "Net invested",
-      amount: Math.abs(totals.invested),
-      direction: totals.invested < 0 ? "add" : "subtract",
-      hint: "Contributions minus explicitly linked withdrawals",
+      label: "Investment contributions",
+      amount: totals.investmentContributions,
+      direction: "subtract",
+      hint: "Actual money invested during this cycle, before withdrawals",
     },
+    ...(totals.investmentWithdrawals > 0 ? [{
+      id: "investment-withdrawals",
+      label: "Investment principal returned",
+      amount: totals.investmentWithdrawals,
+      direction: "add" as const,
+      hint: "Explicitly linked withdrawals, including FD principal; not income",
+    }] : []),
     {
       id: "spent",
       label: totals.spent < 0 ? "Net refunds received" : "Spent after refunds",
@@ -454,6 +464,7 @@ export function calculateSafeToSpend(
     monthlySurplus,
     positionAtCycleStart,
     positionNow,
+    positionDifference: monthlySurplus - (positionNow - positionAtCycleStart),
     cardDebtCleared,
     dailyAllowance,
     remainingDays,

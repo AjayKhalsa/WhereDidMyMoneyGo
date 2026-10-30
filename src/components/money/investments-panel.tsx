@@ -8,7 +8,6 @@ import { parseAmountInput } from "@/lib/domain/money";
 import type { Investment, InvestmentKind } from "@/lib/domain/types";
 import {
   investmentContributions,
-  investmentRate,
   portfolioValue,
   valueInvestments,
 } from "@/lib/engine/analytics";
@@ -74,9 +73,9 @@ export function InvestmentsPanel() {
   const totalContributed = valuations
     .filter((v) => v.investment.isActive)
     .reduce((acc, v) => acc + v.contributed, 0);
-  const totalGain = portfolio - totalContributed;
+  const totalGain = valuations.filter(v => v.investment.isActive).reduce((sum, v) => sum + v.gain, 0);
 
-  const rate = investmentRate(totals);
+  const rate = totals.income > 0 ? totals.investmentContributions / totals.income * 100 : 0;
 
   return (
     <>
@@ -139,14 +138,19 @@ export function InvestmentsPanel() {
         </div>
       )}
 
-      {totals.invested > 0 && (
+      {(totals.investmentContributions > 0 || totals.investmentWithdrawals > 0) && (
         <div className="rounded-xl bg-surface-sunken p-3.5">
           <div className="flex items-baseline justify-between gap-3">
             <span className="text-[13px] text-ink-secondary">
               Invested this month
             </span>
-            <Amount value={totals.invested} size="md" />
+            <Amount value={totals.investmentContributions} size="md" />
           </div>
+          {totals.investmentWithdrawals > 0 && (
+            <p className="mt-1.5 text-[12.5px] text-ink-secondary">
+              {money(totals.investmentWithdrawals)} principal returned · {money(totals.invested)} net flow
+            </p>
+          )}
           {totals.income > 0 && (
             <>
               <div className="mt-2.5">
