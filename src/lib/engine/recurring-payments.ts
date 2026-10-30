@@ -2,7 +2,8 @@ import {toDateInputValue,clampToMonth} from '@/lib/domain/dates';
 import {transactionOccurredBy} from '@/lib/domain/transaction-time';
 import type {RecurringTransaction,Transaction} from '@/lib/domain/types';
 import {recognizedMerchants} from './merchant-recognition';
-import {occurrencesInCycle} from './recurring-occurrences';
+import {anniversaryMonth,occurrencesInCycle} from './recurring-occurrences';
+import {merchantPayee} from './merchant-identity';
 
 export interface RecurringOccurrence {
  rule:RecurringTransaction;dueDate:Date;transaction?:Transaction;basis?:'explicit'|'recognised';
@@ -10,6 +11,7 @@ export interface RecurringOccurrence {
 const normalized=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 function identity(text:string|undefined):string|undefined {
  if(!text)return;
+ text=merchantPayee(text);
  const known=recognizedMerchants(text);
  if(known.length===1)return `brand:${known[0]!.name.toLowerCase()}`;
  if(known.length>1)return;
@@ -45,7 +47,7 @@ export function overlappingRecurringRules(rules:RecurringTransaction[]):Map<stri
     gap=Math.min(gap,Math.abs(dayNumber(toDateInputValue(x))-dayNumber(toDateInputValue(y))));
    }
   }else{
-   const ma=new Date(a.createdAt).getMonth(),mb=new Date(b.createdAt).getMonth();gap=Infinity;
+   const ma=anniversaryMonth(a.createdAt),mb=anniversaryMonth(b.createdAt);gap=Infinity;
    for(const year of [2024,2025])for(const offset of [-1,0,1]){
     const x=clampToMonth(year,ma,a.dayOfPeriod),y=clampToMonth(year+offset,mb,b.dayOfPeriod);
     gap=Math.min(gap,Math.abs(dayNumber(toDateInputValue(x))-dayNumber(toDateInputValue(y))));

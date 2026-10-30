@@ -1,6 +1,8 @@
 import type { Paise, RecurringTransaction, Transaction } from "@/lib/domain/types";
 import {transactionOccurredBy} from '@/lib/domain/transaction-time';
-import {merchantKey} from './merchant-identity';
+import {recognizedMerchants} from './merchant-recognition';
+import {merchantPayee} from './merchant-identity';
+import {monthKeyToDate} from '@/lib/domain/dates';
 
 /**
  * Recurring auto-detection.
@@ -36,20 +38,17 @@ function median(values: number[]): number {
 }
 
 function groupKey(t: Transaction): string {
-  return t.merchant ? `m:${merchantKey(t.merchant)}` : `d:${t.description.trim().toLowerCase()}`;
+  return recurringIdentity(t.merchant||t.description);
 }
-
-/**
- * Same derivation as `groupKey`, applied to an existing recurring rule —
- * so a rule created from a merchant-less candidate (grouped by description)
- * still excludes that candidate on the next scan, not just merchant-based
- * ones. Without this, "Add as recurring" on a description-grouped
- * candidate never stops it being suggested again.
- */
+/** Brand evidence is shared across merchant/description fields. Unknown names
+ * retain their digits, and existing schedules suppress the same plan only. */
+function recurringIdentity(name:string):string{
+  name=merchantPayee(name);
+  const known=recognizedMerchants(name);
+  return known.length===1?`brand:${known[0]!.name.toLowerCase()}`:`text:${name.trim().toLowerCase().replace(/\s+/g,' ')}`;
+}
 function recurringRuleKey(r: RecurringTransaction): string {
-  return r.merchant
-    ? `m:${merchantKey(r.merchant)}`
-    : `d:${r.description.trim().toLowerCase()}`;
+  return recurringIdentity(r.merchant||r.description);
 }
 
 export function detectRecurringCandidates(
@@ -72,8 +71,9 @@ export function detectRecurringCandidates(
   );
 
   const groups = new Map<string, Transaction[]>();
+  const refunded=new Set(transactions.filter(t=>t.type==='INCOME'&&t.isRefund&&t.reversesTransactionId&&transactionOccurredBy(t,now)).map(t=>t.reversesTransactionId));
   for (const t of transactions) {
-    if (t.type !== "EXPENSE" || t.categoryId === 'adjustment' || t.amount <= 0 || !transactionOccurredBy(t,now)) continue;
+    if (t.type !== "EXPENSE" || refunded.has(t.id) || t.categoryId === 'adjustment' || t.amount <= 0 || !transactionOccurredBy(t,now)) continue;
     if (new Date(t.date).getTime() < cutoff) continue;
     if (alreadyRecurringIds.has(t.id)) continue;
     const identity = groupKey(t);
@@ -105,8 +105,8 @@ export function detectRecurringCandidates(
     const chronological = [...sorted].reverse();
     const gapDays: number[] = [];
     for (let i = 1; i < chronological.length; i++) {
-      const prev = new Date(chronological[i - 1]!.date).getTime();
-      const curr = new Date(chronological[i]!.date).getTime();
+      const prev = Date.parse(chronological[i - 1]!.date.slice(0,10)+'T12:00:00Z');
+      const curr = Date.parse(chronological[i]!.date.slice(0,10)+'T12:00:00Z');
       gapDays.push((curr - prev) / (24 * 60 * 60 * 1000));
     }
 
@@ -119,7 +119,7 @@ export function detectRecurringCandidates(
     if (!suggestedFrequency) continue;
 
     const latest = sorted[0]!;
-    const latestDate = new Date(latest.date);
+    const latestDate = monthKeyToDate(latest.date.slice(0,10));
     const suggestedDayOfPeriod =
       suggestedFrequency === "WEEKLY" ? latestDate.getDay() : latestDate.getDate();
 

@@ -1,5 +1,13 @@
 import {clampToMonth,daysBetween} from '@/lib/domain/dates';
 import type {RecurringTransaction} from '@/lib/domain/types';
+import {indiaNow} from '@/lib/domain/transaction-time';
+
+/** Date-only creation metadata is a wall date; timestamp metadata uses IST. */
+export function anniversaryMonth(createdAt:string):number{
+ const hasOffset=/(?:Z|[+-]\d{2}:\d{2})$/i.test(createdAt);
+ const date=hasOffset&&Number.isFinite(Date.parse(createdAt))?indiaNow(new Date(createdAt)):createdAt;
+ return Number(date.slice(5,7))-1;
+}
 
 /**
  * Every date a rule is due inside `[cycleStart, cycleEnd]`.
@@ -30,10 +38,10 @@ export function occurrencesInCycle(
   }
 
   if (rule.frequency === "YEARLY") {
-    const anniversaryMonth = new Date(rule.createdAt).getMonth();
+    const month = anniversaryMonth(rule.createdAt);
     // A cycle can straddle a year boundary, so test both candidate years.
     return [cycleStart.getFullYear(), cycleEnd.getFullYear()]
-      .map((year) => clampToMonth(year, anniversaryMonth, rule.dayOfPeriod))
+      .map((year) => clampToMonth(year, month, rule.dayOfPeriod))
       .filter((d, i, all) => inWindow(d) && all.findIndex((x) => x.getTime() === d.getTime()) === i);
   }
 

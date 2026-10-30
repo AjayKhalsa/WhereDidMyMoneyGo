@@ -28,6 +28,8 @@ import { MoneyField, SelectField, TextField } from "@/components/ui/fields";
 import { Button } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
 import {TransactionList} from '@/components/transactions/transaction-list';
+import {SubscriptionOverview} from './subscription-overview';
+import {subscriptionCategory} from '@/lib/engine/subscription-overview';
 import { useToast } from "@/components/ui/toast";
 import { AccountPicker, CategoryPicker } from "@/components/pickers/pickers";
 import { createId, pluralise } from "@/lib/utils";
@@ -81,6 +83,8 @@ export function RecurringPanel() {
     [db?.transactions, rules, now, dismissed],
   );
 
+  const otherCandidates=candidates.filter(candidate=>!subscriptionCategory(candidate.categoryId,db?.categories??[]));
+
   function openCandidate(candidate: RecurringCandidate) {
     setEditing({
       id: createId("rec"),
@@ -99,9 +103,10 @@ export function RecurringPanel() {
 
   return (
     <>
-      {candidates.length > 0 && (
+      <SubscriptionOverview onEditRule={setEditing} onCandidate={openCandidate} dismissed={dismissed} onDismiss={key=>setDismissed(previous=>new Set(previous).add(key))}/>
+      {otherCandidates.length > 0 && (
         <div className="-mx-3 space-y-2 px-3">
-          {candidates.map((candidate) => (
+          {otherCandidates.map((candidate) => (
             <div
               key={candidate.key}
               className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-accent/25 bg-accent-soft/50 p-3"
