@@ -1,7 +1,7 @@
 import { transactionOccurredBy } from "@/lib/domain/transaction-time";
-import { clampToMonth, daysBetween, monthKey, type MonthKey } from "@/lib/domain/dates";
+import { clampToMonth, daysBetween, monthKey,monthKeyToDate,endOfMonth, type MonthKey } from "@/lib/domain/dates";
 import type { Paise, RecurringTransaction, Transaction } from "@/lib/domain/types";
-import { monthTransactions } from "./analytics";
+import {resolveRecurringPayments,overlappingRecurringRules,possibleRecurringPayments} from './recurring-payments';
 
 /**
  * Recurring schedule maths (spec §18).
@@ -97,6 +97,12 @@ export interface RecurringStatus {
   /** The most recent charge this rule produced, if any. */
   lastCharge: Transaction | undefined;
   monthlyCost: Paise;
+  paidCount:number;
+  occurrenceCount:number;
+  recognisedCount:number;
+  overlappingRuleIds:string[];
+  payments:Transaction[];
+  possiblePayments:Transaction[];
 }
 
 /**
@@ -114,11 +120,8 @@ export function recurringStatuses(
 ): RecurringStatus[] {
   const types = new Map(rules.map(r => [r.id, r.type]));
   const actualPayments = transactions.filter(t => t.recurringId && types.get(t.recurringId) === t.type && t.categoryId !== "adjustment" && transactionOccurredBy(t, now));
-  const paidRuleIds = new Set(
-    monthTransactions(actualPayments, month, cycleStartDay)
-      .map((t) => t.recurringId)
-      .filter((id): id is string => Boolean(id)),
-  );
+  const occurrences=resolveRecurringPayments(rules,transactions,monthKeyToDate(month),endOfMonth(month,cycleStartDay),now);
+  const overlapping=overlappingRecurringRules(rules);
 
   const lastByRule = new Map<string, Transaction>();
   for (const t of actualPayments) {
@@ -129,14 +132,19 @@ export function recurringStatuses(
 
   return rules
     .map((rule) => {
-      const nextDate = nextOccurrence(rule, now);
+      const slots=occurrences.filter(s=>s.rule.id===rule.id),paid=slots.filter(s=>s.transaction);
+      const nextDate = slots.find(s=>!s.transaction&&daysBetween(now,s.dueDate)>=0)?.dueDate??nextOccurrence(rule, now);
+      const lastCharge=[lastByRule.get(rule.id),...paid.map(s=>s.transaction!)].filter((t):t is Transaction=>!!t).sort((a,b)=>b.date.localeCompare(a.date))[0];
       return {
         rule,
         nextDate,
         daysUntil: daysBetween(now, nextDate),
-        paidThisMonth: paidRuleIds.has(rule.id),
-        lastCharge: lastByRule.get(rule.id),
+        paidThisMonth: slots.length>0&&paid.length===slots.length,
+        lastCharge,
         monthlyCost: monthlyEquivalent(rule),
+        paidCount:paid.length,occurrenceCount:slots.length,recognisedCount:paid.filter(s=>s.basis==='recognised').length,overlappingRuleIds:overlapping.get(rule.id)??[],
+        payments:paid.map(s=>s.transaction!),
+        possiblePayments:[...new Map(slots.filter(s=>!s.transaction).flatMap(s=>possibleRecurringPayments(rule,transactions,s.dueDate,now)).map(t=>[t.id,t])).values()],
       };
     })
     .sort((a, b) => {

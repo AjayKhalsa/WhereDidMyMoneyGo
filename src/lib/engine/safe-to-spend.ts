@@ -1,6 +1,6 @@
+import {resolveRecurringPayments} from './recurring-payments';
 import { transactionOccurredBy } from "@/lib/domain/transaction-time";
 import {
-  clampToMonth,
   daysBetween,
   endOfMonth,
   monthKey,
@@ -145,59 +145,13 @@ export function expectedMonthlyIncome(sources: IncomeSource[]): Paise {
 }
 
 /**
- * Every date a rule is due inside `[cycleStart, cycleEnd]`.
- *
- * Mirrors `nextOccurrence`'s reading of `dayOfPeriod` exactly (day-of-month
- * for MONTHLY/YEARLY, day-of-week 0-6 for WEEKLY, yearly anniversary month
- * taken from `createdAt`) so the two can never disagree about when a bill
- * lands. Weekly rules legitimately return several dates — that is the whole
- * reason this returns a list rather than one date.
- */
-function occurrencesInCycle(
-  rule: RecurringTransaction,
-  cycleStart: Date,
-  cycleEnd: Date,
-): Date[] {
-  const inWindow = (d: Date) =>
-    daysBetween(cycleStart, d) >= 0 && daysBetween(d, cycleEnd) >= 0;
-
-  if (rule.frequency === "WEEKLY") {
-    const target = ((rule.dayOfPeriod % 7) + 7) % 7;
-    const first = new Date(cycleStart);
-    first.setDate(first.getDate() + ((target - cycleStart.getDay() + 7) % 7));
-    const out: Date[] = [];
-    for (let d = first; inWindow(d); d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7)) {
-      out.push(d);
-    }
-    return out;
-  }
-
-  if (rule.frequency === "YEARLY") {
-    const anniversaryMonth = new Date(rule.createdAt).getMonth();
-    // A cycle can straddle a year boundary, so test both candidate years.
-    return [cycleStart.getFullYear(), cycleEnd.getFullYear()]
-      .map((year) => clampToMonth(year, anniversaryMonth, rule.dayOfPeriod))
-      .filter((d, i, all) => inWindow(d) && all.findIndex((x) => x.getTime() === d.getTime()) === i);
-  }
-
-  // MONTHLY. The same `dayOfPeriod` can land in either the cycle's start
-  // month or its end month depending on how it compares to `cycleStartDay`
-  // (a Jul24 → Aug23 cycle: day 5 occurs in August, day 28 in July), so try
-  // both rather than comparing raw day-of-month integers.
-  return [
-    clampToMonth(cycleStart.getFullYear(), cycleStart.getMonth(), rule.dayOfPeriod),
-    clampToMonth(cycleEnd.getFullYear(), cycleEnd.getMonth(), rule.dayOfPeriod),
-  ].filter((d, i, all) => inWindow(d) && all.findIndex((x) => x.getTime() === d.getTime()) === i);
-}
-
-/**
  * Recurring charges still to come this cycle — one entry per *occurrence*,
  * not per rule, because a weekly bill is due four or five times a cycle and
  * reserving it once would understate what's committed.
  *
- * Charges already made are netted off by count rather than by suppressing
- * the rule outright: two of a weekly bill's four payments being recorded
- * means two are still to come, not none.
+ * Each posted payment clears only its own occurrence. Explicit saved links
+ * and unique subscription matches share the same resolution as Money and
+ * the payment calendar; ambiguous matches remain reserved for review.
  */
 export function upcomingRecurring(
   recurring: RecurringTransaction[],
@@ -206,13 +160,6 @@ export function upcomingRecurring(
   now: Date,
   cycleStartDay = 1,
 ): { rule: RecurringTransaction; dueDate: Date; amount: Paise }[] {
-  const paidCounts = new Map<string, number>();
-  const ruleTypes = new Map(recurring.map(r => [r.id, r.type]));
-  for (const t of monthTransactions(transactions, month, cycleStartDay)) {
-    if (!t.recurringId || t.type !== ruleTypes.get(t.recurringId) || t.categoryId === "adjustment" || !transactionOccurredBy(t, now)) continue;
-    paidCounts.set(t.recurringId, (paidCounts.get(t.recurringId) ?? 0) + 1);
-  }
-
   const cycleStart = monthKeyToDate(month);
   const cycleEnd = endOfMonth(month, cycleStartDay);
   const isCurrentCycle = monthKey(now, cycleStartDay) === month;
@@ -221,21 +168,9 @@ export function upcomingRecurring(
   // every rule "still due" inside that cycle window counts.
   const cutoff = isCurrentCycle ? now : cycleStart;
 
-  const out: { rule: RecurringTransaction; dueDate: Date; amount: Paise }[] = [];
-  for (const rule of recurring) {
-    if (!rule.isActive) continue;
-
-    const dates = occurrencesInCycle(rule, cycleStart, cycleEnd);
-    // Drop the earliest N, where N is how many charges this rule already
-    // produced this cycle — those are the ones that have been paid.
-    const unpaid = dates.slice(paidCounts.get(rule.id) ?? 0);
-
-    for (const dueDate of unpaid) {
-      if (daysBetween(cutoff, dueDate) < 0) continue; // already passed
-      out.push({ rule, dueDate, amount: rule.amount });
-    }
-  }
-  return out.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+  return resolveRecurringPayments(recurring,transactions,cycleStart,cycleEnd,now)
+    .filter(slot=>!slot.transaction&&daysBetween(cutoff,slot.dueDate)>=0)
+    .map(({rule,dueDate})=>({rule,dueDate,amount:rule.amount}));
 }
 
 /** Planned investment contributions not yet made this month. */
