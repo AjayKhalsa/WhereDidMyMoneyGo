@@ -12,6 +12,14 @@ const LOCAL_DINING: MerchantEntry[] = [
   {name:'Cafe Madras', aliases:['cafe madras'], categoryId:'dining'},
   {name:'Cafe Mondegar', aliases:['cafe mondegar'], categoryId:'dining'},
   {name:'Bademiya', aliases:['bademiya'], categoryId:'dining'},
+  {name:"Good Flippin' Burgers", aliases:['good flippin burgers','good flippin'], categoryId:'dining'},
+  {name:'Bee Laban', aliases:['bee laban'], categoryId:'dining'},
+  {name:'Kanha Sweets', aliases:['kanha sweets'], categoryId:'dining'},
+  {name:'Pehlwan Kulcha Shop', aliases:['pehlwan kulcha shop','pehlwan kulcha'], categoryId:'dining'},
+  {name:'Ram Ashraya', aliases:['ram ashraya','ramashraya'], categoryId:'dining'},
+  {name:'Sardar Pav Bhaji', aliases:['sardar pav bhaji'], categoryId:'dining'},
+  {name:'Prithvi Cafe', aliases:['prithvi cafe'], categoryId:'dining'},
+  {name:'SodaBottleOpenerWala', aliases:['sodabottleopenerwala','soda bottle opener wala'], categoryId:'dining'},
 ];
 
 /** Category evidence only: do not use this to merge financial identities or infer location. */
@@ -21,7 +29,9 @@ export function recognizedMerchants(text: string): MerchantEntry[] {
     [...merchant.aliases, merchant.name].some(alias => haystack.includes(` ${normalized(alias)} `)));
   // Explicit parent/sub-brand combination; retain the more specific merchant.
   return matches.filter(m => !(m.name === 'Swiggy' && matches.some(v => v.name === 'Instamart'))
-    && !(m.name === 'YouTube Premium' && matches.some(v => v.name === 'YouTube Music')));
+    && !(m.name === 'YouTube Premium' && matches.some(v => v.name === 'YouTube Music'))
+    && !(m.name === 'Amazon' && matches.some(v => ['Amazon Prime','Prime'].includes(v.name)))
+    && !(m.name === 'Amazon Prime' && matches.some(v => v.name === 'Prime')));
 }
 
 /** Clear food-business descriptors; ambiguous bar/hotel/social alone are insufficient. */

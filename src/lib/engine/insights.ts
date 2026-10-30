@@ -1,5 +1,6 @@
 import { spendingReport } from "./spending-report";
-import { isSpendingActivity, isCategoryActivity, netSpending, investmentMovement, spendingAttribution } from "./spending";
+import {personalSpendingInsights} from './personal-spending-insights';
+import { isSpendingActivity, isCategoryActivity, netSpending, spendingAttribution } from "./spending";
 import { actualTransactionTime, transactionOccurredBy } from "@/lib/domain/transaction-time";
 import { groupIdOf } from "@/lib/domain/categories";
 import { contextLabel } from "@/lib/domain/contexts";
@@ -26,7 +27,6 @@ import {
   compareToAverage,
   creditCardOutstanding,
   highFrequencySmallSpends,
-  investmentRate,
   isExpense,
   monthTotals,
   monthTransactions,
@@ -71,7 +71,10 @@ export type InsightKind =
   | "credit-commitment"
   | "velocity"
   | "goal-progress"
-  | "merchant";
+  | "merchant"
+  | "food-mix"
+  | "payment-source"
+  | "subscription-change";
 
 export interface Insight {
   id: string;
@@ -355,10 +358,10 @@ function detectOutlier(input: InsightInput): Insight[] {
 function detectInvestmentRate(input: InsightInput): Insight[] {
   const { transactions, month, cycleStartDay } = input;
   const totals = monthTotals(transactions, month, cycleStartDay);
-  if (totals.income <= 0 || totals.invested <= 0) return [];
-  const rate = investmentRate(totals);
+  if (totals.income <= 0 || totals.investmentContributions <= 0) return [];
+  const rate = totals.investmentContributions / totals.income * 100;
   const rows = monthTransactions(transactions, month, cycleStartDay).filter(
-    (t) => investmentMovement(t) !== 0,
+    (t) => t.type === 'INVESTMENT' && t.categoryId !== 'adjustment',
   );
 
   if (rate >= 25) {
@@ -369,9 +372,9 @@ function detectInvestmentRate(input: InsightInput): Insight[] {
         kind: "investment-rate",
         tone: "positive",
         eyebrow: "You're doing well",
-        title: `${formatMoney(totals.invested)} net invested this month`,
-        amount: totals.invested,
-        body: `That's ${rate.toFixed(1)}% of your income going into long-term assets, across ${rows.length} investment ${rows.length === 1 ? "movement" : "movements"}. Well above the 20% most people aim for.`,
+        title: `${formatMoney(totals.investmentContributions)} contributed to investments`,
+        amount: totals.investmentContributions,
+        body: `Contributions equal ${rate.toFixed(1)}% of recorded income across ${rows.length} investment ${rows.length === 1 ? "entry" : "entries"}.` + (totals.investmentWithdrawals>0?` ${formatMoney(totals.investmentWithdrawals)} of principal was returned separately; it is not earned income.`:''),
         transactions: rows,
         priority: 68,
         action: "See contributions",
@@ -387,8 +390,8 @@ function detectInvestmentRate(input: InsightInput): Insight[] {
         tone: "warning",
         eyebrow: "Worth a look",
         title: `Only ${rate.toFixed(1)}% of income invested`,
-        amount: totals.invested,
-        body: `${formatMoney(totals.invested)} out of ${formatMoney(totals.income)}. Nudging this toward 20% is the single highest-leverage change available to you.`,
+        amount: totals.investmentContributions,
+        body: `${formatMoney(totals.investmentContributions)} contributed against ${formatMoney(totals.income)} of recorded income. Returned principal is tracked separately.`,
         transactions: rows,
         priority: 60,
         action: "See contributions",
@@ -522,6 +525,7 @@ function detectMonthOverMonth(input: InsightInput): Insight[] {
 // ---------------------------------------------------------------------------
 
 const DETECTORS: ((input: InsightInput) => Insight[])[] = [
+  personalSpendingInsights,
   detectLensSpikes,
   detectCategorySpikes,
   detectVelocity,
@@ -684,8 +688,8 @@ function recentRates(
       key === month ? Math.max(incomeBasis, totals.income) : totals.income;
     if (basis <= 0) continue;
     out.push({
-      invested: (totals.invested / basis) * 100,
-      saved: ((basis - totals.spent - totals.invested) / basis) * 100,
+      invested: (totals.investmentContributions / basis) * 100,
+      saved: ((basis - totals.spent - totals.investmentContributions) / basis) * 100,
     });
   }
   return out;

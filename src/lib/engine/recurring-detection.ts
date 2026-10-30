@@ -1,4 +1,6 @@
 import type { Paise, RecurringTransaction, Transaction } from "@/lib/domain/types";
+import {transactionOccurredBy} from '@/lib/domain/transaction-time';
+import {merchantKey} from './merchant-identity';
 
 /**
  * Recurring auto-detection.
@@ -34,7 +36,7 @@ function median(values: number[]): number {
 }
 
 function groupKey(t: Transaction): string {
-  return t.merchant ? `m:${t.merchant.toLowerCase()}` : `d:${t.description.trim().toLowerCase()}`;
+  return t.merchant ? `m:${merchantKey(t.merchant)}` : `d:${t.description.trim().toLowerCase()}`;
 }
 
 /**
@@ -46,7 +48,7 @@ function groupKey(t: Transaction): string {
  */
 function recurringRuleKey(r: RecurringTransaction): string {
   return r.merchant
-    ? `m:${r.merchant.toLowerCase()}`
+    ? `m:${merchantKey(r.merchant)}`
     : `d:${r.description.trim().toLowerCase()}`;
 }
 
@@ -68,15 +70,17 @@ export function detectRecurringCandidates(
   const alreadyRecurringIds = new Set(
     transactions.filter((t) => t.recurringId).map((t) => t.id),
   );
-  const excludedKeys = new Set(existingRecurring.map(recurringRuleKey));
 
   const groups = new Map<string, Transaction[]>();
   for (const t of transactions) {
-    if (t.type !== "EXPENSE") continue;
+    if (t.type !== "EXPENSE" || t.categoryId === 'adjustment' || t.amount <= 0 || !transactionOccurredBy(t,now)) continue;
     if (new Date(t.date).getTime() < cutoff) continue;
     if (alreadyRecurringIds.has(t.id)) continue;
-    const key = groupKey(t);
-    if (excludedKeys.has(key)) continue;
+    const identity = groupKey(t);
+    if (existingRecurring.some(r=>r.type==='EXPENSE'&&recurringRuleKey(r)===identity&&(!r.accountId||r.accountId===t.accountId))) continue;
+    // Distinct payment accounts can represent separate plans; never combine
+    // their charges into a manufactured cadence.
+    const key=JSON.stringify([identity,t.accountId??'']);
     const list = groups.get(key) ?? [];
     list.push(t);
     groups.set(key, list);
@@ -105,12 +109,11 @@ export function detectRecurringCandidates(
       const curr = new Date(chronological[i]!.date).getTime();
       gapDays.push((curr - prev) / (24 * 60 * 60 * 1000));
     }
-    const medianGap = median(gapDays);
 
     let suggestedFrequency: "MONTHLY" | "WEEKLY" | null = null;
-    if (medianGap >= MONTHLY_GAP_DAYS[0] && medianGap <= MONTHLY_GAP_DAYS[1]) {
+    if (gapDays.every(g=>g>=MONTHLY_GAP_DAYS[0]&&g<=MONTHLY_GAP_DAYS[1])) {
       suggestedFrequency = "MONTHLY";
-    } else if (medianGap >= WEEKLY_GAP_DAYS[0] && medianGap <= WEEKLY_GAP_DAYS[1]) {
+    } else if (gapDays.every(g=>g>=WEEKLY_GAP_DAYS[0]&&g<=WEEKLY_GAP_DAYS[1])) {
       suggestedFrequency = "WEEKLY";
     }
     if (!suggestedFrequency) continue;

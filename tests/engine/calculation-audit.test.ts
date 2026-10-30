@@ -94,7 +94,7 @@ test('investment and card insights expose evidence on the correct financial basi
  const rows=[income({amount:rs(100000),accountId:bank.id,date:at('2026-10-01')}),investmentTxn({amount:rs(50000),investmentId:'fund',accountId:bank.id,date:at('2026-10-02')}),transfer({amount:rs(10000),investmentId:'fund',accountId:holding.id,toAccountId:bank.id,date:at('2026-10-03')}),expense({amount:rs(30000),accountId:card.id,date:at('2026-09-01')}),transfer({amount:rs(5000),accountId:bank.id,toAccountId:card.id,date:at('2026-10-04')})];
  const input={transactions:rows,accounts:[bank,card,holding],investments:[],goals:[],month,now,cycleStartDay:1,groupLabel:(id:string)=>id};
  const insights=generateInsights(input);
- const inv=insights.find(i=>i.kind==='investment-rate')!;assert.equal(inv.amount,rs(40000));assert.equal(inv.basis,'investment');assert.equal(inv.transactions.length,2);
+ const inv=insights.find(i=>i.kind==='investment-rate')!;assert.equal(inv.amount,rs(50000));assert.equal(inv.basis,'investment');assert.equal(inv.transactions.length,1);assert.match(inv.body,/10,000.*principal/);assert.equal(monthTotals(rows,month,1).invested,rs(40000));
  const debt=insights.find(i=>i.kind==='credit-commitment')!;assert.equal(debt.amount,rs(25000));assert.equal(debt.basis,'balance');assert.ok(debt.transactions.some(t=>t.date.startsWith('2026-09')));assert.ok(debt.transactions.some(t=>t.toAccountId===card.id));
  const noIncome=generateInsights({...input,transactions:rows.filter(t=>t.type!=='INCOME')}).find(i=>i.kind==='credit-commitment')!;assert.doesNotMatch(noIncome.body,/%/);assert.match(noIncome.body,/No income/);
 });

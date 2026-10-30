@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {authenticatedFoodReceipt,parseFoodReceipt,possibleFoodPayments,exactFoodOrder} from '@/lib/gmail/food-receipts';
+import {authenticatedFoodReceipt,parseFoodReceipt,possibleFoodPayments,exactFoodOrder,receiptMailText} from '@/lib/gmail/food-receipts';
 import {expense} from '../helpers/factories';
 test('completed Zomato receipt distinguishes outlet address from delivery address and discounts',()=>{
  const r=parseFoodReceipt('Zomato <noreply@zomato.com>','Your Zomato order from Example Cafe','ORDER ID: 1234567890 Delivered Example Cafe Shop 1, Example Road, Mumbai 1 X Tea Total paid - ₹894.89 Delivery Address: PRIVATE HOME Discount ₹100');
@@ -31,4 +31,18 @@ test('automatic identity requires an explicit provider and full labelled order I
  assert.equal(exactFoodOrder(expense({description:'Zomato',notes:'RRN: 1234567890'}),r),false);
  assert.equal(exactFoodOrder(expense({description:'Different cafe',notes:'Order ID: 1234567890'}),r),false);
  assert.equal(exactFoodOrder(expense({description:'Zomato',notes:'Order ID: 123456789012'}),r),false);
+});
+test('structured Swiggy journey stops at its first clock before any customer details',()=>{
+ const source='<p>ORDER JOURNEY</p><p>Example Burgers</p><p>Shop 12, Example Road, Mumbai</p><p>Oct 29, 8:00 PM</p><p>Private Person</p><p>PRIVATE HOME ADDRESS</p><p>Order ID: 1234567890</p><p>delivered</p><p>Paid Via Card INR 716</p>';
+ const receipt=parseFoodReceipt('noreply@swiggy.in','Your Swiggy Gourmet order was delivered',source);
+ assert.equal(receipt?.restaurant,'Example Burgers');assert.equal(receipt?.outletAddress,'Shop 12, Example Road, Mumbai');assert.equal(receipt?.paidAmount,71600);
+ assert.ok(!JSON.stringify(receipt).includes('PRIVATE'));assert.ok(!JSON.stringify(receipt).includes('8:00'));
+ const ambiguous=source.replace('<p>Oct 29, 8:00 PM</p>','');assert.equal(parseFoodReceipt('noreply@swiggy.in','Delivered',ambiguous)?.restaurant,undefined);
+ const missingAddress=source.replace('Shop 12, Example Road, Mumbai','Example Burgers.');assert.equal(parseFoodReceipt('noreply@swiggy.in','Delivered',missingAddress)?.outletAddress,undefined);
+});
+test('receipt MIME chooses a single structured alternative, ignores attachments and excludes unposted messages',()=>{
+ const part={mimeType:'multipart/alternative',parts:[{mimeType:'text/plain',body:{data:Buffer.from('not concatenated').toString('base64url')}},{mimeType:'text/html',body:{data:Buffer.from('<p>structured</p>').toString('base64url')}}]};
+ assert.equal(receiptMailText(part),'<p>structured</p>');assert.equal(receiptMailText({...part,filename:'attachment.html'}),'');
+ assert.equal(parseFoodReceipt('noreply@swiggy.in','Your refund initiated','Order Number: 1234567890 delivered Paid Via UPI Rs. 500'),null);
+ assert.equal(parseFoodReceipt('noreply@swiggy.in','Delivered','Order Number: 1234567890 delivered Paid Via UPI Rs. 500')?.paidAmount,50000);
 });
