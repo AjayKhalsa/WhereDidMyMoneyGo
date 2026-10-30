@@ -3,19 +3,20 @@ import { BANK_SENDERS, INVESTMENT_SENDERS } from './alerts';
 export const NIGHTLY_SYNC_UTC = '30 21 * * *'; // 03:00 IST
 export function gmailHealth(input: {
   lastSyncedAt?: string | null; error?: string | null; hasNextPage: boolean;
-  pending: number; review: number;
+  pending: number; review: number; hasReceiptWork?:boolean;
   historical?: { query: string; status: string; discovery_complete: boolean } | null;
 }, now = Date.now()) {
   const last = input.lastSyncedAt ? Date.parse(input.lastSyncedAt) : NaN;
-  const stale = !Number.isFinite(last) || last > now || now - last > 36 * 3600000;
+  const stale = !Number.isFinite(last) || last > now || now - last > 12 * 3600000;
   const history = input.historical;
   const historicalOutdated = !!history && [...Object.keys(BANK_SENDERS), ...INVESTMENT_SENDERS].some(sender => !history.query.includes(`from:${sender}`));
   return {
-    state: input.error ? 'error' : input.hasNextPage || input.pending > 0 ? 'incomplete' : stale ? 'stale' : 'checked',
+    state: input.error ? 'error' : input.hasNextPage || input.hasReceiptWork || input.pending > 0 ? 'incomplete' : stale ? 'stale' : 'checked',
     stale, pending: input.pending, review: input.review,
+    needsReconnect:!!input.error?.startsWith('Reconnect Gmail'),needsSetup:!!input.error?.startsWith('Gmail server setup'),
     historicalOutdated,
     historicalDiscoveryComplete: !!history && history.status === 'complete' && history.discovery_complete && !historicalOutdated,
-    schedule: 'Nightly, targeting 03:00 IST (timing can vary)',
+    schedule: 'Every 4 hours via GitHub Actions, with a nightly 03:00 IST fallback (timing can vary)',
   };
 }
 

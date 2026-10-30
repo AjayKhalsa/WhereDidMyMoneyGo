@@ -36,8 +36,8 @@ Keep the nightly fallback, watch Actions failures and do not certify uninterrupt
 sync from the presence of a workflow file.
 
 The Vercel multi-run proposal in PR #25 is superseded by this approach; do not merge
-that unsupported Hobby expression. Settings currently describes the nightly Vercel
-schedule; the extra Actions calls update the same last-sync/backlog information.
+that unsupported Hobby expression. Settings describes the four-hour Actions
+target and nightly fallback; both update the same last-sync/backlog information.
 
 ## Reliability and privacy
 
@@ -60,6 +60,10 @@ schedule; the extra Actions calls update the same last-sync/backlog information.
 - Use GitHub's Actions failure notifications if desired. Existing app push alerts
   still depend on their own server keys/device permissions. A failure before the
   endpoint is reached can only appear in Actions, not in the app's push system.
+
+Connection and retry errors now carry controlled codes so revoked Gmail access
+is not confused with a cron-secret mismatch. See [connection recovery](gmail-connection-recovery.md)
+for checkpoint preservation, quota handling and Google's OAuth Testing limit.
 
 Run `python3 -m unittest discover -s tests/automation -v` to test the caller without
 network or real credentials. These are caller/contract tests; production activation,

@@ -25,7 +25,7 @@ interface Status {
   possibleExistingMessages?:ReviewItem[];
   categoryReviewCount?:number;
   possibleExistingCount?:number;
-  health?: { state: string; stale: boolean; pending: number; review: number; historicalOutdated: boolean; historicalDiscoveryComplete: boolean; schedule: string };
+  health?: { state: string; stale: boolean; pending: number; review: number; historicalOutdated: boolean; historicalDiscoveryComplete: boolean; schedule: string;needsReconnect?:boolean;needsSetup?:boolean };
 }
 async function api(path = "", method = "GET", body?: unknown) {
   const response = await fetch(`/api/gmail${path}`, { method, cache: "no-store", headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
@@ -44,18 +44,20 @@ export function GmailPanel() {
   useEffect(() => {
     void load().catch(e => setError(e.message));
     const result = new URLSearchParams(window.location.search).get("gmail");
-    if (result === "connected") setNotice("Gmail connected. Sync now to import your first alerts.");
+    if (result === "connected") setNotice("Gmail connected. Saved scan progress is preserved; sync can continue.");
+    if (result === 'busy')setError('A Gmail sync is running. Wait for it to finish, then reconnect again; saved progress is preserved.');
+    if (result === 'setup')setError('The Google OAuth app configuration needs attention. Reconnecting alone will not fix this server setup issue.');
     if (result === "failed") setError("Connection was not completed. Use the same Gmail address as your app login and allow read-only access.");
   }, []);
   async function run(work: () => Promise<void>) {
     setBusy(true); setError(""); setNotice("");
-    try { await work(); await load(); } catch (e) { setError(e instanceof Error ? e.message : "Please try again."); }
+    try { await work(); await load(); } catch (e) { setError(e instanceof Error ? e.message : "Please try again.");try{await load();}catch{/* Keep the original controlled failure visible. */} }
     finally { setBusy(false); }
   }
   return <Section title="Gmail transaction alerts" description="Let bank emails keep your ledger up to date.">
     <Card className="space-y-4 p-4 sm:p-5">
       <p className="text-sm text-ink-secondary">Uses your saved category rules and consistent past corrections. Food orders can use bank time in IST; email-time suggestions are labelled. Confirmed debits, explicit salary credits and posted card refunds can log automatically. Uncertain categories remain reviewable. Unknown credits, repayment origins and possible duplicates need confirmation. Statements are still needed to verify balances.</p>
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      {(error||status?.connection?.last_error)&&<p role="alert" className="text-sm text-danger">{error||status?.connection?.last_error}</p>}
       {notice && <p role="status" className="text-sm text-ink-secondary">{notice}</p>}
       {!status && !error && <p className="text-sm">Checking connection…</p>}
       {status && !status.configured && <p className="text-sm text-ink-secondary">Google connection setup is pending. Automatic logging has not started.</p>}
@@ -68,7 +70,6 @@ export function GmailPanel() {
       </>}
       {status?.connection && <>
         <div className="text-sm"><p className="font-medium">Connected: {status.connection.email}</p><p className="mt-1 text-ink-tertiary">From {status.connection.start_date} · Last mailbox check: {status.connection.last_synced_at ? new Date(status.connection.last_synced_at).toLocaleString() : "Not yet"}</p></div>
-        {status.connection.last_error && <p className="text-sm text-danger">{status.connection.last_error}</p>}
         {status.health && <div className="space-y-1 text-xs text-ink-secondary" aria-label="Gmail sync health">
           <p>{status.health.schedule}. {status.health.state === 'error' ? 'Sync needs attention.' : status.health.state === 'incomplete' ? 'Mailbox scan unfinished.' : status.health.stale ? 'No recent completed mailbox check.' : 'Recent incremental discovery finished.'} {status.health.pending} queued · {status.health.review} need a transaction or link decision.</p>
           {status.health.historicalOutdated && <p className="text-danger">Historical coverage uses an older bank sender list. Run a new historical preview with an updated date range.</p>}
@@ -82,8 +83,9 @@ export function GmailPanel() {
             setNotice(`Imported ${logged} transactions; matched ${matched} existing entries. ${more ? "More alerts remain. Press Sync now to continue." : "Sync complete."}`);
           })}>{busy ? "Working…" : "Sync now"}</Button>
           <Button variant="quiet" disabled={busy} onClick={() => setDisconnecting(!disconnecting)}>Disconnect</Button>
-          {status.connection.last_error?.includes("Reconnect") && <Button disabled={busy} onClick={() => void run(async () => { const result = await api("/connect", "POST", { startDate: status.connection!.start_date }); window.location.assign(result.url); })}>Reconnect Gmail</Button>}
+          {(status.health?.needsReconnect??status.connection.last_error?.startsWith('Reconnect Gmail')) && <Button disabled={busy} onClick={() => void run(async () => { const result = await api("/connect", "POST", { startDate: status.connection!.start_date }); window.location.assign(result.url); })}>Reconnect Gmail</Button>}
         </div>
+        <details className="text-xs text-ink-secondary"><summary className="cursor-pointer">Keeping Gmail connected</summary><p className="mt-2">Google OAuth apps left in Testing can issue Gmail refresh tokens that expire after seven days. Check <a className="underline" href="https://console.cloud.google.com/auth/audience" target="_blank" rel="noreferrer">Google Auth Platform → Audience</a> for the app's publishing status. After publishing, reconnect once to renew the grant. Production status avoids the testing limit, but Google can still revoke access after security or permission changes.</p></details>
         {disconnecting && <div className="space-y-2 text-sm"><p>Stop automatic imports and revoke Google access? Your saved transactions and duplicate checks stay in the app.</p><Button variant="danger" disabled={busy} onClick={() => void run(async () => { await api("", "DELETE"); setDisconnecting(false); setNotice("Disconnected. Your saved transactions are unchanged."); })}>Disconnect Gmail</Button></div>}
       </>}
       {status?.connection&&<><GmailBackfill email={status.connection.email}/><FoodReceipts /></>}

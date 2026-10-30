@@ -14,6 +14,12 @@ test('health distinguishes discovery, processing, stale checks and review; never
   assert.equal(gmailHealth({ ...current, lastSyncedAt: new Date(now - 37 * 3600000).toISOString() }, now).stale, true);
   assert.equal(gmailHealth({ ...current, error: 'Reconnect Gmail' }, now).state, 'error');
   assert.equal(gmailHealth({ ...current, review: 7 }, now).review, 7);
+  assert.equal(gmailHealth({...current,hasReceiptWork:true},now).state,'incomplete');
+  assert.equal(gmailHealth({...current,lastSyncedAt:new Date(now-13*3600000).toISOString()},now).stale,true);
+  assert.equal(gmailHealth({...current,error:'Reconnect Gmail: expired'},now).needsReconnect,true);
+  assert.equal(gmailHealth({...current,error:'Gmail server setup needs attention.'},now).needsSetup,true);
+  assert.equal(gmailHealth({...current,error:'Google temporarily limited Gmail requests.'},now).needsReconnect,false);
+  assert.match(gmailHealth(current,now).schedule,/Every 4 hours/);
 });
 test('completed historical scan with omitted new sender is explicitly outdated', () => {
   const history = { query: [...Object.keys(BANK_SENDERS), ...INVESTMENT_SENDERS].map(s => `from:${s}`).join(' '), status: 'complete', discovery_complete: true };
