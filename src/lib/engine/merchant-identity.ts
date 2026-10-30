@@ -1,4 +1,5 @@
 import { MERCHANTS } from "./lexicon";
+import { recognizedMerchants } from './merchant-recognition';
 
 /** A statement's recipient bank is routing evidence, not the merchant.
  * Require the full labelled layout so a real merchant name is never truncated. */
@@ -19,4 +20,11 @@ export function merchantKey(text: string): string {
   // Instamart must not collapse into Swiggy food delivery.
   if (known.length === 1) return known[0]!.name.toLowerCase();
   return cleaned;
+}
+
+/** Classification scope only. Never change financial matching identities when
+ * enriching a brand vocabulary. Parent and sub-brand corrections stay separate. */
+export function classificationMerchantKey(text: string): string {
+  const known = recognizedMerchants(merchantPayee(text));
+  return known.length === 1 ? known[0]!.name.toLowerCase() : merchantKey(text);
 }

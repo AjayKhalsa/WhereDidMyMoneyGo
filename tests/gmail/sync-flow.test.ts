@@ -53,7 +53,7 @@ test('real sync retries review upgrades, matches before categorization and dispa
  let failMatch=true;
  const updates:Record<string,unknown>[]=[];
  const calls:string[]=[];
- const json=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json','content-range':'0-0/0'}});
+ const json=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json','content-range':Array.isArray(value)?`0-${Math.max(0,value.length-1)}/${value.length}`:'*/0'}});
  globalThis.fetch=async(input,init)=>{
   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
   const method=init?.method??'GET';calls.push(`${method} ${url.pathname}`);

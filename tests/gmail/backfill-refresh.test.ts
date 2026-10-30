@@ -16,7 +16,7 @@ test('explicit refresh starts one new preview, continuation resumes it, and dism
  const user='11111111-1111-4111-8111-111111111111';
  let run:any={id:'old',start_date:'2026-07-18',end_date:'2026-10-18',status:'complete',discovery_complete:true};
  let inserts=0,discovery=0,mailFetches=0;const itemUpdates:any[]=[];
- const json=(v:unknown)=>new Response(JSON.stringify(v),{status:200,headers:{'content-type':'application/json'}});
+ const json=(v:unknown)=>new Response(JSON.stringify(v),{status:200,headers:{'content-type':'application/json','content-range':Array.isArray(v)?`0-${Math.max(0,v.length-1)}/${v.length}`:'*/0'}});
  globalThis.fetch=async(input,init)=>{
   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url),method=init?.method??'GET';
   if(url.hostname==='oauth2.googleapis.com')return json({access_token:'synthetic'});
