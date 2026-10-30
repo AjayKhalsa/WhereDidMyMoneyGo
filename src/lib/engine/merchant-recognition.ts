@@ -3,7 +3,8 @@ import { MERCHANTS, type MerchantEntry } from './lexicon';
 const normalized = (text: string) => text.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
 // Full phrases, never generic locality or person-name matches.
-const LOCAL_DINING: MerchantEntry[] = [
+const EXTRA_MERCHANTS: MerchantEntry[] = [
+  {name:'Nykaa Fashion', aliases:['nykaa fashion','nykaafashion'], categoryId:'shopping.clothing'},
   {name:'Tea Post', aliases:['tea post','teapost'], categoryId:'dining'},
   {name:'Nariyal Pani', aliases:['nariyal pani','nariyalpani','nariyal paani'], categoryId:'dining'},
   {name:'Shiv Sagar', aliases:['shiv sagar','shivsagar'], categoryId:'dining'},
@@ -25,13 +26,14 @@ const LOCAL_DINING: MerchantEntry[] = [
 /** Category evidence only: do not use this to merge financial identities or infer location. */
 export function recognizedMerchants(text: string): MerchantEntry[] {
   const haystack = ` ${normalized(text)} `;
-  const matches = [...MERCHANTS, ...LOCAL_DINING].filter(merchant =>
+  const matches = [...MERCHANTS, ...EXTRA_MERCHANTS].filter(merchant =>
     [...merchant.aliases, merchant.name].some(alias => haystack.includes(` ${normalized(alias)} `)));
   // Explicit parent/sub-brand combination; retain the more specific merchant.
   return matches.filter(m => !(m.name === 'Swiggy' && matches.some(v => v.name === 'Instamart'))
     && !(m.name === 'YouTube Premium' && matches.some(v => v.name === 'YouTube Music'))
-    && !(m.name === 'Amazon' && matches.some(v => ['Amazon Prime','Prime'].includes(v.name)))
-    && !(m.name === 'Amazon Prime' && matches.some(v => v.name === 'Prime')));
+    && !(m.name === 'Amazon' && matches.some(v => ['Amazon Prime','Prime','Amazon Fresh'].includes(v.name)))
+    && !(m.name === 'Amazon Prime' && matches.some(v => v.name === 'Prime'))
+    && !(m.name === 'Nykaa' && matches.some(v => v.name === 'Nykaa Fashion')));
 }
 
 /** Clear food-business descriptors; ambiguous bar/hotel/social alone are insufficient. */

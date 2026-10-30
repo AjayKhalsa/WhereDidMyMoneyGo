@@ -22,7 +22,7 @@ test("three equal-value allocations stay separate, reminders create no payment a
   process.env.GMAIL_TOKEN_KEY = "ab".repeat(32);
   const user = "11111111-1111-4111-8111-111111111111";
   const rows: Record<string, any> = Object.fromEntries(["allocation1", "allocation2", "allocation3", "reminder"].map(id => [id, { message_id: id, status: "pending", parser_version: 0 }]));
-  const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { "content-type": "application/json" } });
+  const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { "content-type": "application/json", "content-range": Array.isArray(value) ? `0-${Math.max(0,value.length-1)}/${value.length}` : "*/0" } });
   let calls = 0;
   globalThis.fetch = async (input, init) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);

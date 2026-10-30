@@ -1,5 +1,5 @@
 import { createId } from "@/lib/utils";
-import { merchantKey } from "./merchant-identity";
+import { classificationMerchantKey } from "./merchant-identity";
 import type {
   ClassificationRule,
   TransactionContext,
@@ -85,12 +85,15 @@ export function learnFromEntry(
   // them would make every later Uber a work trip or every dinner a birthday.
   // Explicit rule contexts can still be configured in Settings.
   const contexts: TransactionContext[] = [];
-  const key = merchantKey(input.merchant || input.description);
-  const applicable = existing.filter(r => !r.conditions && (!r.learningEvidence || r.learningEvidence.merchantKey === key));
-  const match =
+  const key = classificationMerchantKey(input.merchant || input.description);
+  const applicable = existing.filter(r => !r.conditions && (!r.learningEvidence || classificationMerchantKey(r.learningEvidence.merchantKey) === key));
+  const matched =
     applicable.find((r) => r.id === input.matchedRuleId) ??
     applicable.find((r) => r.pattern === pattern && r.learningEvidence) ??
     applicable.find((r) => r.pattern === pattern);
+  // Editing one payee must not repurpose a generic rule used by other payees.
+  const match = input.wasCorrected && matched && !matched.learningEvidence && matched.pattern !== key
+    ? undefined : matched;
 
   // Nothing learned yet for this word — start a rule only once the user has
   // actually told us something, i.e. on a correction or an explicit save.
@@ -107,6 +110,7 @@ export function learnFromEntry(
         timesApplied: 1,
         createdAt: now,
         updatedAt: now,
+        ...(input.wasCorrected ? {learningEvidence:{source:'manual-correction' as const,merchantKey:key,exampleIds:[],support:1}} : {}),
       },
     ];
   }
@@ -129,7 +133,7 @@ export function learnFromEntry(
     {
       ...match,
       categoryId: input.categoryId,
-      ...(match.learningEvidence && input.wasCorrected ? {learningEvidence:{...match.learningEvidence,source:"manual-correction" as const,support:1}} : {}),
+      ...(input.wasCorrected ? {learningEvidence:{source:"manual-correction" as const,merchantKey:key,exampleIds:[],support:1}} : {}),
       contexts,
       merchant: input.merchant ?? match.merchant,
       accountId: input.accountId ?? match.accountId,

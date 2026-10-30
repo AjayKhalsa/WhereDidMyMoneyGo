@@ -1,6 +1,6 @@
 import type { ClassificationRule, Transaction } from "@/lib/domain/types";
 import { classificationTime, validWallTime } from "@/lib/domain/transaction-time";
-import { merchantKey } from "./merchant-identity";
+import { classificationMerchantKey } from "./merchant-identity";
 
 export const MEAL_WINDOWS = [
   { start: 0, end: 12, categoryId: "dining.breakfast", label: "Breakfast" },
@@ -22,7 +22,7 @@ export function timedMealCategory(categoryId: string | undefined, actualTime: st
 export function ruleConditionsMatch(rule: ClassificationRule, merchant: string, actualTime?: string): boolean {
   if (!rule.conditions) return true;
   const c = rule.conditions;
-  if (!actualTime || !validWallTime(actualTime) || merchantKey(merchant) !== c.merchantKey) return false;
+  if (!actualTime || !validWallTime(actualTime) || classificationMerchantKey(merchant) !== classificationMerchantKey(c.merchantKey)) return false;
   if (!Number.isInteger(c.startHour) || !Number.isInteger(c.endHour) || c.startHour < 0 || c.endHour > 24 || c.startHour >= c.endHour || !Array.isArray(c.weekdays)) return false;
   const hour = Number(actualTime.slice(11, 13));
   const day = new Date(actualTime.slice(0, 10) + "T12:00:00Z").getUTCDay();

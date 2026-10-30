@@ -6,7 +6,7 @@ import { admin, GmailError, GoogleRequestError, google, tokenRequest, unseal } f
 import { historicalRules, classifiedAlert } from "./classification";
 import { learningData, ruleRow } from "./learning-data";
 import { investmentNoticeReason, parseInvestmentNotice } from "./investment-notices";
-import { merchantKey } from "@/lib/engine/merchant-identity";
+import { classificationMerchantKey, merchantKey } from "@/lib/engine/merchant-identity";
 import { syncFoodReceipts } from './receipt-sync';
 
 export async function syncMailbox(userId: string, deadline = Date.now() + 45000) {
@@ -65,7 +65,7 @@ export async function syncMailbox(userId: string, deadline = Date.now() + 45000)
       const seeded=await db.rpc('gmail_seed_rules',{p_user:userId,p_rules:trained.rules.map(r=>ruleRow({...r,id:`${userId}_${r.id}`}))});if(seeded.error)throw seeded.error;
       learned=await learningData(db,userId);
     }
-    learned.rules=learned.rules.filter(r=>r.learningEvidence?.source!=='history'||!trained.conflicts.includes(r.learningEvidence.merchantKey));
+    learned.rules=learned.rules.filter(r=>r.learningEvidence?.source!=='history'||!trained.conflicts.includes(classificationMerchantKey(r.learningEvidence.merchantKey)));
     const profile=await db.from('profiles').select('name').eq('id',userId).maybeSingle();if(profile.error)throw profile.error;
     for (const item of inboxResult.data ?? []) {
       if (Date.now() - started > 40000 || deadline - Date.now() < 12000) break;

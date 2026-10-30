@@ -15,10 +15,10 @@ import { matchAccountMentions, type AccountHit } from "./account-match";
 import { levenshteinDistance } from "./fuzzy-match";
 import { ACTIVITIES, CONTEXT_KEYWORDS, MERCHANTS, STOP_WORDS } from "./lexicon";
 import { parseBankSms, type BankSmsRead } from "./sms";
-import { merchantKey } from "./merchant-identity";
 import { extractTags } from "@/lib/domain/tags";
 import { factualTimeContexts } from "@/lib/domain/transaction-time";
-import { ruleConditionsMatch, timedMealCategory } from "./time-rules";
+import { timedMealCategory } from "./time-rules";
+import { explicitCorrection, preserveRuleLeaf, ruleMerchantAlias, selectClassificationRule } from './classification-rules';
 
 /**
  * Deterministic natural-language expense parser.
@@ -205,37 +205,6 @@ function buildDescription(tokens: Token[], amountIndex: number | null): string {
   if (words.length === 0) return "";
   const phrase = words.join(" ");
   return phrase.charAt(0).toUpperCase() + phrase.slice(1);
-}
-
-/** Longest learned rule whose pattern appears in the phrase wins. */
-function findRule(
-  normalised: string,
-  rules: ClassificationRule[],
-  actualTime?: string,
-): ClassificationRule | null {
-  // Match complete tokens/phrases: "tea" must not match inside "steak".
-  const candidates = rules.filter(rule => {
-    if (!ruleConditionsMatch(rule, normalised, actualTime)) return false;
-    if (rule.learningEvidence && rule.learningEvidence.merchantKey !== merchantKey(normalised)) return false;
-    const pattern = tokenize(rule.pattern).map(t => t.clean).join(" ");
-    return Boolean(pattern) && ` ${normalised} `.includes(` ${pattern} `);
-  });
-  const conditional = candidates.filter(r => r.conditions);
-  if (new Set(conditional.map(r => r.categoryId)).size > 1) return null;
-  const scoped = conditional.length ? conditional : candidates.filter(r => r.learningEvidence);
-  const applicable = scoped.length ? scoped : candidates;
-  let best: ClassificationRule | null = null;
-  for (const rule of applicable) {
-    if (
-      !best ||
-      rule.pattern.length > best.pattern.length ||
-      (rule.pattern.length === best.pattern.length &&
-        rule.confidence > best.confidence)
-    ) {
-      best = rule;
-    }
-  }
-  return best;
 }
 
 const TYPE_HINTS: { keywords: string[]; type: TransactionType }[] = [
@@ -489,11 +458,17 @@ export function parseExpenseInput(
   const { type } = typeDetection;
 
   // ---- 1. A learned rule beats everything the lexicon knows. -------------
-  const rule = findRule(normalised, rules, options.actualTime);
+  const ruleSelection = selectClassificationRule(normalised, rules, options.actualTime);
+  const rule = ruleSelection.rule;
 
   // ---- 2. Lexicon signals ------------------------------------------------
   const merchantHit = findMerchant(tokens) ?? findMerchantFuzzy(tokens);
-  const activityHits = findActivities(tokens);
+  // A word inside a recognised business name is not a separate purchase:
+  // "Indian Oil" means fuel, not the groceries activity named "oil".
+  const merchantWords = new Set(tokenize(merchantHit?.merchant.name ?? '').map(t=>t.clean));
+  const activityHits = findActivities(tokens).filter(hit => !merchantHit || merchantHit.fuzzy
+    || groupIdOf(hit.categoryId) === groupIdOf(merchantHit.merchant.categoryId)
+    || !merchantWords.has(hit.matchedWord));
   const contextHits = findContexts(tokens);
 
   for (const hit of contextHits) contextValues.push(hit.context);
@@ -507,17 +482,21 @@ export function parseExpenseInput(
   let baseScore = 0;
   let merchant = merchantHit?.merchant.name;
 
-  if (rule) {
+  if (ruleSelection.conflicts.length) {
+    baseScore = 0.2;
+    alternatives.push(...ruleSelection.conflicts);
+    reasons.push('Conflicting saved categories for this payee; choose the correct category');
+  } else if (rule) {
     categoryId = rule.categoryId;
-    baseScore = 0.55 + Math.min(0.35, rule.confidence * 0.35);
-    if (rule.merchant) merchant = rule.merchant;
+    baseScore = explicitCorrection(rule) ? 0.9 : 0.55 + Math.min(0.35, rule.confidence * 0.35);
+    merchant = ruleMerchantAlias(rule, normalised) ?? merchant;
     reasons.push(`You've classified "${rule.pattern}" this way before`);
     // Explicit wording distinguishes today's lunch from yesterday's dinner
     // without undoing a user's mapping to a different financial category.
     const specific = activityHits.find(
       hit => groupIdOf(hit.categoryId) === groupIdOf(categoryId) && hit.categoryId.includes("."),
     );
-    if (specific && specific.categoryId !== categoryId) {
+    if (specific && specific.categoryId !== categoryId && !preserveRuleLeaf(rule)) {
       categoryId = specific.categoryId;
       reasons.push(`"${specific.matchedWord}" specifies the expense type`);
     }
@@ -565,7 +544,7 @@ export function parseExpenseInput(
     reasons.push("Nothing in the description was recognisable");
   }
 
-  if (!rule && type === "EXPENSE") {
+  if (!rule && !ruleSelection.conflicts.length && type === "EXPENSE") {
     const specific = automaticSubcategory(normalised);
     const explicitMeal = activityHits.some(hit => ['dining.breakfast','dining.lunch','dining.snacks','dining.dinner'].includes(hit.categoryId));
     if (specific && !(specific.mealEligible && explicitMeal)) {
@@ -575,7 +554,7 @@ export function parseExpenseInput(
     }
   }
 
-  if (type === "EXPENSE" && mealEligibleMerchant(normalised)) {
+  if (type === "EXPENSE" && !ruleSelection.conflicts.length && !preserveRuleLeaf(rule) && mealEligibleMerchant(normalised)) {
     const meal = timedMealCategory(categoryId, options.actualTime, normalised);
     if (meal && meal !== categoryId) {
       categoryId = meal;
