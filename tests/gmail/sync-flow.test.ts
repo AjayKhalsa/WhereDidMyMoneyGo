@@ -17,13 +17,13 @@ after(()=>{globalThis.fetch=originalFetch;hook.deregister();for(const k of names
 test('expired paging cursor replays fixed scan without deleting receipts or advancing on other errors',async()=>{
  for(const name of names)process.env[name]='synthetic';
  process.env.NEXT_PUBLIC_SUPABASE_URL='https://database.example';process.env.GMAIL_TOKEN_KEY='ab'.repeat(32);
- let upstreamStatus=400;let queries:URLSearchParams[]=[];let updates:any[]=[];
+ let upstreamStatus=400,financialMore=false;let queries:URLSearchParams[]=[];let updates:any[]=[];
  const connection={refresh_token:seal('refresh',user),start_date:'2026-10-01',aliases:{},page_token:'expired',scan_after:1791000000,scan_started_at:'2026-10-25T05:00:00Z',last_synced_at:'2026-10-20T05:00:00Z'};
  const json=(v:unknown,status=200)=>new Response(JSON.stringify(v),{status,headers:{'content-type':'application/json','content-range':'*/0'}});
  globalThis.fetch=async(input,init)=>{
   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url),method=init?.method??'GET';
   if(url.hostname==='oauth2.googleapis.com')return json({access_token:'synthetic'});
-  if(url.hostname==='gmail.googleapis.com'){if(!url.searchParams.get('q')?.includes('noreply@zomato.com'))queries.push(url.searchParams);return url.searchParams.has('pageToken')?json({error:'Synthetic invalid cursor'},upstreamStatus):json({messages:[]});}
+  if(url.hostname==='gmail.googleapis.com'){if(!url.searchParams.get('q')?.includes('noreply@zomato.com'))queries.push(url.searchParams);return url.searchParams.has('pageToken')?json({error:'Synthetic invalid cursor'},upstreamStatus):json({messages:[],...(financialMore?{nextPageToken:'continue-financial'}:{})});}
   const body=init?.body?JSON.parse(String(init.body)):undefined;
   if(url.pathname.endsWith('/rpc/gmail_acquire_lease'))return json(true);
   if(url.pathname.endsWith('/gmail_connections')){if(method==='GET')return json(connection);updates.push(body);return json(body?.receipt_scan?{user_id:user}:null);}
@@ -39,6 +39,9 @@ test('expired paging cursor replays fixed scan without deleting receipts or adva
   upstreamStatus=status;queries=[];updates=[];await assert.rejects(syncMailbox(user));
   assert.equal(queries.length,1);assert.equal(updates.some(p=>'page_token' in p||'last_synced_at' in p),false);
  }
+ upstreamStatus=400;financialMore=true;updates=[];
+ assert.deepEqual(await syncMailbox(user),{logged:0,reviewed:0,matched:0,more:true});
+ assert.equal(updates.some(p=>'receipt_scan' in p),false,'Unfinished financial discovery has priority over receipt enrichment');
 });
 
 test('real sync retries review upgrades, matches before categorization and dispatches only identified posted credits',async()=>{
