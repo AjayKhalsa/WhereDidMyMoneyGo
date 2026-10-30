@@ -35,7 +35,7 @@ export function personalSpendingInsights(input:InsightInput):Insight[]{
  const reversed=new Set(transactions.filter(t=>t.type==='INCOME'&&t.isRefund&&t.reversesTransactionId).map(t=>t.reversesTransactionId));
  const subscriptions=new Map<string,Transaction[]>();
  for(const t of transactions){
-  if(t.type!=='EXPENSE'||t.categoryId!=='bills.subscription'||t.amount<=0||reversed.has(t.id))continue;
+  if(t.type!=='EXPENSE'||t.categoryId!=='bills.subscription'||!t.accountId||t.amount<=0||reversed.has(t.id))continue;
   const name=t.merchant??t.description,key=merchantKey(name);if(!key)continue;
   const identity=JSON.stringify([key,t.accountId??'']);subscriptions.set(identity,[...subscriptions.get(identity)??[],t]);
  }

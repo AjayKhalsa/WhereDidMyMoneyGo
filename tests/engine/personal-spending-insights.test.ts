@@ -19,6 +19,7 @@ test('subscription charge change needs two stable monthly payments on the same a
  const change=insights(rows).find(i=>i.kind==='subscription-change')!;assert.equal(change.amount,rs(649));assert.equal(change.comparison?.difference,rs(150));assert.equal(change.transactions.length,1);
  for(const bad of [[rows[0]!,rows[2]!],[rows[0]!,subscription('2026-09-05',499,'bank'),rows[2]!],[rows[0]!,subscription('2026-09-05',399),rows[2]!],[rows[0]!,rows[1]!,subscription('2026-11-05',649)]])assert.equal(insights(bad).some(i=>i.kind==='subscription-change'),false);
  assert.equal(insights([...rows,income({date:'2026-10-06',isRefund:true,amount:rs(649),reversesTransactionId:rows[2]!.id})]).some(i=>i.kind==='subscription-change'),false);
+ assert.equal(insights(rows.map(t=>({...t,accountId:undefined}))).some(i=>i.kind==='subscription-change'),false,'Unknown accounts cannot prove a same-account plan change');
 });
 test('recurring candidates reject irregular median-only patterns, future entries and adjustments',()=>{
  const now=new Date('2026-10-30T08:00:00Z');
