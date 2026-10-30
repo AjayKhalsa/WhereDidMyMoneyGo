@@ -1,5 +1,9 @@
 "use client";
 
+import { DataQualityCard } from "@/components/home/data-quality-card";
+
+import { DataLoadError } from "@/components/layout/data-load-error";
+
 import { useState } from "react";
 import { Lightbulb } from "lucide-react";
 import type { Insight } from "@/lib/engine/insights";
@@ -24,7 +28,7 @@ import { EmptyState, Section, Skeleton } from "@/components/ui/primitives";
  */
 
 export default function InsightsPage() {
-  const { status, insights, monthRows } = useFinance();
+  const { status, error, insights, monthRows } = useFinance();
   const [active, setActive] = useState<Insight | null>(null);
 
   if (status === "loading" || status === "idle") {
@@ -40,6 +44,8 @@ export default function InsightsPage() {
     );
   }
 
+  if (status === "error") return <DataLoadError error={error} />;
+
   const attention = insights.filter(
     (i) => i.tone === "alert" || i.tone === "warning",
   );
@@ -54,6 +60,8 @@ export default function InsightsPage() {
         description="What's worth knowing about your money this month."
         action={<MonthSwitcher />}
       />
+
+      <DataQualityCard />
 
       {!monthRows.some(t => t.type === "EXPENSE" || (t.type === "INCOME" && t.isRefund)) && insights.length === 0 ? (
         <EmptyState

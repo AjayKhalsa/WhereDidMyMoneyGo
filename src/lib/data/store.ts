@@ -125,9 +125,18 @@ export function resetStoreBoot(): void {
 
 /** Reload after a resumable import, including any writes completed before an error. */
 export async function refreshDatabase(): Promise<void> {
-  const data = await getRepository().load();
-  if (!data) throw new Error("Could not reload your data.");
-  emit({ status: "ready", data, error: null });
+  try {
+    const data = await getRepository().load();
+    if (!data) throw new Error("Could not reload your data.");
+    emit({ status: "ready", data, error: null });
+  } catch (error) {
+    emit({
+      status: "error",
+      data: null,
+      error: error instanceof Error ? error.message : "Could not load complete financial data.",
+    });
+    throw error;
+  }
 }
 
 function requireData(): Database {

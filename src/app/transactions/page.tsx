@@ -1,5 +1,7 @@
 "use client";
 
+import { DataLoadError } from "@/components/layout/data-load-error";
+
 import { useMemo, useState } from "react";
 import { SearchX } from "lucide-react";
 import { useMoneyText } from "@/lib/hooks/use-privacy";
@@ -38,7 +40,7 @@ import { pluralise } from "@/lib/utils";
 
 export default function TransactionsPage() {
   const money = useMoneyText();
-  const { status, db, now, categories, cycleStartDay } = useFinance();
+  const { status, error, db, now, categories, cycleStartDay } = useFinance();
 
   const [query, setQuery] = useState("");
   const [barFilter, setBarFilter] = useState<TransactionFilter>({});
@@ -86,6 +88,8 @@ export default function TransactionsPage() {
       </div>
     );
   }
+
+  if (status === "error") return <DataLoadError error={error} />;
 
   const narrowed =
     Boolean(query.trim()) || !isFilterEmpty(barFilter) || range !== "all";
