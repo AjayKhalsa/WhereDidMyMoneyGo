@@ -1,6 +1,6 @@
-# Food receipt linking — prepared phase
+# Food receipt linking
 
-Status: implemented and locally tested; production migration and deployment require approval. This phase extends the existing 30-day Swiggy/Zomato receipt preview. It does not create financial transactions or change categories, merchants, notes, amounts, dates, accounts or contexts.
+Status: implemented and tested. The approved database migration was applied and verified on 30 October 2026; the application release is tracked in PR #47. This phase extends the existing 30-day Swiggy/Zomato receipt preview. It does not create financial transactions or change categories, merchants, notes, amounts, dates, accounts or contexts.
 
 ## Behaviour
 
@@ -14,7 +14,7 @@ Status: implemented and locally tested; production migration and deployment requ
 
 `20261030101829_food_receipt_details.sql` adds one empty metadata table, its user-scoped read policy/index and one server-only `SECURITY INVOKER` link function. Browser roles have no write or function-execute permission. The function never inserts or updates ledger rows. Existing `transaction_sources` stores per-email provenance. The migration reloads the PostgREST schema cache.
 
-No new environment variables or Gmail scopes. Credentials remain in the existing encrypted server-side connection. Apply the migration and verify its permissions before merging/deploying the application change. No production schema or historical receipt attachment has been applied in this phase yet.
+No new environment variables or Gmail scopes. Credentials remain in the existing encrypted server-side connection. The migration and its permissions were verified before the application release. The approved schema update is applied (remote migration version `20261030104507`, name `food_receipt_details`). Verification preserved all 641 current transactions and 609 existing source records; the new table started empty. No historical receipt attachment was applied as part of deployment.
 
 ## Validation
 
