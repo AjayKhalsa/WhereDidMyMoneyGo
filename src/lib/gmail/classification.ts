@@ -95,7 +95,14 @@ export function historicalRules(transactions: Transaction[], existing: Classific
   for(const t of transactions){if(t.type!=='EXPENSE'||!t.categoryId||['other','adjustment'].includes(t.categoryId))continue;const key=merchantKey(t.merchant||t.description);if(!key||key.length<4||['home','office','work','expense','payment','shopping','dinner','lunch','breakfast','snacks','auto','cab','transport','food','groceries'].includes(key))continue;groups.set(key,[...(groups.get(key)??[]),t]);}
   const rules:ClassificationRule[]=[], conflicts:string[]=[];
   for(const [key,rows] of groups){
-    if(new Set(rows.map(t=>t.categoryId)).size!==1){if(!(rows.every(t=>['dining','dining.breakfast','dining.lunch','dining.snacks','dining.dinner'].includes(t.categoryId??''))))conflicts.push(key);continue;}
+    if(new Set(rows.map(t=>t.categoryId)).size!==1){
+      // A platform can have delivery, coffee and meal labels without any
+      // disagreement about Food & Dining. Do not learn a particular leaf from
+      // mixed history, but let current merchant/time evidence choose one.
+      // Disagreements across category families still require review.
+      if(!rows.every(t=>t.categoryId==='dining'||t.categoryId?.startsWith('dining.')))conflicts.push(key);
+      continue;
+    }
     if(rows.length<3)continue;
     const pattern=deriveRulePattern(key);if(!pattern||['home','office','work','expense','payment','shopping','dinner','lunch','breakfast','snacks','auto','cab','transport','food','groceries'].includes(pattern)||existing.some(r=>r.pattern===pattern)||rules.some(r=>r.pattern===pattern))continue;
     const first=rows[0]!;
