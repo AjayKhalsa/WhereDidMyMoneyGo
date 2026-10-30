@@ -2,6 +2,7 @@ import { transactionOccurredBy } from "@/lib/domain/transaction-time";
 import { clampToMonth, daysBetween, monthKey,monthKeyToDate,endOfMonth, type MonthKey } from "@/lib/domain/dates";
 import type { Paise, RecurringTransaction, Transaction } from "@/lib/domain/types";
 import {resolveRecurringPayments,overlappingRecurringRules,possibleRecurringPayments} from './recurring-payments';
+import {anniversaryMonth} from './recurring-occurrences';
 
 /**
  * Recurring schedule maths (spec §18).
@@ -39,16 +40,16 @@ export function nextOccurrence(
   }
 
   if (rule.frequency === "YEARLY") {
-    const anniversaryMonth = new Date(rule.createdAt).getMonth();
+    const month = anniversaryMonth(rule.createdAt);
     const thisYear = clampToMonth(
       today.getFullYear(),
-      anniversaryMonth,
+      month,
       rule.dayOfPeriod,
     );
     if (thisYear >= today) return thisYear;
     return clampToMonth(
       today.getFullYear() + 1,
-      anniversaryMonth,
+      month,
       rule.dayOfPeriod,
     );
   }
