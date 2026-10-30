@@ -1,5 +1,6 @@
 "use client";
 
+import { ReceiptDetails } from "@/components/transactions/receipt-details";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
@@ -1015,6 +1016,8 @@ export function AddTransactionSheet({
                     </div>
                   </div>
                 )}
+
+                {editing && <ReceiptDetails transactionId={editing.id} />}
 
                 <TextField
                   label="Notes"

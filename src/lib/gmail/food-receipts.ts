@@ -41,3 +41,11 @@ export function possibleFoodPayments(receipt:FoodReceipt,receivedDay:string,tran
  const received=Date.parse(receivedDay+'T12:00:00Z');
  return transactions.filter(t=>t.type==='EXPENSE'&&t.amount===receipt.paidAmount&&Math.abs(Date.parse(t.date.slice(0,10)+'T12:00:00Z')-received)<=86400000&&new RegExp(`\\b${receipt.provider}\\b`,'i').test(`${t.merchant??''} ${t.description}`));
 }
+
+/** An explicit provider + labelled order ID is stronger than amount/day.
+ * It still must identify one eligible payment; bare bank references do not count. */
+export function exactFoodOrder(t:Transaction,receipt:FoodReceipt):boolean {
+ if(!/^\d{8,25}$/.test(receipt.orderId))return false;
+ const text=`${t.merchant??''} ${t.description} ${t.notes??''}`;
+ return new RegExp(`\\b${receipt.provider}\\b`,'i').test(text)&&new RegExp(`\\border(?:\\s*(?:id|no\\.?|number))?\\s*[:#-]?\\s*${receipt.orderId}\\b`,'i').test(text);
+}

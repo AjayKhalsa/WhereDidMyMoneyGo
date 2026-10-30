@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {authenticatedFoodReceipt,parseFoodReceipt,possibleFoodPayments} from '@/lib/gmail/food-receipts';
+import {authenticatedFoodReceipt,parseFoodReceipt,possibleFoodPayments,exactFoodOrder} from '@/lib/gmail/food-receipts';
 import {expense} from '../helpers/factories';
 test('completed Zomato receipt distinguishes outlet address from delivery address and discounts',()=>{
  const r=parseFoodReceipt('Zomato <noreply@zomato.com>','Your Zomato order from Example Cafe','ORDER ID: 1234567890 Delivered Example Cafe Shop 1, Example Road, Mumbai 1 X Tea Total paid - ₹894.89 Delivery Address: PRIVATE HOME Discount ₹100');
@@ -23,4 +23,12 @@ test('candidate matches preserve equal-value repeated payments and never mutate 
  const receipt={provider:'Swiggy' as const,orderId:'1234567890',paidAmount:71600};
  const rows=[expense({merchant:'Swiggy Limited',amount:71600,date:'2026-10-29T00:00:00'}),expense({merchant:'Swiggy',amount:71600,date:'2026-10-29T00:00:00'}),expense({merchant:'Uber',amount:71600,date:'2026-10-29T00:00:00'}),expense({merchant:'Swiggy',type:'INCOME',amount:71600,date:'2026-10-29T00:00:00'})];
  const before=JSON.stringify(rows);assert.equal(possibleFoodPayments(receipt,'2026-10-29',rows).length,2);assert.equal(JSON.stringify(rows),before);
+});
+
+test('automatic identity requires an explicit provider and full labelled order ID',()=>{
+ const r={provider:'Zomato' as const,orderId:'1234567890',paidAmount:50000};
+ assert.equal(exactFoodOrder(expense({description:'Zomato',notes:'Order ID: 1234567890'}),r),true);
+ assert.equal(exactFoodOrder(expense({description:'Zomato',notes:'RRN: 1234567890'}),r),false);
+ assert.equal(exactFoodOrder(expense({description:'Different cafe',notes:'Order ID: 1234567890'}),r),false);
+ assert.equal(exactFoodOrder(expense({description:'Zomato',notes:'Order ID: 123456789012'}),r),false);
 });
