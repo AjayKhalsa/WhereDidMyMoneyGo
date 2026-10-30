@@ -19,6 +19,8 @@ import { PageHeader } from "@/components/layout/month-switcher";
 import { ImportStatementSheet } from "@/components/settings/import-statement-sheet";
 import { ReconciliationImport } from "@/components/settings/reconciliation-import";
 import { PushNotifications } from "@/components/settings/push-notifications";
+import { InfoButton } from "@/components/ui/info-button";
+import { DataQualityCard } from "@/components/home/data-quality-card";
 import { GmailPanel } from "@/components/settings/gmail-panel";
 import { RulesPanel } from "@/components/settings/rules-panel";
 import { HistoryEnrichment } from "@/components/settings/history-enrichment";
@@ -106,6 +108,11 @@ export default function SettingsPage() {
       <Section title="Transaction times & smarter rules">
         <HistoryEnrichment />
       </Section>
+
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[13px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">Data quality</h2>
+        <InfoButton title="Data quality"><DataQualityCard /></InfoButton>
+      </div>
 
       <Section title="Your data">
         <DataPanel />

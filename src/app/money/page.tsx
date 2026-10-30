@@ -3,6 +3,7 @@
 import { DataLoadError } from "@/components/layout/data-load-error";
 import { PaymentCalendar } from "@/components/money/payment-calendar";
 
+import { InfoButton } from "@/components/ui/info-button";
 import { useMoneyText } from "@/lib/hooks/use-privacy";
 import {
   expectedMonthlyIncome,
@@ -213,11 +214,7 @@ export default function MoneyPage() {
         </DisclosurePanel>
       </div>
 
-      <p className="pb-2 text-[12.5px] leading-relaxed text-ink-tertiary">
-        Everything here feeds safe-to-spend. Income sets the ceiling; planned
-        investments, unpaid bills and goal contributions are held back before
-        you&rsquo;re told what&rsquo;s left.
-      </p>
+
     </div>
   );
 }
@@ -235,7 +232,7 @@ function StatBlock({
 }) {
   return (
     <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4 sm:p-5">
-      <p className="text-[13px] text-ink-secondary">{label}</p>
+      <div className="flex items-center gap-1"><p className="text-[13px] text-ink-secondary">{label}</p><InfoButton title={label}>{detail}</InfoButton></div>
       <div className="mt-1.5">
         <Amount
           value={value}
@@ -250,7 +247,6 @@ function StatBlock({
           }
         />
       </div>
-      <p className="mt-1.5 text-[12.5px] text-ink-tertiary">{detail}</p>
     </div>
   );
 }

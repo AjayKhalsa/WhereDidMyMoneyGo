@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatMonthLabel } from "@/lib/domain/dates";
 import { useFinance, useMonthNavigation } from "@/lib/hooks/use-finance";
 import { IconButton } from "@/components/ui/primitives";
+import { InfoButton } from "@/components/ui/info-button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -55,14 +56,12 @@ export function PageHeader({
         className,
       )}
     >
-      <div className="min-w-0">
+      <div className="flex min-w-0 items-center gap-1">
         <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink sm:text-[30px]">
           {title}
         </h1>
         {description && (
-          <p className="mt-1 text-[14px] leading-relaxed text-ink-secondary">
-            {description}
-          </p>
+          <InfoButton title={title}>{description}</InfoButton>
         )}
       </div>
       {action}
