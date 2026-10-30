@@ -1,5 +1,4 @@
 "use client";
-import { InfoButton } from "@/components/ui/info-button";
 import { useState } from 'react';
 import { addMonths } from '@/lib/domain/dates';
 import type { Transaction } from '@/lib/domain/types';
@@ -19,7 +18,7 @@ export function SpendingTrend({report, transactions, month, cycleStartDay, onOpe
   const y=(value:number)=>145-(value-low)/span*130;
   const path=(days:typeof current)=>`M ${x(0)} ${y(0)} `+days.map(d=>`L ${x(d.day)} ${y(d.cumulative)}`).join(' ');
   return <section aria-label="Spending trend" className="rounded-xl border border-line bg-surface p-4 space-y-3">
-    <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-semibold">Spending trend</h3><InfoButton title="Spending trend"><p>Current cycle versus previous cycle, aligned by cycle day. Credits and refunds lower the line.</p><p>Based on recorded transactions, not proof of complete bank coverage. No forecast is assumed.</p></InfoButton></div>
+    <div><h3 className="text-sm font-semibold">How net outflow builds up</h3><p className="text-xs text-ink-secondary">Current cycle versus previous cycle, aligned by cycle day. Credits and refunds lower the line.</p></div>
     {hidden?<p className="py-8 text-center text-sm text-ink-secondary">Chart hidden while balances are private.</p>:<svg viewBox="0 0 320 165" role="img" aria-label={`Cumulative net outflow: ${money(report.current.net)} this cycle${report.hasPrevious?`, ${money(report.previous.net)} in the comparison period`:''}`} className="w-full">
       <line x1="12" x2="308" y1={y(0)} y2={y(0)} stroke="currentColor" opacity="0.15" />
       {report.hasPrevious&&<path d={path(previous)} fill="none" stroke="currentColor" opacity="0.4" strokeWidth="2" strokeDasharray="5 4" />}
@@ -27,6 +26,7 @@ export function SpendingTrend({report, transactions, month, cycleStartDay, onOpe
       <text x="12" y="162" fontSize="10" fill="currentColor">Day 1</text><text x="308" y="162" textAnchor="end" fontSize="10" fill="currentColor">Day {Math.max(current.length,previous.length)}</text>
     </svg>}
     <p className="text-xs text-ink-secondary">Solid: current {money(report.current.net)} · {report.hasPrevious?`Dashed: previous ${money(report.previous.net)}`:'No previous-period records available.'}</p>
+    <p className="text-xs text-ink-tertiary">Based on recorded transactions, not proof of complete bank coverage. No forecast is assumed.</p>
     {selected&&<div className="border-t border-line pt-3 space-y-2">
       <label className="block text-xs text-ink-secondary" htmlFor="trend-day">Explore a day</label>
       <select id="trend-day" value={selected.date} onChange={e=>setChosenDate(e.target.value)} className="w-full rounded-lg border border-line bg-surface p-2 text-sm">{current.map(d=><option key={d.date} value={d.date}>{d.date} · {d.transactions.length} records</option>)}</select>

@@ -1,6 +1,5 @@
 "use client";
 
-import { InfoButton } from "@/components/ui/info-button";
 import { useMemo, useState } from "react";
 import { SpendingTrend } from "./spending-trend";
 import { contextLabel, DIMENSION_LABELS } from "@/lib/domain/contexts";
@@ -109,9 +108,9 @@ export function SpendingExplorer() {
       </div>
       {tags.length > 0 && (
         <div>
-          <div className="mb-2 flex items-center gap-1 text-[12px] text-ink-secondary">
-            Filter by tags <InfoButton title="Tag filters">Every selected tag must match.</InfoButton>
-          </div>
+          <p className="mb-2 text-[12px] text-ink-secondary">
+            Filter by tags · every selected tag must match
+          </p>
           <div className="flex flex-wrap gap-1.5">
             {tags.map((tag) => (
               <SelectableChip
@@ -136,16 +135,9 @@ export function SpendingExplorer() {
         </div>
       )}
       <div className="rounded-xl border border-line bg-surface p-4">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[12px] text-ink-secondary">Net category outflow</p>
-        <InfoButton title="Spending comparison">
-          {report.hasPrevious
-            ? `Previous cycle${report.comparableDays !== null ? `, first ${report.comparableDays} days or cycle end` : ""}: ${money(report.previous.net)}. Changes below use this comparison.`
-            : "No spending history in the comparison period yet."}
-          {report.comparableDays !== null &&
-            " Current cycle includes transactions through today."}
-        </InfoButton>
-        </div>
+        <p className="text-[12px] text-ink-secondary">
+          Net category outflow for this selection
+        </p>
         <button
           type="button"
           className="mt-1 text-left"
@@ -161,15 +153,21 @@ export function SpendingExplorer() {
           {money(report.current.refunds + report.current.credits)} credits and refunds · {report.current.count}{" "}
           expenses · {money(report.current.average)} average purchase
         </p>
-
+        <p className="mt-2 text-[12px] text-ink-tertiary">
+          {report.hasPrevious
+            ? `Previous cycle${report.comparableDays !== null ? `, first ${report.comparableDays} days or cycle end` : ""}: ${money(report.previous.net)}. Changes below use this comparison.`
+            : "No spending history in the comparison period yet."}
+          {report.comparableDays !== null &&
+            " Current cycle includes transactions through today."}
+        </p>
       </div>
       <SpendingTrend report={report} transactions={db?.transactions ?? []} month={month} cycleStartDay={cycleStartDay} onOpen={open} />
       {!["category", "type", "merchant"].includes(dimension) && (
-        <InfoButton title="Tag totals">
+        <p className="text-[12px] text-ink-tertiary">
           An expense can appear under several tags. Tag rows overlap; the
           selection total counts each transaction once. “Not tagged” means this
           dimension was not recorded.
-        </InfoButton>
+        </p>
       )}
       {report.buckets.length === 0 ? (
         <p className="text-sm text-ink-secondary" role="status">
