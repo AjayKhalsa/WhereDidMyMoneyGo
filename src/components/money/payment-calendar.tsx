@@ -1,5 +1,4 @@
 "use client";
-import {InfoButton} from '@/components/ui/info-button';
 import {useState} from 'react';
 import {useFinance} from '@/lib/hooks/use-finance';
 import {useMoneyText} from '@/lib/hooks/use-privacy';
@@ -14,7 +13,7 @@ export function PaymentCalendar(){
  const dates=[...new Set(events.map(e=>e.date))];
  const visible=events.filter(e=>!day||e.date===day);
  return <section className="rounded-2xl border border-line bg-surface p-4 space-y-4" aria-label="Upcoming payments">
-  <div className="flex items-center justify-between gap-2"><h2 className="text-base font-semibold">Coming up · next 30 days</h2><InfoButton title="Upcoming payments"><p>Bills, subscriptions, dated investment rules and expected income. Card repayments are separate from spending.</p><p>Monthly investment plans without a payment date are not assigned a guessed date. Expected items do not change your balances.</p></InfoButton></div>
+  <div><h2 className="text-base font-semibold">Coming up · next 30 days</h2><p className="mt-1 text-xs text-ink-secondary">Bills, subscriptions, dated investment rules and expected income. Card repayments are separate from spending.</p></div>
   {dates.length>0&&<label className="block text-xs text-ink-secondary">Choose a date<select className="mt-1 w-full rounded-lg border border-line bg-surface p-2 text-sm" value={day} onChange={e=>setDay(e.target.value)}><option value="">All upcoming dates</option>{dates.map(d=><option key={d} value={d}>{d}</option>)}</select></label>}
   {!events.length&&<p className="text-sm text-ink-secondary">No dated payments scheduled. Your existing recurring rules and income dates will appear here.</p>}
   <ul className="divide-y divide-line">{visible.map(e=><li key={e.id} className="py-3 space-y-1">
@@ -23,6 +22,7 @@ export function PaymentCalendar(){
    <p className="text-xs text-ink-tertiary">{e.note}</p>
    {e.transactionIds.length>0&&<button type="button" className="min-h-11 text-xs underline" onClick={()=>setSelected(e.transactionIds)}>View linked payments</button>}
   </li>)}</ul>
+  <p className="text-xs text-ink-tertiary">Monthly investment plans without a payment date are not assigned a guessed date. Expected items do not change your balances.</p>
   <Sheet open={selected!==null} onClose={()=>setSelected(null)} title="Linked payments"><TransactionList transactions={(db?.transactions??[]).filter(t=>selected?.includes(t.id))} showDayTotals={false}/></Sheet>
  </section>;
 }

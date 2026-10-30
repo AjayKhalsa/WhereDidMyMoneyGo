@@ -1,11 +1,7 @@
-# On-demand explanations
+# Balanced explanatory text
 
-Keep default screens focused on financial figures, statuses, transactions, useful observations and actions. Routine descriptions and calculation guidance belong behind a tappable information icon rather than persistent paragraphs.
+Keep helpful short descriptions, the Home balance explanation and the existing calculation link visible. Do not replace page and section descriptions wholesale with information icons: those descriptions give the screens context.
 
-- Home has no data-quality card. The full report is available through information controls in Insights and Settings.
-- Home's safe-to-spend information icon opens the existing calculation sheet. The balance, status and cycle remain visible.
-- Shared page/section descriptions, Money stat explanations, upcoming-payment guidance and spending-chart/comparison notes use `InfoButton`.
-- `InfoButton` uses a native auto popover with an accessible name, keyboard activation, Escape, close button and outside-click dismissal. Help content mounts when opened; data-quality requests therefore do not run merely because a hidden report exists.
-- Keep actual financial results, meaningful dates, expected/recorded statuses, errors, unresolved discrepancies and review actions visible. Do not replace useful insights with information icons.
+The large data-quality card stays off Home. Its detailed report remains available on demand in Insights and Settings using `InfoButton`. This is the limited use of information popovers, rather than a global rule for all explanatory text.
 
-No financial logic, ledger data, categories, database schema or environment variables change. Validation covers production build/type checks and Chromium phone/tablet widths, help interactions, Home removal and report availability in Insights/Settings. Native popovers require a modern browser (Chrome 114+, Safari 17+, Firefox 125+); the app's current phone/browser targets support them. Safari itself was not exercised in the development checks.
+Home's “How is this worked out?” link opens the existing calculation sheet. Financial figures, dates, meaningful insights and actionable errors remain visible. No financial calculation, ledger data or schema changes are involved.

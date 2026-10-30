@@ -1,7 +1,6 @@
 "use client";
 
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { InfoButton } from "./info-button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -129,14 +128,14 @@ export function Section({
     <section className={cn("space-y-3", className)}>
       {(title || action) && (
         <header className="flex items-end justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-1">
+          <div className="min-w-0">
             {title && (
               <h2 className="text-[13px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">
                 {title}
               </h2>
             )}
             {description && (
-              <InfoButton title={title ?? "More information"}>{description}</InfoButton>
+              <p className="mt-1 text-sm text-ink-secondary">{description}</p>
             )}
           </div>
           {action}

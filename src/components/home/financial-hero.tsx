@@ -11,7 +11,7 @@ import {
 } from "@/lib/domain/dates";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { usePrivacy, useMoneyText } from "@/lib/hooks/use-privacy";
-import { AnimatedAmount } from "@/components/ui/amount";
+import { AnimatedAmount, Amount } from "@/components/ui/amount";
 import { ProgressTrack } from "@/components/ui/charts";
 import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -94,19 +94,29 @@ export function FinancialHero() {
           <button
             type="button"
             onClick={() => setExplaining(true)}
-            aria-label="How safe-to-spend is calculated"
-            aria-haspopup="dialog"
-            aria-expanded={explaining}
-            title="How safe-to-spend is calculated"
             className={cn(
-              "inline-flex h-10 w-10 items-center justify-center rounded-full",
+              "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5",
               "text-[12.5px] font-medium text-ink-tertiary",
               "transition-colors hover:bg-surface-hover hover:text-ink-secondary",
             )}
           >
-            <Info aria-hidden="true" className="h-4 w-4" strokeWidth={1.75} />
+            <Info className="h-3.5 w-3.5" strokeWidth={1.75} />
+            How is this worked out?
           </button>
         </div>
+
+        <p className="mt-2 max-w-md text-[13.5px] leading-relaxed text-ink-secondary">
+          {overspent ? (
+            <>
+              You&rsquo;ve committed{" "}
+              <Amount value={Math.abs(safeToSpend.safeAmount)} size="xs" /> more
+              than you hold, once card balances, bills and investments are
+              accounted for.
+            </>
+          ) : (
+            "What's actually yours right now — your cash, less what you already owe on cards and everything committed this cycle."
+          )}
+        </p>
 
         <LiquidCashStrip />
       </div>
