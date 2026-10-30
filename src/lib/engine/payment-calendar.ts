@@ -1,8 +1,7 @@
-import { nextOccurrence } from './recurring';
 import { toDateInputValue, clampToMonth } from '@/lib/domain/dates';
-import { transactionOccurredBy } from '@/lib/domain/transaction-time';
 import type { RecurringTransaction, Transaction, IncomeSource } from '@/lib/domain/types';
 import type { CreditCardSummary } from './analytics';
+import {resolveRecurringPayments} from './recurring-payments';
 
 export interface PaymentEvent {id:string;date:string;label:string;amount:number;kind:'bill'|'investment'|'income'|'card';status:'expected'|'recorded';transactionIds:string[];note:string}
 /** Read-only schedule projection. Never creates a payment or modifies safe-to-spend. */
@@ -10,14 +9,9 @@ export function paymentCalendar(rules:RecurringTransaction[],income:IncomeSource
  const start=new Date(now.getFullYear(),now.getMonth(),now.getDate());
  const end=new Date(start);end.setDate(end.getDate()+29);
  const from=toDateInputValue(start),to=toDateInputValue(end),events:PaymentEvent[]=[];
- for(const rule of rules.filter(r=>r.isActive)){
-  let date=nextOccurrence(rule,start);
-  for(let guard=0;date<=end&&guard<31;guard++){
-   const day=toDateInputValue(date);
-   const paid=transactions.filter(t=>t.recurringId===rule.id&&t.type===rule.type&&t.categoryId!=='adjustment'&&t.date.slice(0,10)===day&&transactionOccurredBy(t,now));
-   events.push({id:`rule:${rule.id}:${day}`,date:day,label:rule.merchant||rule.description,amount:paid.length?paid.reduce((sum,t)=>sum+t.amount,0):rule.amount,kind:rule.type==='INVESTMENT'?'investment':'bill',status:paid.length?'recorded':'expected',transactionIds:paid.map(t=>t.id),note:paid.length?'Linked payment recorded.':rule.frequency==='YEARLY'?'Estimated anniversary; month inferred from rule creation.':'Scheduled estimate. Payments on another date may need linking.'});
-   const next=new Date(date);next.setDate(next.getDate()+1);date=nextOccurrence(rule,next);
-  }
+ for(const slot of resolveRecurringPayments(rules,transactions,start,end,now)){
+  const {rule,transaction}=slot,day=toDateInputValue(slot.dueDate);
+  events.push({id:`rule:${rule.id}:${day}`,date:day,label:rule.merchant||rule.description,amount:transaction?.amount??rule.amount,kind:rule.type==='INVESTMENT'?'investment':'bill',status:transaction?'recorded':'expected',transactionIds:transaction?[transaction.id]:[],note:transaction?(slot.basis==='recognised'?'Existing payment recognised by merchant, account, amount and schedule.':'Linked payment recorded.'):rule.frequency==='YEARLY'?'Estimated anniversary; month inferred from rule creation.':'Scheduled estimate. Ambiguous payments require review.'});
  }
  for(const source of income.filter(s=>s.isActive&&s.recurring)){
   for(let offset=0;offset<2;offset++){

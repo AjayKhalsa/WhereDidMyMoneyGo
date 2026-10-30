@@ -25,8 +25,9 @@ import {
 import { useFinance } from "@/lib/hooks/use-finance";
 import { Amount } from "@/components/ui/amount";
 import { MoneyField, SelectField, TextField } from "@/components/ui/fields";
-import { Button, Chip } from "@/components/ui/primitives";
+import { Button } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
+import {TransactionList} from '@/components/transactions/transaction-list';
 import { useToast } from "@/components/ui/toast";
 import { AccountPicker, CategoryPicker } from "@/components/pickers/pickers";
 import { createId, pluralise } from "@/lib/utils";
@@ -63,9 +64,11 @@ export function RecurringPanel() {
   const [editing, setEditing] = useState<RecurringTransaction | null>(null);
   const [creating, setCreating] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [viewingId,setViewingId]=useState<string|null>(null);
 
   const rules = db?.recurring ?? [];
   const statuses = recurringStatuses(rules, db?.transactions ?? [], month, now, cycleStartDay);
+  const viewing=statuses.find(s=>s.rule.id===viewingId)??null;
   const monthlyTotal = monthlyRecurringTotal(rules);
   const activeCount = rules.filter((r) => r.isActive).length;
   const live = isLiveMonth(month, now, cycleStartDay);
@@ -139,9 +142,13 @@ export function RecurringPanel() {
             status={status}
             live={live}
             onEdit={() => setEditing(status.rule)}
+            onInspect={()=>setViewingId(status.rule.id)}
           />
         ))}
       </div>
+      <Sheet open={!!viewing} onClose={()=>setViewingId(null)} title="Recorded payments" description={viewing?.rule.description}>
+       <div className="space-y-3 py-2"><p className="text-xs text-ink-secondary">{viewing?.possiblePayments.length?'Possible existing payments need review. Check these before adding another charge or changing a schedule.':'Payments recognised by their saved link or by a unique merchant, account, amount and scheduled date match.'}</p><TransactionList transactions={[...viewing?.payments??[],...viewing?.possiblePayments??[]]} showTime showDayTotals={false}/></div>
+      </Sheet>
 
       {monthlyTotal > 0 && (
         <div className="rounded-xl bg-surface-sunken p-3.5">
@@ -190,10 +197,12 @@ function RecurringRow({
   status,
   live,
   onEdit,
+  onInspect,
 }: {
   status: RecurringStatus;
   live: boolean;
   onEdit: () => void;
+  onInspect:()=>void;
 }) {
   const money = useMoneyText();
   const toast = useToast();
@@ -211,8 +220,11 @@ function RecurringRow({
 
   const sublabel = !rule.isActive
     ? "Paused"
+    : status.overlappingRuleIds.length>0 ? 'Possible duplicate schedule — review'
+    : status.possiblePayments.length>0 ? 'Possible payment already recorded'
     : paidThisMonth
-      ? "Paid this month"
+      ? status.recognisedCount>0 ? "Existing payment recognised" : "Paid this month"
+      : status.paidCount>0 ? `${status.paidCount} of ${status.occurrenceCount} payments recorded`
       : daysUntil < 0
         ? `Overdue since ${formatDayMonth(nextDate)}`
         : daysUntil === 0
@@ -238,12 +250,13 @@ function RecurringRow({
       </button>
 
       <div className="flex shrink-0 items-center gap-3">
-        {paidThisMonth ? (
-          <Chip tone="positive">
+        {(status.paidCount>0||status.possiblePayments.length>0)&&(
+          <Button size="sm" variant="quiet" onClick={onInspect} aria-label="View recorded payments" className="h-7 px-2 text-[12px]">
             <Check className="h-3 w-3" strokeWidth={2.5} />
-            Paid
-          </Chip>
-        ) : live && rule.isActive ? (
+            {paidThisMonth?'Paid':status.possiblePayments.length?'Review':'View'}
+          </Button>
+        )}
+        {!paidThisMonth&&!status.possiblePayments.length&&live && rule.isActive ? (
           <Button
             size="sm"
             variant="quiet"
