@@ -21,7 +21,7 @@ export function categoryPaymentSources(rows: Transaction[], all: Transaction[], 
   for (const original of rows) {
     const t = metadata(original);
     if (!isCategoryActivity(t)) continue;
-    const group = t.categoryId ? groupFor(t.categoryId) : 'other';
+    const group = groupFor(t.categoryId ?? 'other');
     const source = paymentSource(byAccount.get(t.accountId ?? ''));
     const sources = result.get(group) ?? [];
     const slice = sources.find(s => s.source === source) ?? {source, outgoing: 0, returned: 0, net: 0, transactions: []};
