@@ -14,6 +14,7 @@ import urllib.request
 MAX_REQUESTS = 6
 TIMEOUT_SECONDS = 70
 MAX_RESPONSE_BYTES = 65536
+ERROR_CODES = {"gmail_reconnect_required", "gmail_server_setup", "google_temporary_failure", "google_rate_limited"}
 
 
 class SyncJobError(Exception):
@@ -52,10 +53,23 @@ def request_sync(url, secret):
     try:
         response = urllib.request.build_opener(NoRedirect()).open(request, timeout=TIMEOUT_SECONDS)
     except urllib.error.HTTPError as error:
-        # The status is enough; never read or print a private upstream error body.
+        # Preserve only controlled error metadata, never upstream messages,
+        # mailbox content or credentials. Read is bounded for hostile responses.
         status = error.code
-        error.close()
-        return status, None
+        safe = None
+        try:
+            raw = error.read(MAX_RESPONSE_BYTES + 1)
+            value = json.loads(raw) if len(raw) <= MAX_RESPONSE_BYTES else None
+            if isinstance(value, dict) and isinstance(value.get("code"), str) and value["code"] in ERROR_CODES:
+                safe = {"code": value["code"]}
+                delay = value.get("retryAfterSeconds")
+                if type(delay) is int and 0 < delay <= 86400:
+                    safe["retryAfterSeconds"] = delay
+        except (ValueError, UnicodeError, OSError):
+            pass
+        finally:
+            error.close()
+        return status, safe
     with response:
         raw = response.read(MAX_RESPONSE_BYTES + 1)
         if len(raw) > MAX_RESPONSE_BYTES:
@@ -74,13 +88,23 @@ def run_sync(url, secret, fetch=request_sync, pause=time.sleep):
             status, body = fetch(url, secret)
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
             status, body = 0, None
+        code = body.get("code") if isinstance(body, dict) and status >= 400 else None
+        if code == "gmail_reconnect_required":
+            raise SyncJobError("Reconnect Gmail in the app's Settings. Google access expired or was revoked; saved scan progress and ledger entries are preserved.")
+        if code == "gmail_server_setup":
+            raise SyncJobError("The Google OAuth app configuration needs attention on the server. Reconnecting Gmail or changing CRON_SECRET alone will not fix it.")
+        retry_delay = body.get("retryAfterSeconds", 5) if code == "google_rate_limited" else 5
+        if type(retry_delay) is not int or retry_delay < 1:
+            retry_delay = 5
+        if retry_delay > 30:
+            raise SyncJobError("Google requested a longer pause than this job's retry budget. Saved progress is preserved; allow the quota pause before retrying.")
         if status in (401, 403):
             raise SyncJobError("Sync authorization was rejected. Check that GitHub CRON_SECRET matches Vercel and the production endpoint is reachable.")
         if 300 <= status < 400:
             raise SyncJobError("The sync URL redirected. Use its final canonical HTTPS URL; credentials were not forwarded.")
         if status in (0, 409, 429) or 500 <= status <= 599:
             if attempt + 1 < MAX_REQUESTS:
-                pause(5)
+                pause(retry_delay)
                 continue
             raise SyncJobError("Sync remained unavailable or busy within the retry budget. Saved entries are safe to retry.")
         if status not in (200, 202):

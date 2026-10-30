@@ -4,18 +4,18 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export class GmailError extends Error {
-  constructor(message: string, public status = 400) { super(message); }
+  constructor(message: string, public status = 400,public code?:'gmail_reconnect_required'|'gmail_server_setup'|'google_temporary_failure'|'google_rate_limited',public retryAfterSeconds?:number) { super(message); }
 }
 /** HTTP status only; never retain Google's response body or request token. */
 export class GoogleRequestError extends GmailError {
-  constructor(public upstreamStatus:number) { super('Google could not complete the request. Try again later.',502); }
+  constructor(public upstreamStatus:number,rateLimited=false,retryAfterSeconds?:number) { super(rateLimited?'Google temporarily limited Gmail requests. Your saved progress is safe; retry later.':'Google could not complete the request. Try again later.',rateLimited?503:502,rateLimited?'google_rate_limited':'google_temporary_failure',retryAfterSeconds); }
 }
 export function configured(): boolean {
   return ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GMAIL_TOKEN_KEY", "APP_ORIGIN", "CRON_SECRET"].every(k => !!process.env[k])
     && /^[a-f0-9]{64}$/i.test(process.env.GMAIL_TOKEN_KEY ?? "");
 }
 export function requireConfig() {
-  if (!configured()) throw new GmailError("Gmail setup is not finished on the server.", 503);
+  if (!configured()) throw new GmailError("Gmail setup is not finished on the server.", 503,'gmail_server_setup');
 }
 export function admin() {
   requireConfig();
@@ -64,15 +64,32 @@ export function checkOrigin(request: NextRequest) {
 }
 export function failure(error: unknown) {
   // Do not log or return upstream payloads: they can contain credentials or mail.
-  return json({ error: error instanceof GmailError ? error.message : "Gmail sync could not finish. Try again; saved entries will not be duplicated." }, error instanceof GmailError ? error.status : 500);
+  const response=json({ error: error instanceof GmailError ? error.message : "Gmail sync could not finish. Try again; saved entries will not be duplicated.",...(error instanceof GmailError?{code:error.code,retryAfterSeconds:error.retryAfterSeconds}:{}) }, error instanceof GmailError ? error.status : 500);
+  if(error instanceof GmailError&&error.retryAfterSeconds)response.headers.set('Retry-After',String(error.retryAfterSeconds));return response;
 }
 export async function google<T>(url: string, init: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(10000) });
+  let response:Response;
+  try{response=await fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(10000) });}
+  catch{throw new GoogleRequestError(0);}
   if (!response.ok) {
-    if (response.status === 401 || response.status === 400 && url.includes("/token")) throw new GmailError("Reconnect Gmail: Google authorization expired or was revoked.", 401);
+    // Inspect only whitelisted error codes. Never retain/return descriptions,
+    // message bodies, credentials or raw upstream exceptions.
+    let payload:any;try{payload=await response.json();}catch{payload=null;}
+    const tokenEndpoint=new URL(url).origin==='https://oauth2.googleapis.com'&&new URL(url).pathname==='/token';
+    const code=typeof payload?.error==='string'?payload.error:undefined;
+    const reasons:unknown[]=Array.isArray(payload?.error?.errors)?payload.error.errors.map((e:any)=>e?.reason):[];
+    if((tokenEndpoint&&code==='invalid_grant')||(!tokenEndpoint&&(response.status===401||reasons.includes('insufficientPermissions'))))
+      throw new GmailError('Reconnect Gmail: Google authorization expired, was revoked or needs read-only permission. Saved scan progress is preserved.',401,'gmail_reconnect_required');
+    if((tokenEndpoint&&['invalid_client','unauthorized_client','invalid_scope','invalid_request'].includes(code??''))||reasons.includes('accessNotConfigured'))
+      throw new GmailError('Gmail server setup needs attention. Check the Google OAuth app configuration; reconnecting alone will not fix it.',503,'gmail_server_setup');
+    if(response.status===429||reasons.some(r=>['rateLimitExceeded','userRateLimitExceeded','quotaExceeded','dailyLimitExceeded'].includes(String(r)))){
+      const raw=response.headers.get('retry-after'),parsed=raw&&/^\d+$/.test(raw)?Number(raw):raw?Math.ceil((Date.parse(raw)-Date.now())/1000):30;
+      const seconds=Number.isFinite(parsed)&&parsed>0?Math.ceil(parsed):30;
+      throw new GoogleRequestError(response.status,true,Math.max(5,Math.min(86400,seconds)));
+    }
     throw new GoogleRequestError(response.status);
   }
-  return response.json() as Promise<T>;
+  try{return await response.json() as T;}catch{throw new GoogleRequestError(502);}
 }
 export function tokenRequest(parameters: Record<string, string>) {
   return google<{ access_token: string; refresh_token?: string; scope?: string }>("https://oauth2.googleapis.com/token", {

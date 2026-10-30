@@ -73,6 +73,30 @@ class SyncJobTests(unittest.TestCase):
             self.assertNotIn(SECRET, str(caught.exception))
         self.assertIsNone(job.NoRedirect().redirect_request(None, None, 302, "", {}, "https://elsewhere.example"))
 
+    def test_google_access_and_server_setup_errors_have_actionable_messages(self):
+        for code, expected in (("gmail_reconnect_required", "Reconnect Gmail"), ("gmail_server_setup", "OAuth app configuration")):
+            with self.assertRaisesRegex(job.SyncJobError, expected):
+                self.run_results([(401 if code == "gmail_reconnect_required" else 503, {"code": code, "error": SECRET})])
+
+    def test_rate_limit_pause_is_bounded_and_honoured(self):
+        calls, pauses = [], []
+        def fetch(*_):
+            calls.append(1)
+            return (503, {"code": "google_rate_limited", "retryAfterSeconds": 12}) if len(calls) == 1 else (200, complete())
+        job.run_sync(URL, SECRET, fetch, pauses.append)
+        self.assertEqual(pauses, [12])
+        with self.assertRaisesRegex(job.SyncJobError, "longer pause"):
+            self.run_results([(503, {"code": "google_rate_limited", "retryAfterSeconds": 60})])
+
+    def test_http_error_reader_keeps_only_allowlisted_metadata(self):
+        for payload, expected in (({"code": "gmail_reconnect_required", "error": SECRET}, {"code": "gmail_reconnect_required"}), ({"code": [], "error": SECRET}, None), ({"code": "unknown", "error": SECRET}, None)):
+            error = urllib.error.HTTPError(URL, 401, "", {}, io.BytesIO(job.json.dumps(payload).encode()))
+            with patch.object(job.urllib.request, "build_opener", return_value=SimpleNamespace(open=lambda *_args, **_kwargs: (_ for _ in ()).throw(error))):
+                status, body = job.request_sync(URL, SECRET)
+                self.assertEqual(status, 401)
+                self.assertEqual(body, expected)
+                self.assertNotIn(SECRET, str(body))
+
     def test_disconnected_gmail_and_old_endpoint_are_not_healthy(self):
         for body in ({"connected": False}, {"ok": True}, {**complete(), "more": True}, {**complete(), "logged": True}):
             with self.assertRaises(job.SyncJobError):

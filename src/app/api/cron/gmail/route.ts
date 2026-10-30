@@ -6,7 +6,7 @@ import { drainMailbox } from "@/lib/gmail/health";
 export const maxDuration = 60;
 export async function GET(request: NextRequest) {
   if (!process.env.CRON_SECRET || !safeEqual(request.headers.get("authorization") ?? "", `Bearer ${process.env.CRON_SECRET}`)) return json({ error: "Unauthorized" }, 401);
-  if (!configured()) return json({ error: "Gmail is not configured." }, 503);
+  if (!configured()) return json({ error: "Gmail is not configured.",code:'gmail_server_setup' }, 503);
   let userId: string | undefined;
   try {
     // Personal app. Oldest checked mailbox first; bounded work fits the cron budget.
