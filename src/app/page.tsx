@@ -15,7 +15,7 @@ import { InsightDetailSheet } from "@/components/insights/insight-detail-sheet";
 import { CreditCardCard } from "@/components/money/credit-card-card";
 import { GoalCard } from "@/components/money/goal-card";
 import { TransactionList } from "@/components/transactions/transaction-list";
-import { BarList } from "@/components/ui/charts";
+import { CategoryPaymentBars } from "@/components/home/category-payment-bars";
 import {
   Button,
   Divider,
@@ -106,12 +106,7 @@ export default function HomePage() {
           >
             {groupBreakdown.length > 0 ? (
               <>
-                <BarList
-                  slices={groupBreakdown}
-                  limit={8}
-                  showCount
-                  onSelect={() => setFlowOpen(true)}
-                />
+                <CategoryPaymentBars slices={groupBreakdown} limit={8} />
                 <button
                   type="button"
                   onClick={() => setFlowOpen(true)}
