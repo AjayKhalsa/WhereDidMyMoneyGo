@@ -1,3 +1,4 @@
+import { completeLoad } from "./complete-load";
 import { writeTransactionCompatible } from "./transaction-write";
 import type { Database, TransactionContext, UserProfile } from "@/lib/domain/types";
 import { getSupabaseBrowserClient } from "./supabase-client";
@@ -150,10 +151,18 @@ export class SupabaseRepository implements Repository {
     return data.user.id;
   }
 
+  private async loadCollection(table: string, userId: string, keys: string[] = ["id"]) {
+    return completeLoad<Record<string, unknown>>((from, to) => {
+      let query = this.client.from(table).select("*", { count: "exact" }).eq("user_id", userId);
+      for (const key of keys) query = query.order(key, { ascending: true });
+      return query.range(from, to);
+    }, row => JSON.stringify(keys.map(key => row[key])));
+  }
+
   async load(): Promise<Database | null> {
     return wrap("load", async () => {
       const { data: userData, error: userError } = await this.client.auth.getUser();
-      if (userError || !userData.user) return null;
+      if (userError || !userData.user) throw new RepositoryError("Your session could not be verified. Sign in again before loading financial data.", userError);
       const userId = userData.user.id;
 
       const [
@@ -173,19 +182,19 @@ export class SupabaseRepository implements Repository {
         splitsRes,
       ] = await Promise.all([
         this.client.from("profiles").select("*").eq("id", userId).maybeSingle(),
-        this.client.from("accounts").select("*").eq("user_id", userId),
-        this.client.from("credit_cards").select("*").eq("user_id", userId),
-        this.client.from("categories").select("*").eq("user_id", userId),
-        this.client.from("transactions").select("*").eq("user_id", userId),
-        this.client.from("transaction_contexts").select("*").eq("user_id", userId),
-        this.client.from("recurring").select("*").eq("user_id", userId),
-        this.client.from("goals").select("*").eq("user_id", userId),
-        this.client.from("investments").select("*").eq("user_id", userId),
-        this.client.from("income_sources").select("*").eq("user_id", userId),
-        this.client.from("rules").select("*").eq("user_id", userId),
-        this.client.from("rule_contexts").select("*").eq("user_id", userId),
-        this.client.from("people").select("*").eq("user_id", userId),
-        this.client.from("splits").select("*").eq("user_id", userId),
+        this.loadCollection("accounts", userId),
+        this.loadCollection("credit_cards", userId),
+        this.loadCollection("categories", userId),
+        this.loadCollection("transactions", userId),
+        this.loadCollection("transaction_contexts", userId, ["transaction_id", "type", "value"]),
+        this.loadCollection("recurring", userId),
+        this.loadCollection("goals", userId),
+        this.loadCollection("investments", userId),
+        this.loadCollection("income_sources", userId),
+        this.loadCollection("rules", userId),
+        this.loadCollection("rule_contexts", userId, ["rule_id", "type", "value"]),
+        this.loadCollection("people", userId),
+        this.loadCollection("splits", userId),
       ]);
 
       for (const [name, res] of Object.entries({

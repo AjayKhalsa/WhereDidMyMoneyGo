@@ -149,3 +149,11 @@ A screenshot showed a truncated Supabase `put:transactions` failure; the full pr
 ## Net insights audit and sync frequency request
 
 The user reported Family transfers showing gross outgoing while omitting credits. See `calculation-audit.md` for the synthetic ₹140k − ₹80k = ₹60k regression, broader calculation corrections, and distinctions between category cash flow and consumption. No live financial rows or the previously completed reconciliation were changed. A separate four-daily cron change is prepared for a supported Vercel plan; Hobby's deployment restriction must not block shipping calculation fixes.
+
+## Complete financial loading — 30 October 2026
+
+The next reliability phase replaces single-request reads of all 13 financial/context collections with counted, ordered pagination. Later-page errors, missing/changing counts and repeated identities reject the load rather than publishing partial balances. Authentication failures no longer appear to be empty first-run accounts. Failed refreshes invalidate stale results; Money, Transactions and Insights expose a retry state.
+
+Home and Insights gain a compact coverage panel: uncategorized amounts remain included in balances, supported transaction-time coverage, existing Gmail processing health and collapsed account checkpoints with their as-of dates. Email scans never imply statement verification. Existing saved labels, transaction IDs and balances are not modified. No migration or new environment variables. Separate reads are not an atomic cross-table snapshot; same-count concurrent edits can require a reload.
+
+Validation: all 64 test files, production build and TypeScript checks pass. Pagination regressions retain a credit after 1,250 debits, composite contexts and manual notes. Production deployment status is recorded after release. Remaining phases include durable receipt/outlet enrichment, ambiguous backlog evidence, controlled AI fallback and further coverage-aware insights; this release does not claim complete reconciliation or universal parsing.

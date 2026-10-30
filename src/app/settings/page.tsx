@@ -101,7 +101,7 @@ export default function SettingsPage() {
       </Section>
 
       {isSupabaseConfigured && <CloudMigrationPanel />}
-      {isSupabaseConfigured && <><GmailPanel /><PushNotifications /></>}
+      {isSupabaseConfigured && <><div id="gmail"><GmailPanel /></div><PushNotifications /></>}
 
       <Section title="Transaction times & smarter rules">
         <HistoryEnrichment />

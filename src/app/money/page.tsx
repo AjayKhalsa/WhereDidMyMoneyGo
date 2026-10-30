@@ -1,4 +1,6 @@
 "use client";
+
+import { DataLoadError } from "@/components/layout/data-load-error";
 import { PaymentCalendar } from "@/components/money/payment-calendar";
 
 import { useMoneyText } from "@/lib/hooks/use-privacy";
@@ -38,6 +40,7 @@ export default function MoneyPage() {
   const money = useMoneyText();
   const {
     status,
+    error,
     db,
     safeToSpend,
     creditCards,
@@ -60,6 +63,8 @@ export default function MoneyPage() {
       </div>
     );
   }
+
+  if (status === "error") return <DataLoadError error={error} />;
 
   const spendable = (db?.accounts ?? []).filter(
     (a) => a.isActive && (a.type === "BANK" || a.type === "CASH"),
