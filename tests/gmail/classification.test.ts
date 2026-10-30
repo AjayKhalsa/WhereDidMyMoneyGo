@@ -73,3 +73,31 @@ test('future user correction creates a scoped explicit mapping while preserving 
  assert.equal(suggestCategory(alert({merchant:'Example Driver'}),[generic,change.after],categories).categoryId,'gifts');
  assert.equal(suggestCategory(alert({merchant:'Other Driver'}),[generic,change.after],categories).categoryId,'transport.cab');
 });
+
+test('mixed Zomato dining leaves do not block food recognition on the next Gmail debit',()=>{
+ const cats=[...categories,...['dining.delivery','dining.coffee','dining.other','dining.drinks'].map(id=>({id}))];
+ for(const merchant of ['ZOMATO LTD','Swiggy Limited','SWIGGY INSTAMART PRIVATE LIMITED','Zepto']){
+  const rows=['dining.breakfast','dining.dinner','dining.coffee','dining.delivery','dining.other','dining.drinks'].map(categoryId=>expense({merchant,categoryId}));
+  const legacy=rule({pattern:merchant.startsWith('ZOMATO')?'zomato':'swiggy',categoryId:'dining.dinner',confidence:0.6});
+  const trained=historicalRules(rows,[legacy]);
+  assert.deepEqual(trained.conflicts,[]);
+  assert.deepEqual(trained.rules,[]); // Never select an arbitrary historical leaf.
+  const result=classifiedAlert(alert({merchant,amount:41594,occurredAt:'2026-10-30T20:32:34',date:'2026-10-30',timeSource:'gmail',timeConfidence:'fallback'}),[legacy],[...cats,{id:'dining.groceries'}],[],trained.conflicts);
+  assert.equal(result.categoryId,/instamart|zepto/i.test(merchant)?'dining.groceries':'dining.delivery');
+  assert.equal(result.classification?.needsReview,false);
+  assert.equal(result.amount,41594);
+  assert.deepEqual(rows.map(t=>t.categoryId),['dining.breakfast','dining.dinner','dining.coffee','dining.delivery','dining.other','dining.drinks']);
+ }
+});
+
+test('mixed dining history preserves explicit corrections and real cross-family conflicts',()=>{
+ const cats=[...categories,{id:'dining.delivery'},{id:'dining.coffee'}];
+ const rows=['dining.coffee','dining.delivery'].map(categoryId=>expense({merchant:'ZOMATO LTD',categoryId}));
+ const trained=historicalRules(rows,[]);
+ assert.equal(classifiedAlert(alert(),[rule()],cats,[],trained.conflicts).categoryId,'gifts');
+ const crossFamily=historicalRules([...rows,expense({merchant:'Zomato',categoryId:'gifts'})],[]);
+ assert.deepEqual(crossFamily.conflicts,['zomato']);
+ assert.equal(classifiedAlert(alert(),[],cats,[],crossFamily.conflicts).categoryId,'other');
+ assert.equal(classifiedAlert(alert({direction:'credit'}),[],cats,[],trained.conflicts).categoryId,'other');
+ assert.equal(classifiedAlert(alert({special:true}),[],cats,[],trained.conflicts).categoryId,'other');
+});
