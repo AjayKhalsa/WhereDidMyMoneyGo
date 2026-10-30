@@ -115,3 +115,38 @@ test('an ongoing-cycle month change compares matched elapsed dates, including re
  const insights=generateInsights({transactions:rows,accounts:[],investments:[],goals:[],month,now,cycleStartDay:1,groupLabel:id=>id});
  assert.equal(insights.some(i=>i.id==='month-over-month'),false); // Both comparable periods are 20k, not an invented 80% drop.
 });
+
+test('three 10k SIPs remain 30k contributions when a 50k FD principal is returned',()=>{
+ const bank=makeAccount({openingBalance:rs(100000)}),holding=makeAccount({type:'INVESTMENT',openingBalance:rs(50000)});
+ const fund=makeInvestment({id:'sip'}),fd=makeInvestment({id:'fd',currentValue:rs(50000),valuedAt:at('2026-10-01')});
+ const rows=[...Array.from({length:3},(_,i)=>investmentTxn({id:`sip-${i}`,amount:rs(10000),investmentId:fund.id,accountId:bank.id,date:at('2026-10-26')})),transfer({amount:rs(50000),investmentId:fd.id,accountId:holding.id,toAccountId:bank.id,date:at('2026-10-29')}),income({amount:rs(648),accountId:bank.id,date:at('2026-10-29')})];
+ const original=structuredClone(rows),date=new Date('2026-10-30T12:00:00Z'),cycle='2026-10-24';
+ const totals=monthTotals(rows,cycle,24);
+ assert.equal(totals.investmentContributions,rs(30000));assert.equal(totals.investmentWithdrawals,rs(50000));assert.equal(totals.invested,-rs(20000));assert.equal(totals.income,rs(648));assert.equal(totals.spent,0);
+ const safe=calculateSafeToSpend({transactions:rows,accounts:[bank,holding],investments:[fund,fd],incomeSources:[],recurring:[],goals:[],month:cycle,now:date,cycleStartDay:24});
+ assert.equal(safe.bankBalance,rs(120648));assert.equal(safe.monthlySurplus,rs(20648));assert.equal(safe.positionNow-safe.positionAtCycleStart,safe.monthlySurplus);
+ const lines=safe.monthlySurplusBreakdown;
+ assert.equal(lines.find(l=>l.id==='invested')!.amount,rs(30000));assert.equal(lines.find(l=>l.id==='invested')!.direction,'subtract');
+ assert.equal(lines.find(l=>l.id==='investment-withdrawals')!.amount,rs(50000));assert.equal(lines.find(l=>l.id==='investment-withdrawals')!.direction,'add');
+ assert.equal(lines.reduce((sum,l)=>sum+(l.direction==='add'?l.amount:-l.amount),0),safe.monthlySurplus);
+ assert.equal(valueInvestments([fd],rows,date)[0]!.value,0);assert.equal(valueInvestments([fd],rows,date)[0]!.gain,rs(50000));
+ assert.equal(netWorth([bank,holding],rows,[fund,fd],[],date)-netWorth([bank,holding],[],[fund,fd],[],date),rs(648));assert.deepEqual(rows,original);
+});
+
+test('gross investment totals preserve legitimate repeats and exclude unrelated transfers and adjustments',()=>{
+ const rows=[investmentTxn({amount:rs(10000),date:at('2026-10-26')}),investmentTxn({amount:rs(10000),date:at('2026-10-26')}),investmentTxn({amount:rs(99999),categoryId:'adjustment',date:at('2026-10-26')}),investmentTxn({amount:rs(777),date:at('2026-09-01')}),transfer({amount:rs(50000),date:at('2026-10-26')}),transfer({amount:rs(1000),investmentId:'fund',accountId:'same',toAccountId:'same',date:at('2026-10-26')})];
+ const totals=monthTotals(rows,'2026-10-24',24);assert.equal(totals.investmentContributions,rs(20000));assert.equal(totals.investmentWithdrawals,0);assert.equal(totals.invested,rs(20000));
+});
+
+test('historical card debt reduction stops at the selected cycle end',()=>{
+ const bank=makeAccount({openingBalance:rs(100000)}),card=makeCard();
+ const rows=[expense({accountId:card.id,amount:rs(30000),date:at('2026-09-01')}),transfer({accountId:bank.id,toAccountId:card.id,amount:rs(5000),date:at('2026-10-10')}),transfer({accountId:bank.id,toAccountId:card.id,amount:rs(10000),date:at('2026-11-10')})];
+ const safe=calculateSafeToSpend({transactions:rows,accounts:[bank,card],investments:[],incomeSources:[],goals:[],recurring:[],month:'2026-10-01',now:new Date('2026-11-15T12:00:00Z'),cycleStartDay:1});
+ assert.equal(safe.cardDebtCleared,rs(5000));assert.equal(safe.positionDifference,0);
+});
+
+test('cash-position discrepancies from excluded adjustments remain explicit',()=>{
+ const bank=makeAccount({openingBalance:rs(10000)});
+ const safe=calculateSafeToSpend({transactions:[income({accountId:bank.id,categoryId:'adjustment',amount:rs(1234),date:at('2026-10-10')})],accounts:[bank],investments:[],incomeSources:[],recurring:[],goals:[],month,now,cycleStartDay:1});
+ assert.equal(safe.positionDifference,-rs(1234));assert.equal(safe.monthlySurplus,0);
+});

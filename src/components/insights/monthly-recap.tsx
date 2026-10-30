@@ -7,7 +7,6 @@ import { formatMonthLabel, previousMonths } from "@/lib/domain/dates";
 import { percentOf } from "@/lib/domain/money";
 import {
   compareToAverage,
-  investmentRate,
   monthTransactions,
   spendByGroup,
 } from "@/lib/engine/analytics";
@@ -59,7 +58,7 @@ export function MonthlyRecap() {
     netSpending(monthTransactions(transactions, m, cycleStartDay), transactions),
   );
 
-  const invRate = investmentRate(totals);
+  const invRate = percentOf(totals.investmentContributions, totals.income);
 
   return (
     <div className="rounded-[var(--radius-card)] border border-line bg-surface p-5 sm:p-6">
@@ -84,8 +83,8 @@ export function MonthlyRecap() {
       <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5 border-y border-line py-5 sm:grid-cols-4">
         <Figure label="Income" value={totals.income} />
         <Figure
-          label="Net invested"
-          value={totals.invested}
+          label="Invested"
+          value={totals.investmentContributions}
           sub={totals.income > 0 ? `${invRate.toFixed(1)}%` : undefined}
         />
         <Figure
@@ -98,6 +97,8 @@ export function MonthlyRecap() {
           }
         />
         <Figure label="Net category outflow" value={netCategoryOutflow(monthRows, transactions)} />
+        {totals.investmentWithdrawals > 0 && <Figure label="Investment principal returned" value={totals.investmentWithdrawals} />}
+        {totals.investmentWithdrawals > 0 && <Figure label="Net investment flow" value={totals.invested} />}
         <Figure label="Committed" value={safeToSpend.cardOutstanding} />
       </dl>
 
@@ -148,12 +149,12 @@ export function MonthlyRecap() {
         <Verdict
           label="Best habit"
           headline={
-            totals.invested > 0 ? "Investing" : "Nothing to celebrate yet"
+            totals.investmentContributions > 0 ? "Investing" : "Nothing to celebrate yet"
           }
           detail={
-            totals.invested > 0 ? (
+            totals.investmentContributions > 0 ? (
               <span className="text-[13px] text-ink-secondary tnum">
-                {money(totals.invested)} · {invRate.toFixed(0)}% of income
+                {money(totals.investmentContributions)} · {invRate.toFixed(0)}% of income
               </span>
             ) : (
               <span className="text-[12.5px] text-ink-tertiary">

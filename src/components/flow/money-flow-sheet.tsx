@@ -128,7 +128,7 @@ export function MoneyFlowSheet({
   );
 
   const segments: FlowSegment[] = [
-    { id: "invested", label: "Invested", amount: totals.invested, tone: "accent" },
+    { id: "invested", label: "Invested", amount: totals.investmentContributions, tone: "accent" },
     { id: "spent", label: "Spent", amount: totals.spent, tone: "ink" },
     { id: "left", label: "Unallocated", amount: unallocated, tone: "muted" },
   ];
@@ -197,15 +197,27 @@ export function MoneyFlowSheet({
               emphasis
             />
             <FlowStep
-              label="Net invested"
-              amount={totals.invested}
+              label="Invested"
+              amount={totals.investmentContributions}
               tone="accent"
               detail={
                 totals.income > 0
-                  ? `${percentOf(totals.invested, totals.income).toFixed(1)}% of income — moved, not spent`
+                  ? `${percentOf(totals.investmentContributions, totals.income).toFixed(1)}% of income — moved, not spent`
                   : "Moved into assets, not spent"
               }
             />
+            {totals.investmentWithdrawals > 0 && <FlowStep
+              label="Investment principal returned"
+              amount={totals.investmentWithdrawals}
+              tone="accent"
+              detail="Withdrawn from assets, including FD principal; not earned income"
+            />}
+            {totals.investmentWithdrawals > 0 && <FlowStep
+              label="Net investment flow"
+              amount={totals.invested}
+              tone="accent"
+              detail="Contributions minus returned principal; negative means more was withdrawn"
+            />}
             <FlowStep
               label="Outgoing after refunds"
               amount={totals.spent}
@@ -226,7 +238,7 @@ export function MoneyFlowSheet({
               label="Unallocated"
               amount={unallocated}
               tone="muted"
-              detail="Not yet spent, invested or assigned"
+              detail="Recorded income plus returned principal, less contributions and spending; not your available balance"
             />
 
             {totals.income > 0 && (

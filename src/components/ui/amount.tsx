@@ -37,7 +37,7 @@ export function Amount({
   size = "md",
   className,
   compact,
-  signed,
+  signed = true,
   muted,
   revealed,
 }: {
@@ -45,7 +45,7 @@ export function Amount({
   size?: AmountSize;
   className?: string;
   compact?: boolean;
-  /** Renders a leading − for negative values instead of hiding the sign. */
+  /** Negative values retain their sign by default. Pass false only for an explicit magnitude. */
   signed?: boolean;
   muted?: boolean;
   /**
