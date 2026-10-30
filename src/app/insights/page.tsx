@@ -16,6 +16,7 @@ import { InsightDetailSheet } from "@/components/insights/insight-detail-sheet";
 import { LensAnswers } from "@/components/insights/lens-answers";
 import { SpendingExplorer } from "@/components/insights/spending-explorer";
 import { SpendingDrivers } from '@/components/insights/spending-drivers';
+import { SpendingCalendar } from '@/components/insights/spending-calendar';
 import { MonthlyRecap } from "@/components/insights/monthly-recap";
 import { AffordabilityCheck } from "@/components/insights/affordability-check";
 import { EmptyState, Section, Skeleton } from "@/components/ui/primitives";
@@ -73,6 +74,7 @@ export default function InsightsPage() {
       ) : (
         <>
           <SpendingDrivers />
+          <SpendingCalendar />
           <Section title="Explore your spending" description="Follow the money by category, merchant, people, purpose or your own labels.">
             <SpendingExplorer />
           </Section>
