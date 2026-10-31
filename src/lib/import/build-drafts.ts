@@ -9,6 +9,7 @@ import type {
 } from "@/lib/domain/types";
 import type { StatementRow } from "./statement-row";
 import { bankReference, eventDirection, normalizeBankReference, possibleExistingTransactions, type EventDirection } from "./identity";
+import {possibleRecordedSplits,recordedSplitGroups} from './split-settlements';
 
 /**
  * Statement rows -> reviewable drafts.
@@ -23,6 +24,8 @@ export interface ImportDraft {
   reference?: string;
   direction: EventDirection;
   possibleMatchIds: string[];
+  /** Explicit companion groups whose total matches; review only, never a link. */
+  possibleSplitIds: string[];
   date: string;
   amount: Paise;
   type: TransactionType;
@@ -58,6 +61,7 @@ export function buildImportDrafts(
   existingTransactions: Transaction[],
   rules: ClassificationRule[],
 ): ImportDraft[] {
+  const splitGroups=recordedSplitGroups(existingTransactions);
   // Counted, not boolean: two genuinely separate ₹150 UPI payments to the
   // same place on the same day shouldn't both get flagged as duplicates of
   // each other just because one of them matches something already saved.
@@ -91,6 +95,7 @@ export function buildImportDrafts(
 
     return {
       reference, direction, possibleMatchIds: possibleMatches.map((t) => t.id),
+      possibleSplitIds:possibleRecordedSplits(splitGroups,accountId,amount,row.date,direction,reference).map(group=>group.id),
       date: row.date,
       amount,
       type,

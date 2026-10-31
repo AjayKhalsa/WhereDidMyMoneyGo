@@ -22,6 +22,7 @@ import { factualTimeContexts, timingFor, UNKNOWN_TIMING } from "@/lib/domain/tra
 import { validateEnrichmentChange, type EnrichmentChange } from "@/lib/engine/history-enrichment";
 import { getRepository } from "./local-adapter";
 import { bankReference, possibleExistingTransactions, sourceDigest, type SourceObservation, type StatementImportResult } from "@/lib/import/identity";
+import {assertSplitReview} from '@/lib/import/split-settlements';
 import { createId } from "@/lib/utils";
 import {
   applyBatch,
@@ -216,6 +217,11 @@ export async function importTransactions(
   }
 
   const repo = getRepository();
+  // A review can remain open while another device records a split settlement.
+  // Reload before the first write; never create a gross payout over its parts.
+  const freshImport=rows.some(row=>row.observation)?await repo.load():null;
+  if(rows.some(row=>row.observation)&&!freshImport)throw new Error('Could not verify existing entries. Reopen this statement before importing.');
+  assertSplitReview(transactions.flatMap((transaction,i)=>rows[i]!.observation?[{transaction,observation:rows[i]!.observation!}]:[]),freshImport?.transactions??[]);
   if (repo.commitStatementImport) {
     if (rows.some((r) => !r.observation)) throw new Error("Reopen the statement to prepare its source identities before importing.");
     const result = await repo.commitStatementImport(transactions.map((transaction, i) => ({ transaction, observation: rows[i]!.observation! })));
@@ -241,7 +247,7 @@ export async function importTransactions(
   }
   // Offline/demo fallback keeps stable source IDs and never overwrites an
   // existing manual entry. Cross-device locking is provided by the cloud RPC.
-  const fresh = await repo.load();
+  const fresh = freshImport??await repo.load();
   const existing = [...(fresh?.transactions ?? [])];
   const created: Transaction[] = [];
   let matched = 0;
