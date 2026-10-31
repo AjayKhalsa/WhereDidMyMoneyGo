@@ -7,6 +7,7 @@ import { useMoneyText } from '@/lib/hooks/use-privacy';
 import { deleteTransactions, importTransactions } from "@/lib/data/actions";
 import { sourceDigest } from "@/lib/import/identity";
 import {possibleRecordedSplits,recordedSplitGroups} from '@/lib/import/split-settlements';
+import {reviewCreditPurpose,reviewImportCategory,type CreditPurpose} from '@/lib/import/credit-purpose';
 import {
   buildImportDrafts,
   type ImportDraft,
@@ -68,6 +69,7 @@ export function ImportStatementSheet({
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [routingRow, setRoutingRow] = useState<number | null>(null);
+  const [creditRow,setCreditRow]=useState<number|null>(null);
   const [committing, setCommitting] = useState(false);
   const [sourceHash, setSourceHash] = useState("");
   const [splitSelection,setSplitSelection]=useState<{index:number;id:string}|null>(null);
@@ -95,6 +97,7 @@ export function ImportStatementSheet({
     setSplitSelection(null);
     setEditingRow(null);
     setRoutingRow(null);
+    setCreditRow(null);
     setPasswordPrompt(null);
   }
 
@@ -135,7 +138,7 @@ export function ImportStatementSheet({
         db?.rules ?? [],
       );
       setRows(
-        drafts.map((d, index) => ({ ...d, included: !d.isLikelyDuplicate && d.possibleMatchIds.length === 0 && d.possibleSplitIds.length===0,
+        drafts.map((d, index) => ({ ...d, included: !d.needsCreditReview && !d.isLikelyDuplicate && d.possibleMatchIds.length === 0 && d.possibleSplitIds.length===0,
           sourceKey: `${accountId}:${fileHash}:${index}`, wasCorrected: false })),
       );
       setStep("review");
@@ -164,11 +167,21 @@ export function ImportStatementSheet({
   // transfer with no destination debits the bank and credits nothing, so a
   // card payment would leave the card's outstanding untouched forever.
   const unresolvedTransfers = rows.filter(
-    (r) => r.included && r.type === "TRANSFER" && !r.toAccountId,
+    (r) => r.included && !r.existingTransactionId && r.type === "TRANSFER" && !(r.direction==='credit'?r.fromAccountId:r.toAccountId),
   ).length;
+  const unresolvedCredits=rows.filter(r=>r.included&&r.needsCreditReview&&!r.existingTransactionId).length;
+  const routingCredit=routingRow!==null&&rows[routingRow]?.direction==='credit';
+  const detailOpen=!!selectedSplit||creditRow!==null||editingRow!==null||routingRow!==null;
+
+  function chooseCreditPurpose(purpose:CreditPurpose) {
+    if(creditRow===null)return;
+    setRows(current=>current.map((row,i)=>i===creditRow?{...reviewCreditPurpose(row,purpose),wasCorrected:true,
+      included:row.included||!!row.allowSeparate||(!row.possibleMatchIds.length&&!splitMatches[i]?.length)}:row));
+    setCreditRow(null);
+  }
 
   async function handleCommit() {
-    if (!accountId || includedCount === 0 || unresolvedTransfers > 0 || unreviewedSplits>0) return;
+    if (!accountId || includedCount === 0 || unresolvedTransfers > 0 || unreviewedSplits>0 || unresolvedCredits>0) return;
     setCommitting(true);
     try {
       const included = rows.filter((r) => r.included);
@@ -181,8 +194,9 @@ export function ImportStatementSheet({
             date: isoDateToLocalDate(r.date),
             categoryId: r.categoryId,
             contexts: r.contexts,
-            accountId,
-            toAccountId: r.toAccountId,
+            accountId:r.type==='TRANSFER'&&r.direction==='credit'?r.fromAccountId:accountId,
+            toAccountId:r.type==='TRANSFER'&&r.direction==='credit'?accountId:r.toAccountId,
+            isRefund:r.isRefund,
             merchant: r.merchant,
             source: "imported",
           },
@@ -220,7 +234,7 @@ export function ImportStatementSheet({
   return (
     <>
       <Sheet
-        open={open&&!selectedSplit}
+        open={open&&!detailOpen}
         onClose={() => {
           reset();
           onClose();
@@ -235,14 +249,16 @@ export function ImportStatementSheet({
               variant="primary"
               block
               onClick={handleCommit}
-              disabled={includedCount === 0 || committing || unresolvedTransfers > 0 || unreviewedSplits>0}
+              disabled={includedCount === 0 || committing || unresolvedTransfers > 0 || unreviewedSplits>0 || unresolvedCredits>0}
             >
               {committing
                 ? "Importing…"
                 : unreviewedSplits>0
                   ? 'Review possible split payouts'
+                : unresolvedCredits>0
+                  ? 'Review received money'
                 : unresolvedTransfers > 0
-                  ? `${unresolvedTransfers} transfer${unresolvedTransfers === 1 ? "" : "s"} need${unresolvedTransfers === 1 ? "s" : ""} a destination`
+                  ? `${unresolvedTransfers} transfer${unresolvedTransfers === 1 ? "" : "s"} need${unresolvedTransfers === 1 ? "s" : ""} an account`
                   : `Import ${includedCount} transaction${includedCount === 1 ? "" : "s"}`}
             </Button>
           ) : undefined
@@ -316,7 +332,7 @@ export function ImportStatementSheet({
             <p className="mb-2 text-[12.5px] text-ink-tertiary">
               {rows.length} rows found. Possible existing entries are unchecked. Link a saved entry,
               or confirm a separate payment when appropriate. Tap a category to change it, or to
-              turn a transfer back into ordinary spending.
+              turn an outgoing transfer back into spending. Unclear credits need a type.
               {unresolvedTransfers > 0 &&
                 " Transfers need to say where the money landed before you can import."}
             </p>
@@ -329,7 +345,7 @@ export function ImportStatementSheet({
                   type="checkbox"
                   aria-label={`Include statement row ${index+1}`}
                   checked={row.included}
-                  disabled={committing||!!splitMatches[index]?.length&&!row.allowSeparate&&!row.existingTransactionId}
+                  disabled={committing||(!row.existingTransactionId&&(row.needsCreditReview||!!splitMatches[index]?.length&&!row.allowSeparate))}
                   onChange={(e) =>
                     setRows((current) =>
                       current.map((r, i) =>
@@ -345,22 +361,21 @@ export function ImportStatementSheet({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13.5px] text-ink">{row.description}</span>
                   <span className="mt-0.5 flex flex-wrap items-center gap-1">
-                    <button type="button" onClick={() => setEditingRow(index)}>
-                      <Chip tone={row.wasCorrected ? "accent" : "neutral"}>
-                        {row.type === "EXPENSE"
+                    <button type="button" disabled={!!row.existingTransactionId} title={row.existingTransactionId?'The saved entry keeps its type and category':undefined} aria-label={`Review type or category for row ${index+1}`} onClick={() => row.direction==='credit'?setCreditRow(index):setEditingRow(index)}>
+                      <Chip tone={row.needsCreditReview?'warning':row.wasCorrected ? "accent" : "neutral"}>
+                        {row.existingTransactionId?'Existing entry':row.direction==='credit'?(row.needsCreditReview?'Choose type':row.isRefund?'Refund':row.type==='TRANSFER'?'Transfer in':'Income'):row.type === "EXPENSE"
                           ? categories.pathOf(row.categoryId)
                           : row.type}
                       </Chip>
                     </button>
-                    {row.type === "TRANSFER" && (
+                    {row.isRefund&&!row.existingTransactionId&&<button type="button" aria-label={`Refund category for row ${index+1}`} onClick={()=>setEditingRow(index)}><Chip>{categories.pathOf(row.categoryId)}</Chip></button>}
+                    {row.type === "TRANSFER" && !row.existingTransactionId && (
                       <button
                         type="button"
                         onClick={() => setRoutingRow(index)}
                       >
-                        <Chip tone={row.toAccountId ? "neutral" : "warning"}>
-                          {row.toAccountId
-                            ? `→ ${accountName(row.toAccountId)}`
-                            : "Where did this go?"}
+                        <Chip tone={(row.direction==='credit'?row.fromAccountId:row.toAccountId) ? "neutral" : "warning"}>
+                          {row.direction==='credit'?(row.fromAccountId?`From ${accountName(row.fromAccountId)}`:'Where did this come from?'):row.toAccountId?`→ ${accountName(row.toAccountId)}`:'Where did this go?'}
                         </Chip>
                       </button>
                     )}
@@ -400,6 +415,15 @@ export function ImportStatementSheet({
         )}
       </Sheet>
 
+      <Sheet open={open&&creditRow!==null} onClose={()=>setCreditRow(null)} title="What is this money received?" size="sm">
+        <div className="space-y-2">
+          {creditRow!==null&&rows[creditRow]?.suggestedCreditPurpose==='refund'&&<p className="mb-3 text-sm text-ink-secondary">The bank narration suggests a refund. Confirm its purpose.</p>}
+          <button type="button" onClick={()=>chooseCreditPurpose('income')} className="block min-h-14 w-full rounded-xl border border-line p-3 text-left"><span className="block font-medium">Income</span><span className="text-xs text-ink-secondary">Salary, interest or money earned</span></button>
+          <button type="button" onClick={()=>chooseCreditPurpose('refund')} className="block min-h-14 w-full rounded-xl border border-line p-3 text-left"><span className="block font-medium">Refund</span><span className="text-xs text-ink-secondary">Money returned against spending</span></button>
+          <button type="button" onClick={()=>chooseCreditPurpose('transfer')} className="block min-h-14 w-full rounded-xl border border-line p-3 text-left"><span className="block font-medium">Own-account transfer</span><span className="text-xs text-ink-secondary">From another bank or cash account you track</span></button>
+        </div>
+      </Sheet>
+
       <Sheet open={open&&!!selectedSplit} onClose={()=>setSplitSelection(null)} title="Possible recorded split" size="lg">
         {selectedSplit&&<><p className="mb-2 text-xl font-semibold">{money(selectedSplit.total)} across {selectedSplit.rows.length} entries</p><p className="mb-5 text-sm text-ink-secondary">These entries explicitly name each other and match this statement total. If they represent this payout, leave the statement row unchecked. No new source link is saved.</p><TransactionList transactions={selectedSplit.rows} showDayTotals={false} showTime/></>}
       </Sheet>
@@ -433,7 +457,7 @@ export function ImportStatementSheet({
       </Sheet>
 
       <Sheet
-        open={editingRow !== null}
+        open={open&&editingRow !== null}
         onClose={() => setEditingRow(null)}
         title="Category"
         size="md"
@@ -445,16 +469,9 @@ export function ImportStatementSheet({
             setRows((current) =>
               current.map((r, i) =>
                 i === editingRow
-                  ? // Choosing a category means this was ordinary spending,
-                    // not a transfer — a "card payment" narration is
-                    // sometimes just a purchase, so let the reviewer say so.
-                    {
-                      ...r,
-                      categoryId: id,
-                      type: "EXPENSE" as const,
-                      toAccountId: undefined,
-                      wasCorrected: true,
-                    }
+                  ? // Refine a refund or reclassify an outgoing payment.
+                    // A credit must keep its incoming financial direction.
+                    {...reviewImportCategory(r,id),wasCorrected:true}
                   : r,
               ),
             );
@@ -464,22 +481,22 @@ export function ImportStatementSheet({
       </Sheet>
 
       <Sheet
-        open={routingRow !== null}
+        open={open&&routingRow !== null}
         onClose={() => setRoutingRow(null)}
-        title="Where did this money go?"
-        description="Your statement only shows it leaving this account. Pick the card or account it landed in, so both sides move."
+        title={routingCredit?'Where did this money come from?':'Where did this money go?'}
+        description={routingCredit?'Choose the bank or cash account you moved this from. Both sides are recorded as one transfer.':'Pick the card or account it landed in, so both sides move.'}
         size="sm"
       >
         <AccountPicker
           accounts={(db?.accounts ?? []).filter(
-            (a) => a.isActive && a.id !== accountId,
+            (a) => a.isActive && a.id !== accountId && (!routingCredit||a.type==='BANK'||a.type==='CASH'),
           )}
-          value={routingRow !== null ? rows[routingRow]?.toAccountId : undefined}
+          value={routingRow !== null ? routingCredit?rows[routingRow]?.fromAccountId:rows[routingRow]?.toAccountId : undefined}
           onChange={(id) => {
             if (routingRow === null) return;
             setRows((current) =>
               current.map((r, i) =>
-                i === routingRow ? { ...r, toAccountId: id } : r,
+                i === routingRow ? { ...r, ...(routingCredit?{fromAccountId:id}:{toAccountId:id}) } : r,
               ),
             );
             setRoutingRow(null);
