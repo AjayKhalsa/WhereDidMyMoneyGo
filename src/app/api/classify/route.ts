@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
-import { CATEGORY_TREE } from "@/lib/domain/categories";
+import { NextResponse,type NextRequest } from "next/server";
+import {AI_MODEL,aiEnabled} from '@/lib/ai/policy';
+import {aiSession,aiOrigin,aiFailure,copyAICookies,type AISession} from '@/lib/ai/server';
+import { buildCategorySeed } from "@/lib/domain/categories";
 import { CONTEXT_DEFINITIONS } from "@/lib/domain/contexts";
 
 /**
@@ -21,7 +23,7 @@ import { CONTEXT_DEFINITIONS } from "@/lib/domain/contexts";
  *    category, and nothing that would let it profile the user's finances.
  */
 
-const MODEL = "gemini-2.0-flash";
+const MODEL = AI_MODEL;
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 /**
@@ -30,16 +32,9 @@ const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODE
  * name something specific ("transport.cab") when the text supports it, and
  * fall back to the parent category when it doesn't.
  */
-const LEAF_IDS = CATEGORY_TREE.flatMap((cat) => [
-  `${cat.id} — ${cat.name}`,
-  ...cat.children.map((child) => `${cat.id}.${child.id} — ${cat.name} › ${child.name}`),
-]);
-const VALID_LEAF_IDS = new Set(
-  CATEGORY_TREE.flatMap((cat) => [
-    cat.id,
-    ...cat.children.map((child) => `${cat.id}.${child.id}`),
-  ]),
-);
+const CATEGORIES=buildCategorySeed();
+const LEAF_IDS=CATEGORIES.map(cat=>`${cat.id} — ${cat.parentId?`${CATEGORIES.find(parent=>parent.id===cat.parentId)?.name??''} › `:''}${cat.name}`);
+const VALID_LEAF_IDS = new Set(CATEGORIES.map(cat=>cat.id));
 
 const CONTEXT_VALUES = CONTEXT_DEFINITIONS.filter(
   // Weekend and late-night come from the timestamp, never from the text.
@@ -79,9 +74,9 @@ interface ClassifyResponse {
   reason: string;
 }
 
-export async function POST(request: Request) {
+async function classify(request: Request) {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  if (!aiEnabled()) {
     // Not an error state: the app is designed to work without this. The client
     // treats 501 as "stay with the deterministic guess" and says nothing.
     return NextResponse.json(
@@ -105,15 +100,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await fetch(`${ENDPOINT}?key=${apiKey}`, {
+    const response = await fetch(ENDPOINT, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json",'x-goog-api-key':apiKey! },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents: [{ role: "user", parts: [{ text: text.trim() }] }],
         generationConfig: {
           temperature: 0,
-          maxOutputTokens: 200,
+          maxOutputTokens: 800,
           responseMimeType: "application/json",
         },
       }),
@@ -173,3 +168,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Classifier failed" }, { status: 502 });
   }
 }
+
+export async function POST(request:NextRequest){let session:AISession|undefined;try{aiOrigin(request);session=await aiSession(request);return copyAICookies(await classify(request),session);}catch(error){return aiFailure(error,session);}}
