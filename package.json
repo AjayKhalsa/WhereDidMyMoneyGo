@@ -12,8 +12,10 @@
     "test:watch": "node --experimental-transform-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./tests/loader.mjs --test --watch \"tests/**/*.test.ts\""
   },
   "dependencies": {
+    "@ai-sdk/google": "4.0.109",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.2",
+    "ai": "7.0.159",
     "clsx": "^2.1.1",
     "framer-motion": "^11.15.0",
     "idb": "^8.0.0",
