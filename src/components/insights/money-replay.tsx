@@ -29,12 +29,13 @@ export function MoneyReplay() {
  const stories=useMemo(()=>moneyReplay({transactions:db?.transactions??[],categories:db?.categories??[],accounts:db?.accounts??[],month,cycleStartDay,now}),[db?.transactions,db?.categories,db?.accounts,month,cycleStartDay,now]);
  const [session,setSession]=useState<{month:string;id:string}|null>(null);
  const [evidence,setEvidence]=useState(false),[period,setPeriod]=useState<'current'|'previous'>('current');
- const open=!!session&&session.month===month&&stories.length>0;
- const index=Math.max(0,stories.findIndex(s=>s.id===session?.id));
+ const index=stories.findIndex(s=>s.id===session?.id);
+ const open=!!session&&session.month===month&&index>=0;
  const story=stories[index];
  const art=story?ART[story.kind]:ART.overview,Icon=art.icon;
  const close=useCallback(()=>{setSession(null);setEvidence(false);},[]);
  const backToStory=useCallback(()=>setEvidence(false),[]);
+ useEffect(()=>{if(session&&(session.month!==month||index<0))close();},[session,month,index,close]);
  const move=(direction:number)=>{const next=stories[index+direction];if(next)setSession({month,id:next.id});};
  useEffect(()=>{
   if(!open||evidence)return;
