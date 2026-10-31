@@ -3,6 +3,17 @@
 import {createRequire,registerHooks} from 'node:module';
 import {pathToFileURL} from 'node:url';
 const require=createRequire(import.meta.url);
+// Diagnostics are restricted to this synthetic-only script, never app requests.
+const originalFetch=globalThis.fetch;
+globalThis.fetch=async(...args)=>{
+  const response=await originalFetch(...args);
+  if(!response.ok&&String(args[0]).includes('generativelanguage.googleapis.com')){
+    const body=await response.clone().json().catch(()=>null);
+    const detail=String(body?.error?.message??'').replaceAll(process.env.GEMINI_API_KEY??'__absent__','[redacted]').replace(/https?:\/\/\S+/g,'[url]').slice(0,600);
+    console.error(`Synthetic provider diagnostic: HTTP ${response.status}; ${String(body?.error?.status??'unknown')}; ${detail}`);
+  }
+  return response;
+};
 const hook=registerHooks({resolve(s,c,n){return n(s==='next/server'?pathToFileURL(require.resolve('next/server.js')).href:s,c);}});
 try {
   const {generateAIInsights}=await import('../src/lib/ai/gemini.ts');
@@ -20,4 +31,4 @@ try {
 } catch(error) {
   console.error(`AI provider smoke FAILED: ${typeof error?.code==='string'?error.code:'unexpected'}. No financial data was used.`);
   process.exitCode=1;
-} finally {hook.deregister();}
+} finally {globalThis.fetch=originalFetch;hook.deregister();}
