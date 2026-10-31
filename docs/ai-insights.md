@@ -19,7 +19,7 @@ without billing to maintain ₹0; clear the flag before changing billing or movi
 the key to a paid project. The app cannot prevent a later external billing change.
 It never enables billing, purchases credits or uses Vercel AI Gateway credits.
 
-The fixed model is gemini-2.5-flash-lite, whose standard input/output were listed
+The fixed model is gemini-3.5-flash-lite, whose standard input/output were listed
 as Free of charge in Google's pricing on 31 October 2026. There is no model
 override, fallback provider, paid grounding, automatic generation schedule,
 automatic retry or data-loading retry that invokes a model. Quota exhaustion
