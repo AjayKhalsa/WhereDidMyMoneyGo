@@ -10,6 +10,7 @@ import type {
 import type { StatementRow } from "./statement-row";
 import { bankReference, eventDirection, normalizeBankReference, possibleExistingTransactions, type EventDirection } from "./identity";
 import {possibleRecordedSplits,recordedSplitGroups} from './split-settlements';
+import {creditPurposeHint,type CreditPurpose} from './credit-purpose';
 
 /**
  * Statement rows -> reviewable drafts.
@@ -29,6 +30,12 @@ export interface ImportDraft {
   date: string;
   amount: Paise;
   type: TransactionType;
+  needsCreditReview:boolean;
+  suggestedCreditPurpose?:CreditPurpose;
+  isRefund?:boolean;
+  refundCategoryId?:string;
+  /** For received transfers, the other account money came from. */
+  fromAccountId?:string;
   description: string;
   categoryId?: string;
   contexts: TransactionContext[];
@@ -80,7 +87,10 @@ export function buildImportDrafts(
     const reference = normalizeBankReference(row.reference) ?? bankReference(row.narration);
     const possibleMatches = possibleExistingTransactions(existingTransactions, accountId, amount, row.date, direction, reference);
     const { cleaned, typeHint } = cleanBankNarration(row.narration);
-    const type = typeHint ?? columnType;
+    // A debit cannot become income because its narration mentions interest;
+    // an incoming redemption/SIP/card credit is never an outgoing investment.
+    const type = direction==='credit'?'INCOME':typeHint==='INCOME'?columnType:typeHint??columnType;
+    const suggestedCreditPurpose=direction==='credit'?creditPurposeHint(row.narration):undefined;
 
     const parsed = parseExpenseInput(`${amount / 100} ${cleaned}`, {
       rules,
@@ -99,6 +109,9 @@ export function buildImportDrafts(
       date: row.date,
       amount,
       type,
+      needsCreditReview:direction==='credit'&&suggestedCreditPurpose!=='income',
+      suggestedCreditPurpose,
+      refundCategoryId:direction==='credit'?parsed.categoryId:undefined,
       description,
       // Matches addIncome()'s existing convention — INCOME/TRANSFER rows
       // don't carry a category in this app, only EXPENSE does.

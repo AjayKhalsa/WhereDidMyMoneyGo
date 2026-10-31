@@ -33,6 +33,17 @@ export function eventDirection(transaction: Transaction, accountId: string): Eve
   if (transaction.accountId === accountId) return transaction.type === "INCOME" ? "credit" : "debit";
 }
 
+/** Cloud already validates direction; local imports must uphold it too.
+ * Run for the complete batch before either writer can persist anything. */
+export function assertStatementDirection(entries:StatementImportEntry[]):void {
+  for(const {transaction:t,observation:o} of entries) {
+    if(!Number.isSafeInteger(t.amount)||t.amount<=0||eventDirection(t,o.accountId)!==o.direction||
+      (t.isRefund&&t.type!=='INCOME')||
+      (t.type==='TRANSFER'&&(!t.accountId||!t.toAccountId||t.accountId===t.toAccountId)))
+      throw new Error('The transaction type does not match the bank debit or credit. Review received money and transfer accounts before importing.');
+  }
+}
+
 export function possibleExistingTransactions(
   transactions: Transaction[], accountId: string, amount: number,
   date: string, direction: EventDirection, reference?: string,
