@@ -19,7 +19,7 @@ without billing to maintain ₹0; clear the flag before changing billing or movi
 the key to a paid project. The app cannot prevent a later external billing change.
 It never enables billing, purchases credits or uses Vercel AI Gateway credits.
 
-The fixed model is gemini-3.1-flash-lite, whose standard input/output were listed
+The fixed model is gemini-2.5-flash-lite, whose standard input/output were listed
 as Free of charge in Google's pricing on 31 October 2026. There is no model
 override, fallback provider, paid grounding, automatic generation schedule,
 automatic retry or data-loading retry that invokes a model. Quota exhaustion
@@ -86,7 +86,8 @@ and unchanged financial rows. These do not impersonate a production user.
 
 For an explicit real-provider check only, run the following in a trusted server
 environment after the no-billing confirmation. It uses entirely synthetic data,
-one request through the actual generator and logs only a safe pass/failure code:
+one request through the actual generator. It logs a pass/failure code and, on
+rejection, a synthetic-only provider diagnostic with the key and URLs removed:
 
 ```sh
 node --experimental-transform-types --import ./tests/loader.mjs scripts/ai-provider-smoke.mjs
