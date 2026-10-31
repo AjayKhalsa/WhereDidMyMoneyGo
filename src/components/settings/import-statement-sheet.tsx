@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AlertTriangle, Loader2, Upload } from "lucide-react";
 import { formatDayMonth } from "@/lib/domain/dates";
-import { formatMoney } from "@/lib/domain/money";
+import { useMoneyText } from '@/lib/hooks/use-privacy';
 import { deleteTransactions, importTransactions } from "@/lib/data/actions";
 import { sourceDigest } from "@/lib/import/identity";
+import {possibleRecordedSplits,recordedSplitGroups} from '@/lib/import/split-settlements';
 import {
   buildImportDrafts,
   type ImportDraft,
@@ -25,6 +26,7 @@ import { TextField } from "@/components/ui/fields";
 import { Sheet } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
 import { AccountPicker, CategoryPicker } from "@/components/pickers/pickers";
+import {TransactionList} from '@/components/transactions/transaction-list';
 
 /**
  * Statement import — deliberately minimal (spec: bank-statement-import plan).
@@ -58,6 +60,7 @@ export function ImportStatementSheet({
 }) {
   const { db, categories } = useFinance();
   const toast = useToast();
+  const money=useMoneyText();
 
   const [step, setStep] = useState<Step>("account");
   const [accountId, setAccountId] = useState<string | undefined>();
@@ -67,7 +70,12 @@ export function ImportStatementSheet({
   const [routingRow, setRoutingRow] = useState<number | null>(null);
   const [committing, setCommitting] = useState(false);
   const [sourceHash, setSourceHash] = useState("");
+  const [splitSelection,setSplitSelection]=useState<{index:number;id:string}|null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const splitGroups=useMemo(()=>recordedSplitGroups(db?.transactions??[]),[db?.transactions]);
+  const splitMatches=useMemo(()=>rows.map(row=>possibleRecordedSplits(splitGroups,accountId??'',row.amount,row.date,row.direction,row.reference)),[rows,splitGroups,accountId]);
+  const selectedSplit=splitSelection?splitMatches[splitSelection.index]?.find(group=>group.id===splitSelection.id):undefined;
+  const unreviewedSplits=rows.filter((row,index)=>row.included&&splitMatches[index]?.length&&!row.allowSeparate&&!row.existingTransactionId).length;
 
   const [passwordPrompt, setPasswordPrompt] = useState<{ isRetry: boolean } | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
@@ -84,6 +92,7 @@ export function ImportStatementSheet({
     setError(null);
     setRows([]);
     setSourceHash("");
+    setSplitSelection(null);
     setEditingRow(null);
     setRoutingRow(null);
     setPasswordPrompt(null);
@@ -126,7 +135,7 @@ export function ImportStatementSheet({
         db?.rules ?? [],
       );
       setRows(
-        drafts.map((d, index) => ({ ...d, included: !d.isLikelyDuplicate && d.possibleMatchIds.length === 0,
+        drafts.map((d, index) => ({ ...d, included: !d.isLikelyDuplicate && d.possibleMatchIds.length === 0 && d.possibleSplitIds.length===0,
           sourceKey: `${accountId}:${fileHash}:${index}`, wasCorrected: false })),
       );
       setStep("review");
@@ -159,7 +168,7 @@ export function ImportStatementSheet({
   ).length;
 
   async function handleCommit() {
-    if (!accountId || includedCount === 0 || unresolvedTransfers > 0) return;
+    if (!accountId || includedCount === 0 || unresolvedTransfers > 0 || unreviewedSplits>0) return;
     setCommitting(true);
     try {
       const included = rows.filter((r) => r.included);
@@ -211,7 +220,7 @@ export function ImportStatementSheet({
   return (
     <>
       <Sheet
-        open={open}
+        open={open&&!selectedSplit}
         onClose={() => {
           reset();
           onClose();
@@ -226,10 +235,12 @@ export function ImportStatementSheet({
               variant="primary"
               block
               onClick={handleCommit}
-              disabled={includedCount === 0 || committing || unresolvedTransfers > 0}
+              disabled={includedCount === 0 || committing || unresolvedTransfers > 0 || unreviewedSplits>0}
             >
               {committing
                 ? "Importing…"
+                : unreviewedSplits>0
+                  ? 'Review possible split payouts'
                 : unresolvedTransfers > 0
                   ? `${unresolvedTransfers} transfer${unresolvedTransfers === 1 ? "" : "s"} need${unresolvedTransfers === 1 ? "s" : ""} a destination`
                   : `Import ${includedCount} transaction${includedCount === 1 ? "" : "s"}`}
@@ -316,7 +327,9 @@ export function ImportStatementSheet({
               >
                 <input
                   type="checkbox"
+                  aria-label={`Include statement row ${index+1}`}
                   checked={row.included}
+                  disabled={committing||!!splitMatches[index]?.length&&!row.allowSeparate&&!row.existingTransactionId}
                   onChange={(e) =>
                     setRows((current) =>
                       current.map((r, i) =>
@@ -354,6 +367,9 @@ export function ImportStatementSheet({
                     {row.isLikelyDuplicate && (
                       <Chip tone="warning">Looks like a duplicate</Chip>
                     )}
+                    {(splitMatches[index]??[]).map(group=><button key={group.id} type="button" onClick={()=>setSplitSelection({index,id:group.id})} className="min-h-11 text-left text-xs underline underline-offset-4" aria-label={`Review recorded split for row ${index+1}`}>
+                      Possible recorded split · {group.rows.length} entries
+                    </button>)}
                     {!!row.possibleMatchIds.length && <select
                       aria-label={`Match existing entry for row ${index + 1}`}
                       className="max-w-full rounded-lg border border-line bg-surface p-1 text-xs"
@@ -362,10 +378,12 @@ export function ImportStatementSheet({
                         ? { ...r, existingTransactionId: e.target.value || undefined, included: !!e.target.value, allowSeparate: false } : r))}>
                       <option value="">Possible existing entry — choose a match</option>
                       {row.possibleMatchIds.map((id) => { const t = db?.transactions.find((t) => t.id === id);
-                        return t ? <option key={id} value={id}>{t.description} · {t.date.slice(0, 10)} · {formatMoney(t.amount)}</option> : null; })}
+                        return t ? <option key={id} value={id}>{t.description} · {t.date.slice(0, 10)} · {money(t.amount)}</option> : null; })}
                     </select>}
-                    {!!row.possibleMatchIds.length && <label className="flex items-center gap-1 text-xs text-ink-tertiary">
+                    {(!!row.possibleMatchIds.length||!!splitMatches[index]?.length) && <label className="flex min-h-11 items-center gap-1 text-xs text-ink-tertiary">
                       <input type="checkbox" checked={row.allowSeparate ?? false}
+                        disabled={committing}
+                        aria-label={`Confirm separate payment for row ${index+1}`}
                         onChange={(e) => setRows((current) => current.map((r, i) => i === index
                           ? { ...r, allowSeparate: e.target.checked, existingTransactionId: undefined, included: e.target.checked } : r))} />
                       I checked: this is a separate payment
@@ -373,13 +391,17 @@ export function ImportStatementSheet({
                   </span>
                 </span>
                 <span className="shrink-0 text-[13.5px] font-medium tnum text-ink">
-                  {row.type === "EXPENSE" ? "−" : "+"}
-                  {formatMoney(row.amount)}
+                  {row.direction === "debit" ? "−" : "+"}
+                  {money(row.amount)}
                 </span>
               </div>
             ))}
           </div>
         )}
+      </Sheet>
+
+      <Sheet open={open&&!!selectedSplit} onClose={()=>setSplitSelection(null)} title="Possible recorded split" size="lg">
+        {selectedSplit&&<><p className="mb-2 text-xl font-semibold">{money(selectedSplit.total)} across {selectedSplit.rows.length} entries</p><p className="mb-5 text-sm text-ink-secondary">These entries explicitly name each other and match this statement total. If they represent this payout, leave the statement row unchecked. No new source link is saved.</p><TransactionList transactions={selectedSplit.rows} showDayTotals={false} showTime/></>}
       </Sheet>
 
       <Sheet
