@@ -29,14 +29,14 @@ test('Axis bank debit preserves exact transaction time, reference and source acc
  assert.equal(credit.direction,'credit'); assert.equal(credit.creditKind,'unknown');
 });
 
-test('explicit Axis P2P names qualify for Auto without a VPA; P2M merchants do not',()=>{
- const body=axis.replace('64000.00','149.99').replace('P2M','P2P').replace('CRED Club','Example Person');
+test('unrecognized small Axis UPI payees use Auto even when bank recipient flags differ',()=>{
+ const body=axis.replace('64000.00','99.99').replace('P2M','P2P').replace('CRED Club','Example Person');
  const a=parseAlert('alerts@axis.bank.in','Account debit',body)!;
  assert.equal(a.merchant,'Example Person');assert.equal(a.upiRecipientKind,'person');assert.equal(a.reference,'123456789012');
  const categories=[{id:'other'},{id:'transport'},{id:'transport.auto'}];
  assert.equal(suggestCategory(a,[],categories).categoryId,'transport.auto');
  const merchant=parseAlert('alerts@axis.bank.in','Account debit',body.replace('P2P','P2M'))!;
- assert.equal(merchant.upiRecipientKind,'merchant');assert.notEqual(suggestCategory(merchant,[],categories).source,'small-upi');
+ assert.equal(merchant.upiRecipientKind,'merchant');assert.equal(suggestCategory(merchant,[],categories).categoryId,'transport.auto');
 });
 
 test('CRED successful receipt uses amount paid, not full statement due, and does not invent a bank RRN', () => {

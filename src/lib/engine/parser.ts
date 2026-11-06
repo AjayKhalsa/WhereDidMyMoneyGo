@@ -1,3 +1,4 @@
+import {smallExpenseDefault,smallExpenseRules} from './small-expense';
 import { automaticSubcategory } from "./subcategory-recognition";
 import { recognizedMerchants, mealEligibleMerchant } from "./merchant-recognition";
 import { groupIdOf, UNCATEGORISED_ID } from "@/lib/domain/categories";
@@ -407,7 +408,7 @@ export interface ParseOptions {
  * still wins, exactly as if it had been typed.
  */
 function fromBankSms(sms: BankSmsRead, options: ParseOptions): ParseResult {
-  const inner = parseExpenseInput(sms.merchant ?? "", {
+  const inner = parseExpenseInput(`${sms.type === 'EXPENSE' ? `${sms.amount / 100} ` : ''}${sms.merchant ?? ""}`, {
     rules: options.rules,
     date: sms.date ? new Date(sms.date) : options.date,
     actualTime: sms.occurredAt,
@@ -458,7 +459,7 @@ export function parseExpenseInput(
   const { type } = typeDetection;
 
   // ---- 1. A learned rule beats everything the lexicon knows. -------------
-  const ruleSelection = selectClassificationRule(normalised, rules, options.actualTime);
+  const ruleSelection = selectClassificationRule(normalised, smallExpenseRules(rules,normalised,amountMatch?.amount), options.actualTime);
   const rule = ruleSelection.rule;
 
   // ---- 2. Lexicon signals ------------------------------------------------
@@ -560,6 +561,11 @@ export function parseExpenseInput(
       categoryId = meal;
       reasons.push(`Actual transaction time ${options.actualTime!.slice(11,16)} IST suggests ${meal.split(".")[1]}`);
     }
+  }
+
+  if (type === 'EXPENSE' && categoryId === UNCATEGORISED_ID && !rule && !ruleSelection.conflicts.length && smallExpenseDefault(amountMatch?.amount)) {
+    categoryId='transport.auto';baseScore=0.86;
+    reasons.push('Your default: otherwise unrecognized expenses below ₹100 are Transport / Auto');
   }
 
   // ---- 3b. A resolved transfer/card-payment shape is as strong a signal as

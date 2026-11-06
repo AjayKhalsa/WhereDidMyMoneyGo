@@ -8,6 +8,7 @@ export function automaticSubcategory(text:string):SubcategoryEvidence|undefined 
   if(known.length>1)return;
   const name=known[0]?.name;
   const result=(categoryId:string,reason:string,mealEligible=false):SubcategoryEvidence=>({categoryId,parentId:categoryId.split('.')[0]!,reason,mealEligible});
+  if(/^(?:\d+\s+)*cred telecom$/.test(value))return result('bills.mobile','CRED Telecom is a mobile recharge/bill, not a credit-card repayment.');
   if(known[0]?.categoryId==='bills.subscription')return result('bills.subscription','Recognised subscription service; generic words such as Premium do not imply insurance.');
   if(name==='District'&&/\bdistrict dining\b/.test(value))return result('dining.restaurant','District Dining explicitly identifies a dining purchase.',true);
   if(['Instamart','Zepto'].includes(name??''))return result('dining.groceries','Recognised quick-commerce merchant; your Food & Dining preference.');

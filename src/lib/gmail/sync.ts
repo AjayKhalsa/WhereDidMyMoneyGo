@@ -1,3 +1,4 @@
+import {tryAutomaticPayment} from './auto-payment';
 import { nonPaymentNotice } from "./bank-notices";
 import { createHash, randomUUID } from "node:crypto";
 import type { Account } from "@/lib/domain/types";
@@ -116,6 +117,10 @@ export async function syncMailbox(userId: string, deadline = Date.now() + 45000)
         if (existing.error) throw existing.error;
         if (existing.data === "matched") { await finish(); matched++; continue; }
         if (existing.data === "duplicate") { await finish(); continue; }
+      }
+      if(candidate&&authenticated){
+        const automatic=await tryAutomaticPayment({db,userId,messageId:item.message_id,alert:candidate,authenticated,startDate:connection.start_date,accounts,selfNames:profile.data?.name?[profile.data.name]:[],aliases:connection.aliases??{},deadline,fetchMail:id=>google<{payload:MailPart;internalDate?:string}>(`${base}/messages/${encodeURIComponent(id)}?format=full`,{headers})});
+        if(automatic!==undefined){if(automatic==='logged')logged++;else if(automatic==='matched')matched++;else if(automatic==='review')reviewed++;await finish();continue;}
       }
       if (candidate && !reason) {
         const result = candidate.direction === 'credit'

@@ -1,5 +1,11 @@
 "use client";
 
+import {useState} from 'react';
+import {Info} from 'lucide-react';
+import {Sheet} from '@/components/ui/sheet';
+import {TransactionList} from '@/components/transactions/transaction-list';
+import {formatDayMonth,formatMonthLabel} from '@/lib/domain/dates';
+import {incomeEvidence} from '@/lib/engine/income-evidence';
 import { percentOf } from "@/lib/domain/money";
 import { useMoneyText } from "@/lib/hooks/use-privacy";
 import { useFinance } from "@/lib/hooks/use-finance";
@@ -16,7 +22,9 @@ import { cn } from "@/lib/utils";
 
 export function MoneySnapshot() {
   const money = useMoneyText();
-  const { totals, safeToSpend } = useFinance();
+  const { totals, safeToSpend, db, month, cycleStartDay, now } = useFinance();
+  const [incomeOpen,setIncomeOpen]=useState(false);
+  const evidence=incomeEvidence(db?.transactions??[],month,cycleStartDay,now);
 
   const items = [
     {
@@ -52,6 +60,7 @@ export function MoneySnapshot() {
   ];
 
   return (
+    <>
     <dl className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-4">
       {items.map((item, index) => (
         <div
@@ -63,7 +72,7 @@ export function MoneySnapshot() {
             index > 0 && "sm:border-l sm:border-line sm:pl-4",
           )}
         >
-          <dt className="text-[12.5px] text-ink-secondary">{item.label}</dt>
+          <dt className="flex min-h-8 items-center text-[12.5px] text-ink-secondary">{item.id==='income'?<button type="button" onClick={()=>setIncomeOpen(true)} className="inline-flex min-h-8 items-center gap-1.5" aria-label="View income breakdown">Income <Info className="h-3.5 w-3.5" aria-hidden="true"/></button>:item.label}</dt>
           <dd className="mt-1 flex flex-wrap items-baseline gap-1.5">
             <Amount value={item.value} size="md" />
             {item.sub && (
@@ -80,5 +89,12 @@ export function MoneySnapshot() {
         </div>
       ))}
     </dl>
+    <Sheet open={incomeOpen} onClose={()=>setIncomeOpen(false)} title="Income in this cycle" description={formatMonthLabel(month,cycleStartDay)} size="lg">
+      <p className="mb-4 text-sm text-ink-secondary">Recorded income includes payments received from friends. Refunds, your own transfers and returned investment principal are separate.</p>
+      <p className="mb-4 font-semibold">Received: {money(totals.income)}</p>
+      {evidence.salaryBeforeCycle&&<div className="mb-5 rounded-xl border border-line p-3 text-sm"><p>Last salary: {formatDayMonth(evidence.salaryBeforeCycle.date)} · {money(evidence.salaryBeforeCycle.amount)}</p><p className="mt-1 text-ink-secondary">Recorded before this cycle started; already included in your bank balance.</p><TransactionList transactions={[evidence.salaryBeforeCycle]} showDayTotals={false}/></div>}
+      <TransactionList transactions={evidence.rows} showDayTotals={false} emptyTitle="No income recorded in this cycle"/>
+    </Sheet>
+    </>
   );
 }
