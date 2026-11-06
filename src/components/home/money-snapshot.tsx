@@ -90,8 +90,9 @@ export function MoneySnapshot() {
       ))}
     </dl>
     <Sheet open={incomeOpen} onClose={()=>setIncomeOpen(false)} title="Income in this cycle" description={formatMonthLabel(month,cycleStartDay)} size="lg">
-      <p className="mb-4 text-sm text-ink-secondary">Recorded income includes payments received from friends. Refunds, your own transfers and returned investment principal are separate.</p>
+      <p className="mb-4 text-sm text-ink-secondary">Cycle income includes salary paid early and payments received from friends. Refunds, your own transfers and returned investment principal are separate.</p>
       <p className="mb-4 font-semibold">Received: {money(totals.income)}</p>
+      {evidence.earlySalary.length>0&&<p className="mb-4 rounded-xl border border-line p-3 text-sm">Salary received {evidence.earlySalary.map(t=>formatDayMonth(t.date)).join(', ')} is included in this cycle. Salary paid between the 22nd and 25th belongs to the cycle starting on that month’s 24th; the original payment date stays unchanged.</p>}
       {evidence.salaryBeforeCycle&&<div className="mb-5 rounded-xl border border-line p-3 text-sm"><p>Last salary: {formatDayMonth(evidence.salaryBeforeCycle.date)} · {money(evidence.salaryBeforeCycle.amount)}</p><p className="mt-1 text-ink-secondary">Recorded before this cycle started; already included in your bank balance.</p><TransactionList transactions={[evidence.salaryBeforeCycle]} showDayTotals={false}/></div>}
       <TransactionList transactions={evidence.rows} showDayTotals={false} emptyTitle="No income recorded in this cycle"/>
     </Sheet>

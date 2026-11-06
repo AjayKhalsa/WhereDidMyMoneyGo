@@ -14,7 +14,7 @@ No migration is needed. Parser version is deliberately unchanged: deployment doe
 
 ## Income evidence
 
-Home's Income label opens the selected cycle's original income transactions, excluding refunds, own transfers and principal returned. When no salary is inside the cycle, the most recent salary before its start is shown separately with its real date. Its bank effect is already included. No payday or salary date is shifted and no salary is counted twice. All amounts respect money hiding.
+Home's Income label opens the selected cycle's original income transactions, excluding refunds, own transfers and principal returned. The later [salary-attribution preference](salary-cycle-attribution.md) includes salary paid on the 22nd–25th in the cycle starting on that month’s 24th, with its original bank date. Older salary is shown separately only if no salary for the selected cycle is recorded. All amounts respect money hiding.
 
 ## Validation
 

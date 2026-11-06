@@ -64,9 +64,9 @@ test('CRED Telecom is an ordinary mobile expense, not a card repayment or person
  assert.equal(result.categoryId,'bills.mobile');assert.equal(automaticReason(result,true,'2026-09-01'),null);
  assert.equal(parseExpenseInput('647.82 CRED TELECOM').categoryId,'bills.mobile');
 });
-test('income evidence keeps salary before payday outside the cycle without removing it from the ledger',()=>{
+test('income evidence attributes early salary to its cycle without rewriting the bank date',()=>{
  const rows=[income({date:'2026-10-22',description:'Salary',amount:rs(153860)}),income({date:'2026-10-27',description:'Friend share',amount:rs(6000)}),income({date:'2026-11-01',amount:rs(500),isRefund:true}),transfer({date:'2026-11-04',amount:rs(30000)}),expense({date:'2026-11-04',amount:rs(500)})];
  const before=structuredClone(rows),report=incomeEvidence(rows,'2026-10-24',24,new Date('2026-11-06T12:00:00Z'));
- assert.equal(report.rows.length,1);assert.equal(report.rows[0]!.amount,rs(6000));assert.equal(report.salaryBeforeCycle?.amount,rs(153860));assert.deepEqual(rows,before);
- const previous=incomeEvidence(rows,'2026-09-24',24,new Date('2026-11-06T12:00:00Z'));assert.equal(previous.rows.some(t=>t.description==='Salary'),true);assert.equal(previous.salaryBeforeCycle,undefined);
+ assert.equal(report.rows.length,2);assert.equal(report.rows.reduce((sum,t)=>sum+t.amount,0),rs(159860));assert.equal(report.earlySalary[0]?.date,'2026-10-22');assert.equal(report.salaryBeforeCycle,undefined);assert.deepEqual(rows,before);
+ const previous=incomeEvidence(rows,'2026-09-24',24,new Date('2026-11-06T12:00:00Z'));assert.equal(previous.rows.some(t=>t.description==='Salary'),false);assert.equal(previous.salaryBeforeCycle,undefined);
 });

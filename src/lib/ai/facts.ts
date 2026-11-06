@@ -51,7 +51,7 @@ export function buildAIFacts(input:{transactions:Transaction[];categories:Catego
  const cycle=monthTransactions(all,input.month,input.cycleStartDay).filter(t=>t.categoryId!=='adjustment'&&metadata(t).categoryId!=='adjustment');
  const totals=monthTotals(all,input.month,input.cycleStartDay);
  const income=cycle.filter(t=>t.type==='INCOME'&&!t.isRefund),contributions=cycle.filter(t=>investmentMovement(t)>0),withdrawals=cycle.filter(t=>investmentMovement(t)<0);
- if(income.length)add('income','Recorded income','Income received; excludes refunds and principal returned',[money('Received',totals.income)],income);
+ if(income.length)add('income','Recorded income','Income assigned to this pay cycle, including salary paid early; excludes refunds and principal returned',[money('Received',totals.income)],income);
  if(contributions.length)add('contributions','Investment contributions','Gross contributions; not consumption spending',[money('Contributed',totals.investmentContributions)],contributions);
  if(withdrawals.length)add('withdrawals','Investment principal returned','Principal returned; not earned income',[money('Returned',totals.investmentWithdrawals)],withdrawals);
  const purchases=report.currentRows.filter(t=>t.type==='EXPENSE');
