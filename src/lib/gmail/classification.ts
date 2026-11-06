@@ -1,3 +1,4 @@
+import {smallExpenseDefault,transportAutoCategory,smallExpenseRules} from '@/lib/engine/small-expense';
 import { automaticSubcategory } from "@/lib/engine/subcategory-recognition";
 import type { Category, ClassificationRule, Transaction, TransactionContext } from "@/lib/domain/types";
 import { deriveRulePattern, learnFromEntry } from "@/lib/engine/learning";
@@ -19,14 +20,6 @@ export interface CategorySuggestion {
   contexts: TransactionContext[];
 }
 type GmailCategory = Pick<Category,'id'> & Partial<Pick<Category,'name'|'parentId'>>;
-/** Existing equivalent user categories win; ambiguity is never resolved by order. */
-function autoCategory(categories:GmailCategory[]):string|undefined {
-  const normalize=(name:string)=>name.toLowerCase().replace(/[^a-z0-9]/g,'');
-  const parents=new Set(categories.filter(c=>c.id==='transport'||(!c.parentId&&normalize(c.name??'')==='transport')).map(c=>c.id));
-  const matches=categories.filter(c=>parents.has(c.parentId??c.id.slice(0,c.id.lastIndexOf('.')))
-    && (c.name?['auto','autorickshaw','rickshaw','autocab'].includes(normalize(c.name)):c.id==='transport.auto'));
-  return matches.length===1?matches[0]!.id:undefined;
-}
 /** Reuse the parser's saved merchant alias after a confident category match. */
 export function classifiedAlert(a:Alert,rules:ClassificationRule[],categories:GmailCategory[],selfNames:string[]=[],conflictingPayees:string[]=[]):Alert {
   const classification=suggestCategory(a,rules,categories,selfNames,conflictingPayees);
@@ -35,10 +28,10 @@ export function classifiedAlert(a:Alert,rules:ClassificationRule[],categories:Gm
   const alias=rule&&ruleMerchantAlias(rule,a.merchant);
   return {...a,classification,categoryId:categories.some(c=>c.id===categoryId)?categoryId:undefined,merchant:alias??a.merchant};
 }
-export function suggestCategory(a: Alert, rules: ClassificationRule[], categories: GmailCategory[], selfNames: string[] = [], conflictingPayees:string[]=[]): CategorySuggestion {
+export function suggestCategory(a: Alert, rules: ClassificationRule[], categories: GmailCategory[], selfNames: string[] = [], conflictingPayees:string[]=[],allowSmallDefault=true): CategorySuggestion {
   if (isSalaryAlert(a)) return {categoryId:'other',confidence:0.98,source:'vocabulary',reason:'Salary explicitly identified in the bank credit narration; use the actual credited amount.',needsReview:false,contexts:[]};
   if (a.direction==='credit' && a.creditKind==='refund') {
-    const suggestion=suggestCategory({...a,direction:'debit',special:false,occurredAt:undefined,timeSource:'unknown',timeConfidence:'unknown',paymentRail:undefined,vpa:undefined,upiRecipientKind:undefined},rules,categories,selfNames,conflictingPayees);
+    const suggestion=suggestCategory({...a,direction:'debit',special:false,occurredAt:undefined,timeSource:'unknown',timeConfidence:'unknown',paymentRail:undefined,vpa:undefined,upiRecipientKind:undefined},rules,categories,selfNames,conflictingPayees,false);
     return {...suggestion,contexts:[],reason:`Refund category suggestion: ${suggestion.reason}`};
   }
   const valid = new Set(categories.map(c=>c.id)), key=classificationMerchantKey(a.merchant);
@@ -49,8 +42,7 @@ export function suggestCategory(a: Alert, rules: ClassificationRule[], categorie
   };
   const unknown=(reason:string):CategorySuggestion=>({categoryId:"other",confidence:0,source:"unknown",reason,needsReview:true,contexts:[]});
   if(a.direction!=="debit"||a.special)return unknown("Confirm the financial purpose before categorizing.");
-  const words=merchantPayee(a.merchant).toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim().split(/\s+/);
-  const selection=selectClassificationRule(merchantPayee(a.merchant),rules.filter(r=>valid.has(r.categoryId)),actualTime);
+  const selection=selectClassificationRule(merchantPayee(a.merchant),(allowSmallDefault?smallExpenseRules(rules,merchantPayee(a.merchant),a.amount):rules).filter(r=>valid.has(r.categoryId)),actualTime);
   if(selection.conflicts.length)return unknown("Conflicting saved categories for this payee.");
   if(selection.rule){
     const r=selection.rule;
@@ -72,12 +64,10 @@ export function suggestCategory(a: Alert, rules: ClassificationRule[], categorie
   const knownCategory=known.length===1?(valid.has(known[0]!.categoryId)?known[0]!.categoryId:known[0]!.categoryId.split('.')[0]):undefined;
   if(knownCategory&&valid.has(knownCategory))return mealSuggestion(knownCategory) ?? {categoryId:knownCategory,confidence:0.9,source:'vocabulary',reason:'Recognized merchant vocabulary; no meal time is assumed without an actual transaction timestamp.',needsReview:false,contexts:[]};
   if(known.length===0&&valid.has('dining')&&diningBusiness(payee)) return mealSuggestion('dining') ?? {categoryId:'dining',confidence:0.87,source:'vocabulary',reason:'Food-business descriptor in the payee name; no branch, location or meal time inferred.',needsReview:false,contexts:[]};
-  const personal=a.paymentRail==='UPI'&&a.upiRecipientKind!=='merchant'&&/^[\p{L} .'-]+$/u.test(a.merchant)&&words.length<=7
-    &&(a.upiRecipientKind==='person'&&key.length>=3||!!a.vpa&&!a.vpa.includes('*')&&words.length>=2);
-  const excluded=/\b(?:store|shop|services|traders|enterprise|bank|club|cred|dreamplug|fund|investment|mandate|recharge|restaurant|cafe|hotel|mart|merchant)\b/i.test(a.merchant)||selfNames.some(n=>n&&key.includes(classificationMerchantKey(n)));
-  if(personal&&!excluded&&a.amount>0&&a.amount<15000){
-    const categoryId=autoCategory(categories);
-    return {categoryId:categoryId??'other',confidence:categoryId?0.86:0,source:'small-upi',reason:categoryId?'Your preference: outgoing personal UPI below ₹150 → Transport / Auto. Saved payee mappings take priority.':'Your under-₹150 Auto preference applies, but its category is missing or ambiguous. Choose the correct Auto category.',needsReview:!categoryId,contexts:[]};
+  const excluded=/\b(?:bank|cred|dreamplug|fund|investment|mandate|loan|repayment|billpay)\b/i.test(a.merchant)||selfNames.some(n=>n&&key.includes(classificationMerchantKey(n)));
+  if(allowSmallDefault&&!excluded&&smallExpenseDefault(a.amount)){
+    const categoryId=transportAutoCategory(categories);
+    return {categoryId:categoryId??'other',confidence:categoryId?0.86:0,source:'small-upi',reason:categoryId?'Your preference: otherwise unrecognized expenses below ₹100 → Transport / Auto. Saved choices and recognized merchants take priority.':'Your under-₹100 Auto preference applies, but its category is missing or ambiguous.',needsReview:!categoryId,contexts:[]};
   }
   return unknown('Financial debit recorded; choose its category.');
 }

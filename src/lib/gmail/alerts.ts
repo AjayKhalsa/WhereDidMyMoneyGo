@@ -161,7 +161,7 @@ export function parseAlert(from: string, subject: string, text: string, received
   const creditKind = direction !== "credit" ? undefined : repayment ? "repayment" : refundStatus || /refund|reversal|cashback/i.test(merchant) ? "refund" : /\bSAL(?:ARY)?\b|Int\.Pd|interest paid/i.test(merchant) ? "income" : "unknown";
   const incomeKind = direction === 'credit' && instrument === 'bank' && creditKind === 'income' && isSalaryNarration(merchant) ? 'salary' : undefined;
   merchant = merchant.replace(/^UPI(?:\/P2[MPA])?[-/]\d+[-/]/i, "").replace(/^VPA\s+\S+\s+\((.+)\)$/i, "$1").trim().slice(0, 180);
-  const special = repayment || !!refundStatus || /refund|reversal|cashback|billpay|card payment|\bcred\b|dreamplug|neft|imps|zerodha|\bgroww\b|mutual fund|mandate/i.test(merchant);
+  const special = repayment || !!refundStatus || (/\bcred\b/i.test(merchant)&&!/^CRED TELECOM$/i.test(merchant)) || /refund|reversal|cashback|billpay|card payment|dreamplug|neft|imps|zerodha|\bgroww\b|mutual fund|mandate/i.test(merchant);
   const words = merchant.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/);
   const matches = MERCHANTS.filter(m => m.aliases.some(a => words.includes(a)));
   const categoryId = new Set(matches.map(m => m.categoryId)).size === 1 ? matches[0]?.categoryId : undefined;

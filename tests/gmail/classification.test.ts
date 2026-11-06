@@ -41,11 +41,12 @@ test('all requested IST meal boundaries use reliable time; delayed email is only
  assert.equal(suggestCategory(alert({occurredAt:'2026-10-18T13:00:00',timeSource:'gmail',timeConfidence:'fallback'}),[],categories).categoryId,'dining');
  assert.notEqual(suggestCategory(alert({merchant:'Uber',occurredAt:'2026-10-18T13:00:00',timeSource:'bank'}),[],categories).source,'meal');
 });
-test('personal outgoing UPI strictly below 150 uses Auto after saved mappings and merchant evidence',()=>{
- const a=alert({merchant:'Example Person',paymentRail:'UPI',vpa:'person@bank',amount:14999});
+test('personal outgoing UPI strictly below 100 uses Auto after saved mappings and merchant evidence',()=>{
+ const a=alert({merchant:'Example Person',paymentRail:'UPI',vpa:'person@bank',amount:9999});
  assert.equal(suggestCategory(a,[],categories).categoryId,'transport.auto');
- for(const over of [{direction:'credit' as const},{amount:15000},{amount:19999},{amount:0},{special:true},{merchant:'Example Store'},{merchant:'Self Person'},{vpa:'***@bank'},{vpa:undefined},{upiRecipientKind:'merchant' as const}])assert.notEqual(suggestCategory({...a,...over},[],categories,['Self Person']).source,'small-upi');
+ for(const over of [{direction:'credit' as const},{amount:10000},{amount:14999},{amount:0},{special:true},{merchant:'Self Person'},])assert.notEqual(suggestCategory({...a,...over},[],categories,['Self Person']).source,'small-upi');
  assert.equal(suggestCategory({...a,merchant:'Zomato'},[],categories).categoryId,'dining');
+ for(const over of [{vpa:'***@bank'},{vpa:undefined},{upiRecipientKind:'merchant' as const}])assert.equal(suggestCategory({...a,...over},[],categories).categoryId,'transport.auto');
  assert.notEqual(suggestCategory({...a,direction:'credit',creditKind:'refund'},[],categories).source,'small-upi');
  assert.equal(suggestCategory(a,[rule({pattern:'example',categoryId:'gifts'})],categories).categoryId,'gifts');
  assert.equal(suggestCategory({...a,vpa:undefined,upiRecipientKind:'person'},[],categories).categoryId,'transport.auto');

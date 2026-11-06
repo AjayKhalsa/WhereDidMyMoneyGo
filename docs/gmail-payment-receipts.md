@@ -38,3 +38,7 @@ Any requested repair of past financial events is separate: obtain a fresh scoped
 ## Validation
 
 Synthetic fixtures reproduce observed layouts without private email content. Tests exercise ICICI/CRED repayment semantics, Axis timing, sender authentication, payment-versus-bill amounts, partial-payment financial invariants, repeated receipts, same-day equal payments, manual field preservation, dismissals/tombstones, RPC permissions and interrupted review reprocessing. Salary and refund tests verify cash/liability/consumption invariants, rejection of generic incoming credits, pending-versus-posted evidence and no duplicate salary. A mocked HTTP integration executes the real sync function through a retry, credit match before categorization, automatic salary/posted refunds and an initiation held in review. Existing Gmail/shared-identity suites, TypeScript checks and production build are also run. Actual Gmail imports require post-deployment verification.
+
+## Preference update — 6 November 2026
+
+The owner now requests strictly below ₹100 for otherwise unrecognized expenses and ordinary income for incoming personal reimbursements. See [personal payment automation](personal-payment-automation.md) for the current precedence, companion-evidence requirements for own-bank/CRED transfers, and preserved financial exceptions. This supersedes the older ₹150 recipient-restricted default above.
