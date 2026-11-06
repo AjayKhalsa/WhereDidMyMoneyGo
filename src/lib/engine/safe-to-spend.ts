@@ -1,3 +1,4 @@
+import {salaryTimingAdjustments} from './salary-cycle';
 import {resolveRecurringPayments} from './recurring-payments';
 import { transactionOccurredBy } from "@/lib/domain/transaction-time";
 import {
@@ -43,7 +44,7 @@ import {
  * a credit card, minus commitments still to come this cycle. Grounded in
  * real balances, so it can never claim you can spend money you don't have.
  *
- * `monthlySurplus` — *change over the cycle*. Income received minus what was
+ * `monthlySurplus` — *change over the cycle*. Income received within the dates, after the salary-attribution timing bridge, minus what was
  * spent and invested. Crucially this is a delta, not a balance: it equals
  * the operating change in `position` (cash plus card credits minus card debt),
  * including explicitly linked investment redemptions. This is not a wealth
@@ -289,7 +290,8 @@ export function calculateSafeToSpend(
   // expected-or-actual basis, and nothing forward-looking. Linked redemptions
   // reduce net invested. Compare this operating delta with the position
   // endpoints; adjustments or incomplete account coverage can differ.
-  const monthlySurplus = totals.income - totals.invested - totals.spent;
+  const salaryTiming=salaryTimingAdjustments(transactions,month,cycleStartDay);
+  const monthlySurplus = totals.income - salaryTiming.difference - totals.invested - totals.spent;
 
   const cycleStart = monthKeyToDate(month);
   const priorTransactions = transactions.filter(
@@ -369,8 +371,16 @@ export function calculateSafeToSpend(
       label: "Income this month",
       amount: totals.income,
       direction: "add",
-      hint: "What has actually landed, including one-offs",
+      hint: "Income assigned to this cycle, including salary received early",
     },
+    ...(salaryTiming.receivedBefore>0?[{
+      id:'salary-before-cycle',label:'Salary received before this cycle',amount:salaryTiming.receivedBefore,direction:'subtract' as const,
+      hint:'Included in cycle income, but already in your opening cash; not received twice',
+    }]:[]),
+    ...(salaryTiming.assignedNext>0?[{
+      id:'salary-next-cycle',label:'Next cycle’s salary received early',amount:salaryTiming.assignedNext,direction:'add' as const,
+      hint:'Cash received during these dates; income belongs to the next salary cycle',
+    }]:[]),
     {
       id: "invested",
       label: "Investment contributions",

@@ -1,3 +1,4 @@
+import {reportingCycle} from './salary-cycle';
 import { isSpendingActivity, isCategoryActivity, investmentMovement, netSpending, netCategoryOutflow, spendingAttribution } from "./spending";
 import { actualTransactionTime, transactionOccurredBy } from "@/lib/domain/transaction-time";
 import { groupIdOf, UNCATEGORISED_ID } from "@/lib/domain/categories";
@@ -42,7 +43,7 @@ export function isExpense(t: Transaction): boolean {
 }
 
 export function inMonth(t: Transaction, key: MonthKey, cycleStartDay = 1): boolean {
-  return monthKey(t.date, cycleStartDay) === key;
+  return reportingCycle(t, cycleStartDay) === key;
 }
 
 export function ofType(
@@ -70,6 +71,7 @@ export function total(transactions: Transaction[]): Paise {
 
 export interface MonthTotals {
   key: MonthKey;
+  /** Cycle-attributed earnings, including early salary; not a cash-balance delta. */
   income: Paise;
   spent: Paise;
   /** Net contributions minus explicitly linked withdrawals. */

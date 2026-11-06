@@ -71,7 +71,7 @@ export function SafeToSpendExplainer() {
           This month
         </h3>
         <p className="mb-1 text-[13px] leading-relaxed text-ink-secondary">
-          Income plus returned investment principal, minus contributions and spending.
+          Cycle income, adjusted for salary paid before the window, plus returned investment principal, minus contributions and spending.
           This is a change in cash and card position, not investment gains or net worth.
         </p>
         <BreakdownList lines={monthlySurplusBreakdown} />

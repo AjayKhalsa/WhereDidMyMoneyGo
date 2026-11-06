@@ -1,0 +1,13 @@
+# Salary attribution without moving the pay-cycle window
+
+Owner preference, 6 November 2026: the cycle remains 24th–23rd. Salary can arrive on the 22nd–25th because of holidays. Such a salary belongs to the cycle starting on the 24th of that same calendar month, regardless of the actual posting day. This supersedes the earlier strictly calendar-based salary treatment.
+
+The shared reporting-cycle selector applies this only to explicit salary INCOME, excluding refunds, linked reversals, adjustments, loans and own transfers. Salary on 22/23 is attributed forward once; salary on 24/25 already belongs there. Other income and all expenses, transfers and investments retain their normal date-based cycle. Other configured cycle-start days are unchanged. No synthetic salary is created and no existing transaction is moved, copied or edited. Distinct real salary entries are not silently discarded; source identity remains responsible for duplicate prevention.
+
+For example, the salary received on 22 October is income for 24 October–23 November. A salary received on 22 November is income for 24 November–23 December. The two salaries do not both appear in October's cycle income. Home, transaction membership, monthly recap, ratios, income evidence and AI income facts use the same selector and retain original bank dates in drill-downs.
+
+Account balances, card liabilities, statement matching, reconciliation fingerprints and safe-to-spend continue to use actual financial postings. The cash/card-position explanation separately subtracts this cycle's salary already received before the window and adds any next-cycle salary actually received inside it. These are explicit timing bridges, not ledger transactions or additional spending. Each actual salary amount is itemized separately, so different adjacent salaries cannot be misleadingly collapsed into one salary amount. The monthly cash-position change therefore still reconciles to its opening/closing positions.
+
+The Income sheet explains included early salary and shows its original receipt once in the list. An older salary can still be shown separately when no salary for the selected cycle is recorded; it is never carried into every later cycle automatically. Future unreceived entries remain excluded by the existing verified-time cutoff. Money hiding applies to evidence and explanation figures.
+
+No database migration, persistent backfill, environment change, Gmail scope change or additional model call is required. Tests cover 22–25 boundaries, adjacent salaries with different amounts, year rollover, foreign timezone, non-24th windows, non-salary exceptions, no fabricated payments, unchanged financial input, cash-position conservation and shared AI/UI evidence.
