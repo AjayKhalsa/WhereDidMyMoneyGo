@@ -51,3 +51,10 @@ test('income evidence and AI income facts use the same cycle attribution, keepin
  const report=incomeEvidence(rows,'2026-10-24',24,now);assert.equal(report.rows.length,2);assert.equal(report.earlySalary[0]!.date,'2026-10-22T10:00:00');assert.equal(report.salaryBeforeCycle,undefined);
  const context=buildAIFacts({transactions:rows,accounts:[makeAccount({id:'bank'})],categories:buildCategorySeed(),month:'2026-10-24',cycleStartDay:24,now});const fact=context.facts.find(f=>f.id==='income')!;assert.equal(fact.metrics[0]!.value,rs(159860));assert.equal(fact.transactionIds.length,2);
 });
+
+test('date-only salary on the cycle start does not become opening cash in another timezone',()=>{
+ const rows=[{...salary('2026-10-24',1000),date:'2026-10-24'}];
+ const safe=calculateSafeToSpend({transactions:rows,accounts:[makeAccount({id:'bank',openingBalance:0})],incomeSources:[],investments:[],recurring:[],goals:[],month:'2026-10-24',cycleStartDay:24,now:new Date('2026-11-06T12:00:00Z')});
+ assert.equal(safe.positionAtCycleStart,0);assert.equal(safe.positionNow,rs(1000));assert.equal(safe.monthlySurplus,rs(1000));assert.equal(safe.positionDifference,0);
+ assert.deepEqual(salaryTimingAdjustments(rows,'2026-10-01',1),{receivedBefore:0,assignedNext:0,difference:0});
+});

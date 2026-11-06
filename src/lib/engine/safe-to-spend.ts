@@ -6,6 +6,7 @@ import {
   endOfMonth,
   monthKey,
   monthKeyToDate,
+  toDateInputValue,
   remainingDaysInMonth,
   type MonthKey,
 } from "@/lib/domain/dates";
@@ -293,13 +294,10 @@ export function calculateSafeToSpend(
   const salaryTiming=salaryTimingAdjustments(transactions,month,cycleStartDay);
   const monthlySurplus = totals.income - salaryTiming.difference - totals.invested - totals.spent;
 
-  const cycleStart = monthKeyToDate(month);
-  const priorTransactions = transactions.filter(
-    (t) => new Date(t.date) < cycleStart,
-  );
+  const priorTransactions = transactions.filter(t => t.date.slice(0,10) < month);
   const positionAtCycleStart = netPosition(accounts, priorTransactions);
   const periodEnd = endOfMonth(month, cycleStartDay);
-  const positionRows = transactions.filter(t => new Date(t.date) <= periodEnd);
+  const positionRows = transactions.filter(t => t.date.slice(0,10) <= toDateInputValue(periodEnd));
   const positionNow = netPosition(accounts, positionRows);
   const cardDebtCleared = Math.max(
     0,

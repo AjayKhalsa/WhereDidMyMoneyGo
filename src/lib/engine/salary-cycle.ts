@@ -20,6 +20,7 @@ export function reportingCycle(t:Transaction,cycleStartDay=1):MonthKey {
 /** Compare attribution with the unchanged calendar cash-flow window. */
 export function salaryTimingAdjustments(transactions:Transaction[],key:MonthKey,cycleStartDay=1){
  let receivedBefore=0,assignedNext=0;
+ if(cycleStartDay!==24)return {receivedBefore,assignedNext,difference:0};
  for(const t of transactions.filter(isSalaryIncome)){
   const actual=monthKey(t.date.length===10?`${t.date}T00:00:00`:t.date,cycleStartDay),assigned=reportingCycle(t,cycleStartDay);
   if(assigned===key&&actual!==key)receivedBefore+=t.amount;
