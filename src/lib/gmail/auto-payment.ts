@@ -13,10 +13,10 @@ export async function tryAutomaticPayment(input:{db:ReturnType<typeof admin>;use
  let plan:ReturnType<typeof automaticTransfer>;
  if(needsPair){
   const low=new Date(Date.parse(a.date)-3*86400000).toISOString().slice(0,10),high=new Date(Date.parse(a.date)+3*86400000).toISOString().slice(0,10);
-  const result=await db.from('gmail_messages').select('message_id,candidate,transaction_id,status').eq('user_id',userId).in('status',['review','logged']).eq('candidate->>amount',String(a.amount)).gte('candidate->>date',low).lte('candidate->>date',high).order('message_id').limit(9);
+  const result=await db.from('gmail_messages').select('message_id,candidate,transaction_id,status',{count:'exact'}).eq('user_id',userId).in('status',['review','logged']).eq('candidate->>amount',String(a.amount)).gte('candidate->>date',low).lte('candidate->>date',high).order('message_id').limit(9);
   if(result.error)throw result.error;
   // No incomplete peer set may establish uniqueness, including for income.
-  if((result.data?.length??0)>8)return;
+  if(result.count===null||result.count>8||result.data?.length!==result.count)return;
   const evidence:PaymentEvidence[]=[];
   for(const row of result.data??[]){
    if(row.message_id===messageId)continue;
