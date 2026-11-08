@@ -234,7 +234,7 @@ function StatBlock({
   tone?: "neutral" | "warning";
 }) {
   return (
-    <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4 sm:p-5">
+    <div className="visual-card">
       <p className="text-[13px] text-ink-secondary">{label}</p>
       <div className="mt-1.5">
         <Amount

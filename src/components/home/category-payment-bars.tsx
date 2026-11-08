@@ -5,7 +5,7 @@ import {transactionOccurredBy} from '@/lib/domain/transaction-time';
 import type {BreakdownSlice} from '@/lib/engine/analytics';
 import {categoryPaymentSources, type PaymentSource} from '@/lib/engine/payment-source-breakdown';
 import {useFinance} from '@/lib/hooks/use-finance';
-import {useMoneyText} from '@/lib/hooks/use-privacy';
+import {useMoneyText,usePrivacy} from '@/lib/hooks/use-privacy';
 import {Amount} from '@/components/ui/amount';
 import {Sheet} from '@/components/ui/sheet';
 import {TransactionList} from '@/components/transactions/transaction-list';
@@ -20,6 +20,7 @@ const SOURCES = [
 export function CategoryPaymentBars({slices, limit=8}: {slices:BreakdownSlice[]; limit?:number}) {
   const {db, monthRows, categories, now} = useFinance();
   const money = useMoneyText();
+  const {hidden}=usePrivacy();
   const [selected, setSelected] = useState<string|null>(null);
   const [source, setSource] = useState<PaymentSource|null>(null);
   const groups = useMemo(() => categoryPaymentSources(monthRows, (db?.transactions ?? []).filter(t => transactionOccurredBy(t, now)), db?.accounts ?? [], id => categories.groupOf(id)?.id ?? 'other'), [monthRows, db?.transactions, db?.accounts, categories, now]);
@@ -44,14 +45,14 @@ export function CategoryPaymentBars({slices, limit=8}: {slices:BreakdownSlice[];
             <span className="min-w-0 truncate text-sm font-medium">{slice.label}</span>
             <span className="flex shrink-0 items-baseline gap-2"><span className="text-xs text-ink-tertiary">{slice.count}</span><Amount value={slice.amount} size="sm"/></span>
           </div>
-          <div role="img" aria-label={parts(slice.id).map(p => `${SOURCES.find(s => s.id===p.source)!.label}: ${money(p.net)} net`).join(', ')} className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-surface-sunken">
+          {!hidden&&<div role="img" aria-label={parts(slice.id).map(p => `${SOURCES.find(s => s.id===p.source)!.label}: ${money(p.net)} net`).join(', ')} className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-surface-sunken">
             {maxNegative>0 && <div className="flex h-full shrink-0 justify-end border-r border-ink-tertiary" style={{width:`${maxNegative/scale*100}%`}}>
               {SOURCES.map(s => {const n=parts(slice.id).find(p=>p.source===s.id)?.net ?? 0;return n<0 ? <span key={s.id} className={`h-full shrink-0 ${s.color}`} style={{width:`${-n/maxNegative*100}%`}}/> : null;})}
             </div>}
             <div className="flex h-full" style={{width:`${maxPositive/scale*100}%`}}>
               {SOURCES.map(s => {const n=parts(slice.id).find(p=>p.source===s.id)?.net ?? 0;return n>0 ? <span key={s.id} className={`h-full shrink-0 ${s.color}`} style={{width:`${n/maxPositive*100}%`}}/> : null;})}
             </div>
-          </div>
+          </div>}
         </button>
       </li>)}
     </ul>

@@ -1,7 +1,7 @@
 "use client";
 
 import {useState} from 'react';
-import {Info} from 'lucide-react';
+import {Info, ArrowDownLeft, TrendingUp, ShoppingBag, CreditCard} from 'lucide-react';
 import {Sheet} from '@/components/ui/sheet';
 import {TransactionList} from '@/components/transactions/transaction-list';
 import {formatDayMonth,formatMonthLabel} from '@/lib/domain/dates';
@@ -15,9 +15,8 @@ import { cn } from "@/lib/utils";
 /**
  * The four figures that describe a month (spec §8).
  *
- * Presented as a quiet row of numbers separated by rules rather than four
- * coloured cards. They are context for the hero, not four competing
- * headlines — hierarchy is the whole point.
+ * Compact summary cards use consistent icons and restrained colour.
+ * They provide context below the primary safe-to-spend figure.
  */
 
 export function MoneySnapshot() {
@@ -28,12 +27,14 @@ export function MoneySnapshot() {
 
   const items = [
     {
+      icon: ArrowDownLeft, tone: "text-positive bg-positive-soft",
       id: "income",
       label: "Income",
       value: totals.income,
       sub: null as string | null,
     },
     {
+      icon: TrendingUp, tone: "text-accent bg-accent-soft",
       id: "invested",
       label: "Invested",
       value: totals.investmentContributions,
@@ -43,6 +44,7 @@ export function MoneySnapshot() {
           : null,
     },
     {
+      icon: ShoppingBag, tone: "text-amber-700 bg-amber-50",
       id: "spent",
       label: "Spent",
       value: totals.spent,
@@ -52,6 +54,7 @@ export function MoneySnapshot() {
           : null,
     },
     {
+      icon: CreditCard, tone: "text-violet-700 bg-violet-50",
       id: "committed",
       label: "Committed",
       value: safeToSpend.cardOutstanding,
@@ -61,18 +64,13 @@ export function MoneySnapshot() {
 
   return (
     <>
-    <dl className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-4">
-      {items.map((item, index) => (
+    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {items.map((item) => (
         <div
           key={item.id}
-          className={cn(
-            "min-w-0",
-            // Hairline separators on wide screens only; on mobile the grid
-            // gap does the work and extra lines would just add noise.
-            index > 0 && "sm:border-l sm:border-line sm:pl-4",
-          )}
+          className="min-w-0 rounded-2xl border border-line bg-surface p-3 shadow-[var(--shadow-subtle)] sm:p-4"
         >
-          <dt className="flex min-h-8 items-center text-[12.5px] text-ink-secondary">{item.id==='income'?<button type="button" onClick={()=>setIncomeOpen(true)} className="inline-flex min-h-8 items-center gap-1.5" aria-label="View income breakdown">Income <Info className="h-3.5 w-3.5" aria-hidden="true"/></button>:item.label}</dt>
+          <dt className="text-[12.5px] text-ink-secondary"><span className={cn("mb-2 flex w-fit rounded-xl p-2",item.tone)}><item.icon aria-hidden="true" className="h-4 w-4"/></span>{item.id==='income'?<button type="button" onClick={()=>setIncomeOpen(true)} className="inline-flex min-h-8 items-center gap-1.5" aria-label="View income breakdown">Income <Info className="h-3.5 w-3.5" aria-hidden="true"/></button>:item.label}</dt>
           <dd className="mt-1 flex flex-wrap items-baseline gap-1.5">
             <Amount value={item.value} size="md" />
             {item.sub && (
@@ -82,9 +80,9 @@ export function MoneySnapshot() {
             )}
           </dd>
           {item.id === "invested" && totals.investmentWithdrawals > 0 && (
-            <p className="mt-1 text-[12px] text-ink-tertiary">
+            <dd className="mt-1 text-[12px] text-ink-tertiary">
               {money(totals.investmentWithdrawals)} withdrawn · {money(totals.invested)} net flow
-            </p>
+            </dd>
           )}
         </div>
       ))}

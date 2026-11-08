@@ -18,7 +18,6 @@ import { TransactionList } from "@/components/transactions/transaction-list";
 import { CategoryPaymentBars } from "@/components/home/category-payment-bars";
 import {
   Button,
-  Divider,
   EmptyState,
   Section,
   TextAction,
@@ -84,8 +83,6 @@ export default function HomePage() {
   return (
     <div className="space-y-10">
       <FinancialHero />
-
-      <Divider />
 
       <MoneySnapshot />
 
@@ -207,7 +204,7 @@ export default function HomePage() {
                   strokeWidth={1.75}
                 />
                 <span className="text-[14px] font-medium text-ink">
-                  What else should I know?
+                  Explore your spending
                 </span>
               </span>
               <ArrowRight

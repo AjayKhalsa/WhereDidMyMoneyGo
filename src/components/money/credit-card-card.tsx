@@ -51,11 +51,11 @@ export function CreditCardCard({
 
   return (
     <>
-      <Card className="p-4 sm:p-5">
+      <Card className="visual-card card-surface">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <CreditCardIcon
-              className="h-4 w-4 text-ink-tertiary"
+              className="h-8 w-8 rounded-lg bg-violet-100 p-1.5 text-violet-700"
               strokeWidth={1.75}
             />
             <span className="text-[13px] font-medium text-ink-secondary">

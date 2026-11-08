@@ -66,7 +66,7 @@ export function FinancialHero() {
   const overspent = safeToSpend.isOverspent;
 
   return (
-    <section className="pt-1">
+    <section className="visual-card home-hero">
       <div className="flex items-center justify-between gap-3">
         <p className="text-[15px] text-ink-secondary">
           {greetingFor(now)}
