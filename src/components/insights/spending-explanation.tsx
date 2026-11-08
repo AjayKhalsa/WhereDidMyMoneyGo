@@ -16,7 +16,7 @@ export function SpendingExplanation({ report, onOpen }: {
   const money = useMoneyText(), { hidden } = usePrivacy(), reduced = useReducedMotion();
   const max = Math.max(1, ...analysis.effects.map(e => Math.abs(e.amount)));
   const driver = analysis.dominant;
-  const headline = !report.hasComparison ? 'Your largest purchases' : report.difference === 0 ? 'Changes offset each other' : !driver ? 'Recorded spending is unchanged' :
+  const headline = !report.hasComparison ? 'Your largest purchases' : report.difference === 0 ? (analysis.effects.some(effect => effect.amount !== 0) ? 'Changes offset each other' : 'Recorded spending is unchanged') : !driver ? 'Recorded spending is unchanged' :
     driver.id === 'frequency' ? (driver.amount > 0 ? 'More purchases drove the change' : 'Fewer purchases drove the change') :
     driver.id === 'ticket' ? (driver.amount > 0 ? 'Larger purchases drove the change' : 'Smaller purchases drove the change') :
     driver.id === 'refunds' ? (driver.amount > 0 ? 'Fewer refunds raised net spending' : 'Refunds brought net spending down') :
