@@ -146,7 +146,8 @@ button,
   box-shadow: 0 2px 3px rgb(35 36 64 / .02), 0 12px 30px -22px rgb(35 36 64 / .15);
 }
 .home-hero {
-  background: radial-gradient(ellipse at 100% 0%, #e7eaf9 0%, transparent 65%), linear-gradient(130deg, #fff 40%, #f0f6f1);
+  padding-top: .25rem;
+  padding-bottom: .5rem;
 }
 .pulse-card {
   background: radial-gradient(ellipse at 95% 0%, #e9e9fc 0%, transparent 65%), linear-gradient(140deg, #fff, #f7f8fe);
@@ -156,7 +157,7 @@ button,
 .insight-navigation button { display: flex; flex: 1; gap: 7px; align-items: center; justify-content: center; min-height: 44px; border-radius: 13px; font-size: 13px; color: var(--color-ink-secondary); transition: background-color .2s, box-shadow .2s; }
 .insight-navigation button[aria-pressed="true"] { background: white; color: var(--color-accent-ink); box-shadow: var(--shadow-subtle); font-weight: 600; }
 .chart-toggle { display: flex; padding: 3px; border-radius: 12px; background: #eeedf5; }
-.chart-toggle button { min-height: 38px; padding: 0 14px; border-radius: 9px; font-size: 12px; color: var(--color-ink-secondary); }
+.chart-toggle button { min-height: 44px; padding: 0 14px; border-radius: 9px; font-size: 12px; color: var(--color-ink-secondary); }
 .chart-toggle button[aria-pressed="true"] { background: white; color: var(--color-accent-ink); box-shadow: var(--shadow-subtle); font-weight: 600; }
 .visual-bar { transition: width .35s var(--ease-out-soft); }
 @media (prefers-reduced-motion: no-preference) {
@@ -165,3 +166,11 @@ button,
 }
 
 .card-surface { background: linear-gradient(135deg, #fff 50%, #f4f1fb); }
+
+.analysis-editorial { padding: 1.5rem .25rem; border-bottom: 1px solid var(--color-line); }
+@media (prefers-reduced-motion: no-preference) {
+  .chart-line-draw { animation: draw-spending-line .85s var(--ease-out-soft) both; }
+  @keyframes draw-spending-line { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  .ring-visible .ring-segment { animation: reveal-payment-ring .8s var(--ease-out-soft) both; }
+  @keyframes reveal-payment-ring { from { stroke-dasharray: 0 100; } to { stroke-dasharray: var(--ring-segment); } }
+}
