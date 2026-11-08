@@ -3,8 +3,7 @@
 /* ------------------------------------------------------------------ */
 /*  Design tokens                                                      */
 /*  A warm neutral canvas, charcoal ink, one restrained accent.        */
-/*  Green is reserved for positive financial signal, amber/red for     */
-/*  warnings. Nothing else is allowed to be colourful.                 */
+/*  Semantic accents identify money sources; red signals warnings.     */
 /* ------------------------------------------------------------------ */
 
 @theme {
@@ -136,3 +135,33 @@ button,
     scroll-behavior: auto !important;
   }
 }
+
+/* Soft surfaces and quiet movement; the financial figures remain the focus. */
+.visual-card {
+  min-width: 0;
+  border: 1px solid var(--color-line);
+  border-radius: 24px;
+  background: var(--color-surface);
+  padding: clamp(1rem, 3vw, 1.5rem);
+  box-shadow: 0 2px 3px rgb(35 36 64 / .02), 0 12px 30px -22px rgb(35 36 64 / .15);
+}
+.home-hero {
+  background: radial-gradient(ellipse at 100% 0%, #e7eaf9 0%, transparent 65%), linear-gradient(130deg, #fff 40%, #f0f6f1);
+}
+.pulse-card {
+  background: radial-gradient(ellipse at 95% 0%, #e9e9fc 0%, transparent 65%), linear-gradient(140deg, #fff, #f7f8fe);
+}
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; color: var(--color-ink-secondary); }
+.insight-navigation { display: flex; gap: 4px; padding: 5px; border: 1px solid var(--color-line); border-radius: 18px; background: #efeee9; }
+.insight-navigation button { display: flex; flex: 1; gap: 7px; align-items: center; justify-content: center; min-height: 44px; border-radius: 13px; font-size: 13px; color: var(--color-ink-secondary); transition: background-color .2s, box-shadow .2s; }
+.insight-navigation button[aria-pressed="true"] { background: white; color: var(--color-accent-ink); box-shadow: var(--shadow-subtle); font-weight: 600; }
+.chart-toggle { display: flex; padding: 3px; border-radius: 12px; background: #eeedf5; }
+.chart-toggle button { min-height: 38px; padding: 0 14px; border-radius: 9px; font-size: 12px; color: var(--color-ink-secondary); }
+.chart-toggle button[aria-pressed="true"] { background: white; color: var(--color-accent-ink); box-shadow: var(--shadow-subtle); font-weight: 600; }
+.visual-bar { transition: width .35s var(--ease-out-soft); }
+@media (prefers-reduced-motion: no-preference) {
+  .chart-reveal { animation: reveal-chart .3s ease-out both; }
+  @keyframes reveal-chart { from { opacity: .3; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+}
+
+.card-surface { background: linear-gradient(135deg, #fff 50%, #f4f1fb); }
