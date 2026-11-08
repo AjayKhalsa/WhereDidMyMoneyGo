@@ -66,7 +66,7 @@ export function FinancialHero() {
   const overspent = safeToSpend.isOverspent;
 
   return (
-    <section className="visual-card home-hero">
+    <section className="home-hero">
       <div className="flex items-center justify-between gap-3">
         <p className="text-[15px] text-ink-secondary">
           {greetingFor(now)}
@@ -84,7 +84,7 @@ export function FinancialHero() {
 
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="text-[17px] font-medium tracking-[-0.01em] text-ink">
-            {overspent ? "Over your limit" : "Safe to spend"}
+            {overspent ? "Shortfall after commitments" : "Safe to spend"}
           </h1>
           {!overspent && safeToSpend.dailyAllowance > 0 && isCurrentMonth && (
             <span className="text-[15px] text-ink-secondary tnum">
@@ -108,10 +108,8 @@ export function FinancialHero() {
         <p className="mt-2 max-w-md text-[13.5px] leading-relaxed text-ink-secondary">
           {overspent ? (
             <>
-              You&rsquo;ve committed{" "}
-              <Amount value={Math.abs(safeToSpend.safeAmount)} size="xs" /> more
-              than you hold, once card balances, bills and investments are
-              accounted for.
+              Your cash is{" "}
+              <Amount value={Math.abs(safeToSpend.safeAmount)} size="xs" /> short of your card balances, bills and planned investments.
             </>
           ) : (
             "What's actually yours right now — your cash, less what you already owe on cards and everything committed this cycle."

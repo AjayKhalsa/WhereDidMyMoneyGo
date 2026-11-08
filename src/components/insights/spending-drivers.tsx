@@ -2,6 +2,7 @@
 
 import {useMemo,useState} from 'react';
 import {SpendingPulse, PaymentMix} from './spending-visuals';
+import {SpendingExplanation} from './spending-explanation';
 import type {Transaction} from '@/lib/domain/types';
 import {useFinance} from '@/lib/hooks/use-finance';
 import {useMoneyText,usePrivacy} from '@/lib/hooks/use-privacy';
@@ -47,6 +48,7 @@ export function SpendingDrivers(){
  if(!report.currentRows.length&&!report.previousRows.length)return null;
  return <section aria-label="Spending drivers" className="space-y-4">
   <SpendingPulse key={month} report={report} transactions={db?.transactions??[]} month={month} cycleStartDay={cycleStartDay} onOpen={openDay}/>
+  <SpendingExplanation report={report} onOpen={openDay}/>
   <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">What moved your spending</h2></div><InfoButton title="Spending drivers"><p>Figures use recorded purchases minus posted refunds. Salary, investments, ordinary credits and card repayments are excluded.</p><p>Changes compare the first {report.days} days of each pay cycle. Different cycle lengths use their shared number of days. Merchant and payment-source totals cover the full selected cycle to date.</p><p>Refunds stay on their posting date and use the original purchase's category and merchant when linked. Account types include archived accounts; missing information stays unknown.</p><p>Change bars extend left for lower spending and right for higher spending. Merchant bars show positive net spending; negative amounts represent net refunds. Recorded history provides the comparison, while bank statements establish coverage.</p></InfoButton></div>
   <div className="visual-card space-y-3">
    <div className="flex items-baseline justify-between gap-3"><h3 className="font-medium">What changed</h3>{report.hasComparison&&<span className="text-xs text-ink-tertiary">First {report.days} cycle days</span>}</div>
@@ -63,7 +65,7 @@ export function SpendingDrivers(){
   </div>
   <div className="grid gap-4 lg:grid-cols-2">
    <div className="visual-card min-w-0"><h3 className="font-semibold">Top merchants</h3><p className="mt-1 text-xs text-ink-tertiary">This cycle · after refunds</p><div className="mt-2 divide-y divide-line">{(allMerchants?report.merchants:report.merchants.slice(0,5)).map(row=><button key={row.id} type="button" onClick={()=>open('merchant',row.id)} aria-label={`Explore merchant ${row.label}`} className="flex min-h-16 w-full items-center justify-between gap-3 py-3 text-left"><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{row.label}</span><span className="mt-1 block text-xs text-ink-tertiary">{row.count?`${row.count} ${row.count===1?'payment':'payments'}${row.count>1?` · avg ${money(row.average)}`:''}`:'Refunds only'}</span>{!hidden&&row.net>0&&<span aria-hidden="true" className="mt-2 block h-1.5 rounded-full bg-surface-sunken"><span className="block h-full rounded-full bg-accent/70 visual-bar" style={{width:`${row.net/maxMerchant*100}%`}}/></span>}</span><span className="shrink-0 text-sm tnum">{money(row.net)}</span></button>)}</div>{report.merchants.length>5&&<button type="button" onClick={()=>setAllMerchants(value=>!value)} className="min-h-11 text-sm underline underline-offset-4">{allMerchants?'Show fewer merchants':`All ${report.merchants.length} merchants`}</button>}</div>
-   <PaymentMix report={report} onSelect={id=>open('source',id)}/>
+   <PaymentMix key={month} report={report} onSelect={id=>open('source',id)}/>
   </div>
   <Sheet open={!!dayDetail&&dayDetail.month===month} onClose={()=>setDayDetail(null)} title={dayDetail?.title} size="lg"><TransactionList transactions={(db?.transactions??[]).filter(row=>dayDetail?.ids.includes(row.id))} showDayTotals={false} showTime/></Sheet>
   <Sheet open={!!detail&&detail.month===month&&!!currentRows} onClose={()=>setDetail(null)} title={title} description={`${dayLabel(range.from)}–${dayLabel(range.to)} · recorded spending after refunds`} size="lg">
