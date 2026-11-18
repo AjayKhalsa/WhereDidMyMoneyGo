@@ -18,6 +18,8 @@ export type AccountType = "BANK" | "CASH" | "CREDIT_CARD" | "INVESTMENT";
 export type Paise = number;
 
 export interface UserProfile {
+  /** Versioned monthly plans; stored with the profile in both backends. */
+  budgetPlans?: import("@/lib/engine/budgets").BudgetPlan[];
   id: string;
   name: string;
   currency: string;

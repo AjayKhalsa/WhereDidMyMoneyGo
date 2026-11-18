@@ -55,6 +55,17 @@ function scoreFor(overrides: Partial<ScoreInput> = {}) {
 const factor = (result: ReturnType<typeof scoreFor>, id: string) =>
   result.factors.find((f) => f.id === id);
 
+test("saved budget adherence contributes 15% without changing legacy scores", () => {
+  const baseline = scoreFor();
+  const result = scoreFor({ budget: { score: 20, spent: rs(90000), limit: rs(60000), overshoot: rs(48000) } });
+  assert.equal(factor(result,"budget")?.weight,0.15);
+  assert.equal(factor(result,"budget")?.score,20);
+  assert.ok(Math.abs(result.factors.reduce((s,f)=>s+f.weight,0)-1)<1e-9);
+  const exactBaseline = baseline.factors.reduce((s,f)=>s+f.score*f.weight,0);
+  assert.equal(result.score,Math.round(exactBaseline*0.85+20*0.15));
+  assert.equal(scoreFor({budget:{score:null,spent:0,limit:rs(60000),overshoot:0}}).score,baseline.score);
+});
+
 describe("bounds and structure", () => {
   test("stays within 0–100 on an empty ledger", () => {
     const result = scoreFor();

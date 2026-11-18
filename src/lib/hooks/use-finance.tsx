@@ -1,5 +1,6 @@
 "use client";
 import { transactionOccurredBy } from "@/lib/domain/transaction-time";
+import { budgetPerformance } from "@/lib/engine/budgets";
 
 import {
   createContext,
@@ -92,6 +93,7 @@ export interface FinanceContextValue {
   insights: Insight[];
   headline: Insight | undefined;
   score: FinancialScore;
+  budget: ReturnType<typeof budgetPerformance> | null;
   groupBreakdown: BreakdownSlice[];
   contextBreakdown: BreakdownSlice[];
   creditCards: CreditCardSummary[];
@@ -221,7 +223,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       cycleStart,
     );
 
+    const budget = db ? budgetPerformance(db, month, now, cycleStartDay) : null;
     const score = calculateFinancialScore({
+      budget: db?.profile.budgetPlans?.length ? budget ?? undefined : undefined,
       transactions,
       accounts: db?.accounts ?? [],
       creditCards: db?.creditCards ?? [],
@@ -272,6 +276,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       insights,
       headline: headlineInsight(insights),
       score,
+      budget,
       groupBreakdown,
       contextBreakdown,
       creditCards,

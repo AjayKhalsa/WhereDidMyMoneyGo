@@ -613,6 +613,7 @@ function rate(score: number): ScoreRating {
 }
 
 export interface ScoreInput {
+  budget?: { score: number | null; spent: number; limit: number; overshoot: number };
   transactions: Transaction[];
   accounts: Account[];
   /** Needed to read each card's last statement rather than its lifetime debt. */
@@ -869,6 +870,12 @@ export function calculateFinancialScore(input: ScoreInput): FinancialScore {
     },
   ];
 
+  if (input.budget && input.budget.score !== null) {
+    for (const factor of factors) factor.weight *= 0.85;
+    const budget = input.budget;
+    factors.push({ id: "budget", label: "Budget adherence", score: budget.score!, rating: rate(budget.score!), weight: 0.15,
+      detail: `${formatMoney(budget.spent)} spent against ${formatMoney(budget.limit)}; ${formatMoney(budget.overshoot)} over individual limits. Budget adherence is 15% of your score.` });
+  }
   const score = Math.round(
     factors.reduce((acc, f) => acc + f.score * f.weight, 0),
   );
