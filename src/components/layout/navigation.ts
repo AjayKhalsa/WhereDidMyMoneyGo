@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
-import { ChartNoAxesColumn, House, Wallet } from "lucide-react";
+import { ChartNoAxesColumn, House, Wallet, Target } from "lucide-react";
 
 /**
- * Four destinations, no more (spec §5).
+ * Main destinations, including the adjustable monthly budget.
  *
  * Home is where you understand your position, Insights is where you
  * understand your behaviour, Money is where you manage the structure, and
@@ -37,6 +37,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Wallet,
     purpose: "Accounts, income, investments and goals",
   },
+  { href: "/budgets", label: "Budgets", icon: Target, purpose: "Adjust monthly limits and track overspending" },
 ];
 
 export function isActivePath(pathname: string, href: string): boolean {

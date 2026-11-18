@@ -49,7 +49,7 @@ export function FinancialScoreCard() {
             {prose(score.summary)}
           </p>
           <p className="mt-2.5 text-[12.5px] leading-relaxed text-ink-tertiary">
-            Weighted from six measurable behaviours this month. It moves when
+            Weighted from {score.factors.length} measurable behaviours this month. It moves when
             your habits move — not when you open the app.
           </p>
         </div>
