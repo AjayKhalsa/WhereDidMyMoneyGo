@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowDownRight, ArrowUpRight, ArrowRight, SlidersHorizontal, Wallet, TrendingUp, Check } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ArrowRight, SlidersHorizontal, Wallet, TrendingUp, Check, ChevronDown } from "lucide-react";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { useMoneyText } from "@/lib/hooks/use-privacy";
 import { saveProfile } from "@/lib/data/store";
@@ -25,10 +25,12 @@ export function BudgetPanel({compact=false}:{compact?:boolean}) {
   const [error,setError]=useState("");
   const [saved,setSaved]=useState(false);
   const [saving,setSaving]=useState(false);
+  const [editorExpanded,setEditorExpanded]=useState<boolean|null>(null);
   if(!db||!budget||!comparison) return null;
   const plan=draft??budget.plan;
   const configured=(db.profile.budgetPlans??[]).some(p=>p.effectiveFrom<=month);
   const allocated=allocation(plan),unallocated=plan.salary-allocated;
+  const editorOpen=editorExpanded??!configured;
   const latest=db.transactions.filter(t=>new Date(t.date)<=now).map(t=>t.date.slice(0,10)).sort().at(-1);
   const improving=comparison.delta<0;
   const ShiftIcon=improving?ArrowDownRight:ArrowUpRight;
@@ -42,7 +44,7 @@ export function BudgetPanel({compact=false}:{compact?:boolean}) {
     const next={...plan,effectiveFrom:month};
     const invalid=validateBudget(next);if(invalid){setError(invalid);return;}
     setSaving(true);setError("");
-    try {await saveProfile({...db.profile,budgetPlans:[...(db.profile.budgetPlans??[]).filter(p=>p.effectiveFrom!==month),next]});setDraft(null);setSaved(true);}
+    try {await saveProfile({...db.profile,budgetPlans:[...(db.profile.budgetPlans??[]).filter(p=>p.effectiveFrom!==month),next]});setDraft(null);setSaved(true);setEditorExpanded(false);}
     catch(e){setError(e instanceof Error?e.message:"Couldn't save. Your previous plan is unchanged.");}
     finally{setSaving(false);}
   }
@@ -69,8 +71,13 @@ export function BudgetPanel({compact=false}:{compact?:boolean}) {
 
     {comparison.hasPrior&&comparison.changes.length>0&&<section className="visual-card"><div className="flex items-center gap-2"><TrendingUp size={18} className="text-accent"/><h2 className="font-semibold">What changed?</h2></div><p className="mt-1 text-sm text-ink-secondary">The biggest shifts versus the same {comparison.matchedDays} days last cycle.</p><div className="mt-4 grid gap-3 sm:grid-cols-3">{comparison.changes.slice(0,3).map(c=><div key={c.id} className="rounded-2xl bg-surface-sunken p-4"><p className="text-sm">{c.label}</p><p className={`mt-2 text-xl font-semibold ${c.delta<0?"text-positive":"text-danger"}`}>{c.delta<0?"−":"+"}{money(Math.abs(c.delta))}</p><p className="mt-1 text-xs text-ink-tertiary">{money(c.previous)} → {money(c.actual)}</p></div>)}</div></section>}
 
-    <section className="visual-card space-y-5" aria-label="Adjustable budget plan">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="flex items-center gap-2 text-lg font-semibold"><SlidersHorizontal size={18}/> Build your month</h2><p className="mt-1 text-sm text-ink-secondary">Slide to make room for what matters. Changes are previews until saved.</p></div><button type="button" className="min-h-11 rounded-xl border border-line px-4 text-sm" disabled={saving} onClick={()=>update(defaultBudget())}>Reset defaults</button></div>
+    <section className="visual-card" aria-label="Adjustable budget plan">
+      <button type="button" aria-label="Monthly plan" aria-expanded={editorOpen} aria-controls="monthly-budget-editor" onClick={()=>setEditorExpanded(!editorOpen)} className="flex min-h-11 w-full items-center justify-between gap-4 text-left">
+        <span className="min-w-0"><span className="flex items-center gap-2 text-lg font-semibold"><SlidersHorizontal size={18}/> Monthly plan</span><span className="mt-1 block text-sm text-ink-secondary">{money(budget.plan.investment)} investments · {money(budget.limit)} spending · {money(budget.plan.emergency)} emergency savings</span><span className="mt-1 block text-xs text-ink-tertiary">{draft?"Unsaved changes — expand to continue editing":saved?"Plan saved — tap to adjust":configured?"Tap to view or adjust your saved plan":"Expand to set your monthly plan"}</span></span>
+        <ChevronDown aria-hidden="true" size={20} className={`shrink-0 text-ink-tertiary transition-transform ${editorOpen?"rotate-180":""}`}/>
+      </button>
+      <div id="monthly-budget-editor" hidden={!editorOpen} className="mt-5 space-y-5 border-t border-line pt-5">
+      <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-ink-secondary">Slide to adjust. Changes are previews until saved.</p><button type="button" className="min-h-11 rounded-xl border border-line px-4 text-sm" disabled={saving} onClick={()=>update(defaultBudget())}>Reset defaults</button></div>
       <div className={`rounded-2xl p-4 ${unallocated<0?"bg-danger-soft text-danger":"bg-accent-soft text-accent-ink"}`} aria-live="polite"><div className="flex flex-wrap justify-between gap-2 text-sm"><span>{money(allocated)} allocated of {money(plan.salary)}</span><strong>{money(Math.abs(unallocated))} {unallocated<0?"over salary":unallocated===0?"· every rupee assigned":"unallocated"}</strong></div><div className="mt-3 flex h-2 overflow-hidden rounded-full bg-white/60">{[{amount:plan.investment,color:"bg-accent"},{amount:plan.buckets.reduce((s,b)=>s+b.limit,0),color:"bg-warning"},{amount:plan.emergency,color:"bg-positive"}].map((s,i)=><div key={i} className={s.color} style={{width:`${plan.salary>0?s.amount/plan.salary*100:0}%`}}/>)}</div><div className="mt-2 flex flex-wrap gap-4 text-xs"><span>● Investments</span><span>● Spending</span><span>● Emergency savings</span></div></div>
       <div className="grid gap-3 sm:grid-cols-2"><BudgetSlider label="Monthly salary" value={plan.salary} max={Math.max(30000000,budget.plan.salary*2)} onChange={salary=>update({...plan,salary})}/><BudgetSlider label="Investments" value={plan.investment} max={plan.salary} detail={`${money(budget.invested)} invested this cycle · all investment types`} onChange={investment=>update({...plan,investment})}/><BudgetSlider label="Emergency savings" value={plan.emergency} max={plan.salary} detail={`${money(budget.emergency)} in linked emergency-goal transfers`} onChange={emergency=>update({...plan,emergency})}/></div>
       <div className="border-t border-line pt-4"><h3 className="font-medium">Spending allowances</h3><p className="mt-1 text-xs text-ink-secondary">Dining includes meals alone, together and with friends. No separate dating tags needed.</p></div>
@@ -78,6 +85,7 @@ export function BudgetPanel({compact=false}:{compact?:boolean}) {
       <details className="rounded-xl border border-line p-4"><summary className="cursor-pointer text-sm font-medium">Category mapping & calculation details</summary><p className="mt-3 text-xs text-ink-secondary">Each transaction counts once. Specific category mappings override parent groups. Refunds reduce spending; transfers and investments are excluded. Unmapped spending stays visible. Emergency progress requires transfers linked to an Emergency goal. Planned expenses have a monthly allowance; unused amounts don't automatically roll over.</p><div className="mt-4 grid gap-3 sm:grid-cols-2">{plan.buckets.map((b,index)=><label key={b.id} className="text-sm">{b.label}<select multiple aria-label={`${b.label} categories`} value={b.categoryIds} onChange={e=>{const categoryIds=Array.from(e.target.selectedOptions,o=>o.value);update({...plan,buckets:plan.buckets.map((x,i)=>i===index?{...x,categoryIds}:x)});}} className="mt-2 block h-28 w-full rounded-lg border border-line bg-surface p-2">{db.categories.filter(c=>c.id!=="adjustment").map(c=><option key={c.id} value={c.id}>{c.parentId?`${db.categories.find(p=>p.id===c.parentId)?.name} › `:""}{c.name}</option>)}</select></label>)}</div></details>
       {error&&<p role="alert" className="text-sm text-danger">{error}</p>}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4"><p className="max-w-md text-xs text-ink-tertiary">Saved changes apply from {month} onward. Earlier saved months stay unchanged.</p><button type="button" onClick={()=>void save()} disabled={saving||(!draft&&configured)} className="flex min-h-11 items-center gap-2 rounded-xl bg-accent px-5 text-sm font-medium text-white disabled:opacity-50">{saved?<><Check size={16}/> Saved</>:saving?"Saving…":"Save monthly plan"}</button></div>
+      </div>
     </section>
 
     <section className="visual-card"><h2 className="font-semibold">Where this month's money went</h2><p className="mt-1 text-sm text-ink-secondary">Saved limits, actual spending and the transactions behind them.</p><div className="mt-5 space-y-5">{budget.buckets.filter(b=>b.id!=="unmapped"||b.actual!==0).map(b=><div key={b.id}><div className="flex flex-wrap justify-between gap-2 text-sm"><span className="font-medium">{b.label}</span><span>{money(b.actual)} / {money(b.limit)} <span className={b.status==="over"?"text-danger":"text-ink-secondary"}>· {money(Math.abs(b.remaining))} {b.remaining<0?"over":"left"}</span></span></div><div role="progressbar" aria-label={`${b.label} spent`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100,Math.round(b.ratio*100))} className="mt-2 h-1.5 overflow-hidden rounded-full bg-line"><div className={`h-full rounded-full ${b.status==="over"?"bg-danger":b.status==="near"?"bg-warning":"bg-accent"}`} style={{width:`${Math.min(100,b.ratio*100)}%`}}/></div>{b.transactionIds.length>0&&<details className="mt-1 text-xs"><summary className="min-h-9 cursor-pointer py-2 text-ink-tertiary">Review {b.transactionIds.length} entries</summary><ul className="max-h-52 space-y-2 overflow-auto">{b.transactionIds.map(id=>{const t=db.transactions.find(t=>t.id===id)!;return <li key={id} className="flex justify-between gap-3"><span>{t.date.slice(0,10)} · {t.merchant||t.description}</span><span className="shrink-0">{t.isRefund?"−":""}{money(t.amount)}</span></li>;})}</ul></details>}</div>)}</div></section>
