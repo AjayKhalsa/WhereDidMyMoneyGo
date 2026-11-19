@@ -41,7 +41,7 @@ export default function InsightsPage() {
   return <div className="space-y-6">
     <PageHeader title="Insights" description="Your money, at a glance." action={<div className="flex items-center gap-1"><InfoButton title="Data quality"><DataQualityCard/></InfoButton><MonthSwitcher/></div>}/>
     <div className="insight-navigation" role="group" aria-label="Insight views">{VIEWS.map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-pressed={view === id} onClick={() => setView(id)}><Icon aria-hidden="true" className="h-4 w-4"/>{label}</button>)}</div>
-    <BudgetPanel compact/>
+    {view === 'overview' && <BudgetPanel compact/>}
     {empty ? <EmptyState icon={<Lightbulb className="h-5 w-5"/>} title="Your patterns start here" description="Record some spending to see your daily chart, merchants and payment mix."/> : <>
       {view === 'overview' && <div className="space-y-6 chart-reveal">
         <SpendingDrivers/>
