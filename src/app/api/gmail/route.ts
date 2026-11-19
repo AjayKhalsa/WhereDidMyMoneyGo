@@ -9,13 +9,14 @@ import type { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import { admin, checkOrigin, configured, failure, GmailError, json, unseal, userFor } from "@/lib/gmail/server";
 import { gmailHealth } from "@/lib/gmail/health";
+import { STATEMENT_PARSER_VERSION } from "@/lib/gmail/statement-processing";
 
 export async function GET(request: NextRequest) {
   try {
     const session = json({}); const user = await userFor(request, session);
     if (!configured()) return json({ configured: false, connection: null, messages: [] });
     const db = admin();
-    const [connection, messages, pending, historical, ledger, sources, learned, profile] = await Promise.all([
+    const [connection, messages, pending, historical, ledger, sources, learned, profile, statementWork, lockedPdfs] = await Promise.all([
       db.from("gmail_connections").select("email,start_date,last_synced_at,last_error,page_token,receipt_scan,statement_scan").eq("user_id", user.id).maybeSingle(),
       completeLoad<Record<string, any>>((from,to)=>db.from("gmail_messages").select("message_id,subject,candidate,reason,status,category_review,transaction_id,category_review_snapshot",{count:"exact"}).eq("user_id",user.id).or("status.eq.review,category_review.eq.true").order("message_id").range(from,to),row=>row.message_id),
       db.from("gmail_messages").select("message_id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending"),
@@ -24,8 +25,10 @@ export async function GET(request: NextRequest) {
       completeLoad<Record<string, any>>((from,to)=>db.from("transaction_sources").select("source_kind,source_key,transaction_id,account_id,direction,amount,bank_reference",{count:"exact"}).eq("user_id",user.id).order("source_key").order("source_kind").range(from,to),row=>JSON.stringify([row.source_kind,row.source_key])),
       learningData(db,user.id,true),
       db.from('profiles').select('name').eq('id',user.id).maybeSingle(),
+      db.from('financial_mail_evidence').select('message_id',{count:'exact',head:true}).eq('user_id',user.id).lt('parser_version',STATEMENT_PARSER_VERSION),
+      db.from('financial_mail_evidence').select('message_id',{count:'exact',head:true}).eq('user_id',user.id).eq('pdf_status','locked'),
     ]);
-    for (const result of [connection, pending, historical, profile]) if (result.error) throw result.error;
+    for (const result of [connection, pending, historical, profile, statementWork, lockedPdfs]) if (result.error) throw result.error;
     const actionable = actionableGmailReviews(messages.data as any,ledger.data.map(row=>domainRow<Transaction>(row)),sources.data as any,new Set(learned.categories.map(row=>row.id)));
     const groups=groupGmailReviews(actionable,ledger.data.map(row=>domainRow<Transaction>(row)));
     const financialReviewCount=groups.financial.length+groups.possibleExisting.length;
@@ -37,11 +40,11 @@ export async function GET(request: NextRequest) {
     const categoryReviews=currentCategoryReviews(groups.category,ledger.data,currentRules,learned.categories,
       profile.data?.name?[profile.data.name]:[],trained.conflicts);
     const clean=(rows:typeof actionable)=>rows.slice(0,50).map(({category_review_snapshot:_snapshot,...row})=>row);
-    const receiptWork=!!connection.data?.receipt_scan?.before||!!connection.data?.statement_scan?.before;
+    const receiptWork=!!connection.data?.receipt_scan?.before||!!connection.data?.statement_scan?.before||(statementWork.count??0)>0;
     const health = gmailHealth({ lastSyncedAt: connection.data?.last_synced_at, error: connection.data?.last_error, hasNextPage: !!connection.data?.page_token,hasReceiptWork:receiptWork, pending: pending.count ?? 0, review: financialReviewCount, historical: historical.data });
     const response = json({ configured: true, connection: connection.data ? { ...connection.data, page_token: undefined,receipt_scan:undefined,statement_scan:undefined, more: !!connection.data.page_token||receiptWork } : null,
       messages:clean(groups.financial),categoryMessages:clean(categoryReviews),possibleExistingMessages:clean(groups.possibleExisting),
-      reviewCount:groups.financial.length,financialReviewCount,categoryReviewCount,possibleExistingCount:groups.possibleExisting.length,health });
+      reviewCount:groups.financial.length,financialReviewCount,categoryReviewCount,possibleExistingCount:groups.possibleExisting.length,lockedStatementCount:lockedPdfs.count??0,health });
     for (const cookie of session.cookies.getAll()) response.cookies.set(cookie);
     return response;
   } catch (e) { return failure(e); }

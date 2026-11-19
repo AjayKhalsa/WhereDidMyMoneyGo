@@ -59,6 +59,21 @@ test("financial email evidence is owner-readable and cannot be forged through th
   assert.equal((await asUser(() => db.query("select message_id from financial_mail_evidence"))).rows.length, 1);
   assert.equal((await asUser(() => db.query("select message_id from financial_mail_evidence"), other)).rows.length, 0);
   await assert.rejects(asUser(() => db.query("update financial_mail_evidence set body_text='forged'")), /permission denied/);
+  await assert.rejects(asUser(() => db.query("select * from statement_credentials")), /permission denied/);
+  await assert.rejects(asUser(() => db.query("select apply_issuer_statement($1,'bill-evidence','rc','{}',null)", [user])), /permission denied/);
+});
+
+test("automatic issuer bills are owner-scoped, preserve conflicting manual figures and never change transactions", async () => {
+  const s = { issuedOn: "2026-11-09", dueOn: "2026-11-26", amount: 12345, source: "Issuer email", recordedAt: "2026-11-19T00:00:00Z" };
+  await db.query("insert into credit_cards(id,user_id,account_id,statement_day,due_day,credit_limit) values('automatic-detail',$1,'card',2,26,0)", [user]);
+  const count = (await db.query<{n:number}>("select count(*) n from transactions")).rows[0]!.n;
+  const apply = (who = user, statement = s) => db.query<{result:string}>("select apply_issuer_statement($1,'bill-evidence','card',$2,9) result", [who, statement]);
+  assert.equal((await apply()).rows[0]!.result, "applied");
+  assert.equal((await apply(user, {...s,amount:99999})).rows[0]!.result, "conflict");
+  assert.equal((await apply(user, {...s,issuedOn:'2026-10-09',dueOn:'2026-10-26'})).rows[0]!.result, "older");
+  await assert.rejects(apply(other), /unavailable/);
+  assert.equal((await db.query<{n:number}>("select count(*) n from transactions")).rows[0]!.n,count);
+  assert.equal((await db.query<{statement_day:number}>("select statement_day from credit_cards where id='automatic-detail'")).rows[0]!.statement_day,9);
 });
 
 test("issuer bills validate at the database boundary and survive atomic reconciliation", async () => {

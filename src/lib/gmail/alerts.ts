@@ -43,7 +43,7 @@ export interface Alert extends Partial<AlertTime> {
 export interface MailPart {
   mimeType?: string; filename?: string;
   headers?: { name: string; value: string }[];
-  body?: { data?: string }; parts?: MailPart[];
+  body?: { data?: string; attachmentId?: string; size?: number }; parts?: MailPart[];
 }
 export function header(part: MailPart, name: string): string {
   return part.headers?.find(h => h.name.toLowerCase() === name.toLowerCase())?.value ?? "";
