@@ -1,4 +1,5 @@
 "use client";
+import {projectMoneyLinks} from "@/lib/engine/money-links";
 import { transactionOccurredBy } from "@/lib/domain/transaction-time";
 import { budgetPerformance } from "@/lib/engine/budgets";
 
@@ -72,6 +73,8 @@ export interface FinanceContextValue {
   status: StoreState["status"];
   error: string | null;
   db: Database | null;
+  personalTransactions: Database["transactions"];
+  moneyHeld: number;
 
   month: MonthKey;
   /** Pins the view to a specific cycle (used by goBack/goForward). */
@@ -171,14 +174,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const empty: Database["transactions"] = [];
     const transactions = (db?.transactions ?? empty).filter(t => transactionOccurredBy(t, now));
 
+    const moneyProjection=projectMoneyLinks({transactions:db?.transactions??[],moneyLinks:db?.moneyLinks},now);
+    const personalTransactions=moneyProjection.transactions.filter(t=>transactionOccurredBy(t,now));
     const liveMonth = monthKey(now, cycleStartDay);
     const month = pinnedMonth ?? liveMonth;
 
-    const totals = monthTotals(transactions, month, cycleStartDay);
-    const monthRows = monthTransactions(transactions, month, cycleStartDay);
+    const totals = monthTotals(personalTransactions, month, cycleStartDay);
+    const monthRows = monthTransactions(personalTransactions, month, cycleStartDay);
 
     const safeToSpend = calculateSafeToSpend({
-      transactions,
+      moneyLinks:db?.moneyLinks,
+      transactions:db?.transactions??[],
       accounts: db?.accounts ?? [],
       incomeSources: db?.incomeSources ?? [],
       investments: db?.investments ?? [],
@@ -190,7 +196,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
 
     const insights = generateInsights({
-      transactions,
+      transactions:personalTransactions,
       accounts: db?.accounts ?? [],
       goals: db?.goals ?? [],
       investments: db?.investments ?? [],
@@ -208,7 +214,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       db?.investments ?? [],
       peopleBalances,
       now,
-    );
+    )-moneyProjection.held;
     // The same figure as it stood when the cycle opened, so the score can ask
     // whether this cycle actually left you better off. Split balances are
     // carried at today's values — the ledger keeps no history of when an IOU
@@ -221,19 +227,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       db?.investments ?? [],
       peopleBalances,
       cycleStart,
-    );
+    )-projectMoneyLinks({transactions:db?.transactions??[],moneyLinks:db?.moneyLinks},new Date(cycleStart.getTime()-1)).held;
 
     const budget = db ? budgetPerformance(db, month, now, cycleStartDay) : null;
     const score = calculateFinancialScore({
       budget: db?.profile.budgetPlans?.length ? budget ?? undefined : undefined,
-      transactions,
+      transactions:personalTransactions,
       accounts: db?.accounts ?? [],
       creditCards: db?.creditCards ?? [],
       goals: db?.goals ?? [],
       month,
       now,
       cycleStartDay,
-      consistency: spendingConsistency(transactions, month, now, cycleStartDay),
+      consistency: spendingConsistency(personalTransactions, month, now, cycleStartDay),
       // One definition of "income" across the app — the same basis Safe to
       // spend plans against.
       incomeBasis: safeToSpend.incomeBasis,
@@ -244,10 +250,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const groupBreakdown = spendByGroup(
       monthRows,
       (groupId) => categories.byId.get(groupId)?.name ?? "Other",
-      transactions, true, id => categories.groupOf(id)?.id ?? "other",
+      personalTransactions, true, id => categories.groupOf(id)?.id ?? "other",
     );
 
-    const contextBreakdown = spendByContext(monthRows, contextLabel, transactions, true);
+    const contextBreakdown = spendByContext(monthRows, contextLabel, personalTransactions, true);
 
     const creditCards = (db?.accounts ?? [])
       .filter((a) => a.type === "CREDIT_CARD" && a.isActive)
@@ -264,6 +270,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       status: state.status,
       error: state.error,
       db,
+      personalTransactions,
+      moneyHeld:moneyProjection.held,
       month,
       setMonth: setPinnedMonth,
       trackCurrentMonth: () => setPinnedMonth(null),

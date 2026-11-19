@@ -31,6 +31,7 @@ import {
   putRows,
   removeRow,
   saveProfile,
+  saveMoneyLinks,
   refreshDatabase,
 } from "./store";
 
@@ -318,6 +319,7 @@ export async function updateTransaction(
  * plus any refunds whose link to it was detached on the way out.
  */
 export interface DeletedTransaction {
+  moneyLinks?: import("@/lib/domain/types").MoneyLink[];
   transaction: Transaction;
   detachedRefunds: Transaction[];
 }
@@ -340,9 +342,9 @@ export async function deleteTransaction(
   }));
   await applyBatch({
     puts: orphaned.length ? { transactions: orphaned } : {},
-    deletes: { transactions: [id] },
+    deletes: { transactions: [id], moneyLinks:(db?.moneyLinks??[]).filter(l=>l.incomeId===id||l.expenseId===id).map(l=>l.id) },
   });
-  return transaction ? { transaction, detachedRefunds } : undefined;
+  return transaction ? { transaction, detachedRefunds, moneyLinks:(db?.moneyLinks??[]).filter(l=>l.incomeId===id||l.expenseId===id) } : undefined;
 }
 
 /**
@@ -360,6 +362,10 @@ export async function restoreTransaction(
       transactions: [deleted.transaction, ...deleted.detachedRefunds],
     },
   });
+  if(deleted.moneyLinks?.length){
+    const current=getSnapshot().data?.moneyLinks??[];
+    await saveMoneyLinks(current,[...current,...deleted.moneyLinks.filter(l=>!current.some(c=>c.id===l.id))]);
+  }
 }
 
 /** Removes a batch of transactions — the undo half of an import. */

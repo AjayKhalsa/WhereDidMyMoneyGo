@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import type { Transaction, TransactionType } from "@/lib/domain/types";
+import {getSnapshot} from "@/lib/data/store";
+import { MoneyLinkSheet } from "@/components/transactions/money-link-sheet";
 import { AddTransactionSheet } from "./add-transaction-sheet";
 
 /**
@@ -37,18 +39,21 @@ interface AddSheetContextValue {
   open: (options?: AddSheetOptions) => void;
   close: () => void;
   isOpen: boolean;
+  openLinks: (id:string)=>void;
 }
 
 const AddSheetContext = createContext<AddSheetContextValue | null>(null);
 
 export function AddSheetProvider({ children }: { children: ReactNode }) {
+  const [linkId,setLinkId]=useState<string|null>(null);
   const [state, setState] = useState<{
     open: boolean;
     options: AddSheetOptions;
   }>({ open: false, options: {} });
 
   const open = useCallback((options: AddSheetOptions = {}) => {
-    setState({ open: true, options });
+    const original=options.transaction?getSnapshot().data?.transactions.find(t=>t.id===options.transaction!.id):undefined;
+    setState({ open: true, options: original?{...options,transaction:original}:options });
   }, []);
 
   const close = useCallback(() => {
@@ -56,7 +61,7 @@ export function AddSheetProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ open, close, isOpen: state.open }),
+    () => ({ open, close, isOpen: state.open, openLinks:(id:string)=>{close();setLinkId(id);} }),
     [open, close, state.open],
   );
 
@@ -75,7 +80,9 @@ export function AddSheetProvider({ children }: { children: ReactNode }) {
         open={state.open}
         onClose={close}
         options={state.options}
+        onLinkMoney={(id)=>{close();setLinkId(id);}}
       />
+      {linkId&&<MoneyLinkSheet key={linkId} transactionId={linkId} onClose={()=>setLinkId(null)} onNavigate={setLinkId}/>}
     </AddSheetContext.Provider>
   );
 }

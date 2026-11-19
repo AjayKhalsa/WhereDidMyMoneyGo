@@ -1,3 +1,4 @@
+import { projectMoneyLinks } from "./money-links";
 import type { Database, Transaction } from "@/lib/domain/types";
 import { monthTransactions } from "./analytics";
 import { daysInMonth, elapsedDaysInMonth, addMonths, monthKeyToDate } from "@/lib/domain/dates";
@@ -48,7 +49,7 @@ export function budgetPerformance(db: Database, month: string, now: Date, cycleS
   const plan = planFor(db.profile.budgetPlans, month);
   const categories = new Map(db.categories.map(c=>[c.id,c]));
   const all = new Map(db.transactions.map(t=>[t.id,t]));
-  const rows = monthTransactions(db.transactions, month, cycleStartDay).filter(t=>new Date(t.date)<=now);
+  const rows = monthTransactions(projectMoneyLinks(db,now).transactions, month, cycleStartDay).filter(t=>new Date(t.date)<=now);
   const actuals = new Map<string,number>();
   const transactionIds = new Map<string,string[]>();
   let invested=0, emergency=0;

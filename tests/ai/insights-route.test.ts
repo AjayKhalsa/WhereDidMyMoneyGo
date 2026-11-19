@@ -2,11 +2,12 @@ import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire,registerHooks} from 'node:module';
 import {pathToFileURL} from 'node:url';
+import {projectMoneyLinks} from '@/lib/engine/money-links';
 import {buildAIFacts} from '@/lib/ai/facts';
 import {AI_MODEL} from '@/lib/ai/policy';
 import {buildCategorySeed} from '@/lib/domain/categories';
 import {domainRow} from '@/lib/gmail/learning-data';
-import type {Transaction,Account} from '@/lib/domain/types';
+import type {Transaction,Account,MoneyLink} from '@/lib/domain/types';
 const require=createRequire(import.meta.url);
 const hook=registerHooks({resolve(s,c,n){return n(s==='next/server'?pathToFileURL(require.resolve('next/server.js')).href:s,c);}});
 after(()=>hook.deregister());
@@ -24,7 +25,7 @@ function fixture(){
  process.env.NEXT_PUBLIC_SUPABASE_URL='https://ai-test.supabase.co';process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY='synthetic-anon';process.env.GEMINI_API_KEY='synthetic-private-key';process.env.AI_FREE_TIER_CONFIRMED='gemini-no-billing';
  const transactions=[{id:'private-tx-id',user_id:user,type:'EXPENSE',amount:100000,description:'Raw email never send',date:'2026-10-25T00:00:00',merchant:'Zomato',category_id:'dining.delivery',account_id:'bank',source:'manual',created_at:'2026-10-25',updated_at:'2026-10-25',notes:'private-note@example.com'},{id:'private-other-id',user_id:user,type:'EXPENSE',amount:30000,description:'Private person',date:'2026-10-26T00:00:00',merchant:'PRIVATE PERSON',category_id:'other',account_id:'bank',source:'manual',created_at:'2026-10-26',updated_at:'2026-10-26'}];
  const accounts=[{id:'bank',name:'PRIVATE BANK 7900',type:'BANK',opening_balance:1000000,is_active:true,created_at:'2026-01-01'}];
- const tables:Record<string,any[]>={transactions,categories:buildCategorySeed().map(c=>({id:c.id,name:c.name,parent_id:c.parentId})),accounts,income_sources:[{id:'salary',amount:1000000,deductions:0,is_active:true,recurring:true,day_of_month:24,created_at:'2026-01-01'}]};
+ const tables:Record<string,any[]>={money_links:[],transactions,categories:buildCategorySeed().map(c=>({id:c.id,name:c.name,parent_id:c.parentId})),accounts,income_sources:[{id:'salary',amount:1000000,deductions:0,is_active:true,recurring:true,day_of_month:24,created_at:'2026-01-01'}]};
  const stats={provider:0,reads:0,bodies:[] as string[],status:200,invalid:false,incomplete:false,classification:false};
  const json=(value:unknown,status=200,headers:Record<string,string>={})=>new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json',...headers}});
  global.fetch=async(input,init)=>{
@@ -50,9 +51,9 @@ function fixture(){
  };
  const access=`${encode({alg:'HS256',typ:'JWT'})}.${encode({sub:user,exp:Math.floor(Date.now()/1000)+3600})}.synthetic`;
  const session=`base64-${encode({access_token:access,refresh_token:'synthetic-refresh',expires_in:3600,expires_at:Math.floor(Date.now()/1000)+3600,token_type:'bearer',user:{id:user,email:'private-owner@example.com'}})}`;
- const context=()=>buildAIFacts({transactions:transactions.map(r=>domainRow<Transaction>(r)),categories:buildCategorySeed(),accounts:accounts.map(r=>domainRow<Account>(r)),month:'2026-10-24',cycleStartDay:24,now:new Date()});
+ const context=()=>buildAIFacts({transactions:projectMoneyLinks({transactions:transactions.map(r=>domainRow<Transaction>(r)),moneyLinks:tables.money_links!.map(r=>domainRow<MoneyLink>(r))},new Date()).transactions,categories:buildCategorySeed(),accounts:accounts.map(r=>domainRow<Account>(r)),month:'2026-10-24',cycleStartDay:24,now:new Date()});
  const request=(body:unknown={month:'2026-10-24',focus:'overview',snapshot:context().snapshot},options:{auth?:boolean;origin?:string;method?:string;path?:string}={})=>new NextRequest(`https://budget.example${options.path??'/api/ai/insights'}`,{method:options.method??'POST',headers:{'content-type':'application/json',origin:options.origin??'https://budget.example',...(options.auth===false?{}:{cookie:`sb-ai-test-auth-token=${session}`})},...(options.method==='GET'?{}:{body:JSON.stringify(body)})});
- return {stats,transactions,context,request,restore(){global.fetch=originalFetch;for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}};
+ return {stats,transactions,links:tables.money_links!,context,request,restore(){global.fetch=originalFetch;for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}};
 }
 
 test('owner-authenticated summary uses private projections, verified facts, no writes and a per-owner cached result',async()=>{
@@ -110,4 +111,12 @@ test('concurrent requests share a generation; new snapshots respect the best-eff
 test('one owner never receives another owner’s cached interpretation for identical financial facts',async()=>{
  const first=fixture();let snapshot:string;try{snapshot=first.context().snapshot;assert.equal((await POST(first.request())).status,200);}finally{first.restore();}
  const second=fixture();try{assert.equal(second.context().snapshot,snapshot!);const response=await POST(second.request());assert.equal(response.status,200);assert.equal(second.stats.provider,1);assert.notEqual((await response.json()).cached,true);}finally{second.restore();}
+});
+
+test('AI facts use the same linked personal spending as the client and keep ownership-scoped loads',async()=>{
+ const f=fixture();try{
+  f.transactions.push({id:'gift',user_id:f.transactions[0]!.user_id,type:'INCOME',amount:40000,description:'Gift funding',date:'2026-10-26T00:00:00',account_id:'bank',source:'manual',created_at:'2026-10-26',updated_at:'2026-10-26'} as typeof f.transactions[number]);
+  f.links.push({id:'link',kind:'CONTRIBUTION',income_id:'gift',expense_id:'private-tx-id',amount:40000,created_at:'2026-10-26T12:00:00'});
+  const response=await POST(f.request());assert.equal(response.status,200,await response.clone().text());assert.equal((await response.json()).snapshot,f.context().snapshot);
+ }finally{f.restore();}
 });

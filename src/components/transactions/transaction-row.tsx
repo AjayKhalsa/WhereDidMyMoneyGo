@@ -9,6 +9,7 @@ import { contextLabel } from "@/lib/domain/contexts";
 import { timeLabel } from "@/lib/domain/transaction-time";
 import type { Transaction } from "@/lib/domain/types";
 import { useFinance } from "@/lib/hooks/use-finance";
+import {useMoneyText} from "@/lib/hooks/use-privacy";
 import { cn } from "@/lib/utils";
 import { Amount } from "@/components/ui/amount";
 
@@ -50,8 +51,15 @@ export function TransactionRow({
   showTime?: boolean;
   className?: string;
 }) {
-  const { categories, db } = useFinance();
-  const marker =
+  const money=useMoneyText();
+  const { categories, db, personalTransactions } = useFinance();
+  const original=db?.transactions.find(t=>t.id===transaction.id)??transaction;
+  const personal=personalTransactions.find(t=>t.id===transaction.id)?.amount??transaction.amount;
+  const links=(db?.moneyLinks??[]).filter(l=>l.incomeId===transaction.id||l.expenseId===transaction.id);
+  const linked=links.length>0;
+  const linkLabel=links.some(l=>l.kind==="PASS_THROUGH")?"Held / forwarded money":"Linked contribution";
+  const forwarded=transaction.type==='EXPENSE'&&linked&&personal===0&&links.every(l=>l.kind==='PASS_THROUGH');
+  const marker = forwarded?TYPE_MARKERS.TRANSFER:
     transaction.type !== "EXPENSE" ? TYPE_MARKERS[transaction.type] : null;
   const Icon = marker?.icon;
 
@@ -59,7 +67,8 @@ export function TransactionRow({
   const toAccount = db?.accounts.find((a) => a.id === transaction.toAccountId);
 
   const meta: string[] = [];
-  if (transaction.type === "EXPENSE" && transaction.categoryId) {
+  if(forwarded)meta.push("Forwarded money");
+  if (!forwarded && transaction.type === "EXPENSE" && transaction.categoryId) {
     meta.push(categories.groupNameOf(transaction.categoryId));
   }
   for (const context of transaction.contexts) {
@@ -91,7 +100,7 @@ export function TransactionRow({
             "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
             marker.className,
           )}
-          aria-label={marker.label}
+          aria-label={linked&&transaction.type==='INCOME'?linkLabel:marker.label}
         >
           <Icon className="h-4 w-4" strokeWidth={1.9} />
         </span>
@@ -116,10 +125,11 @@ export function TransactionRow({
             </>
           )}
         </span>
+        {linked&&<span className="mt-1 block text-xs text-accent">{transaction.type==='EXPENSE'?`${links.length} linked · personal spending ${money(personal)}`:`${linkLabel} · ${links.length} link${links.length===1?'':'s'}`}</span>}
       </span>
 
       <Amount
-        value={transaction.amount}
+        value={original.amount}
         size="sm"
         className={cn(
           "shrink-0",

@@ -129,7 +129,18 @@ export interface RuleConditions {
   weekdays: number[];
 }
 
+export interface MoneyLink {
+  id: string;
+  kind: "CONTRIBUTION" | "PASS_THROUGH";
+  incomeId: string;
+  expenseId?: string;
+  amount: Paise;
+  createdAt: string;
+}
+
 export interface Transaction {
+  /** Runtime-only original amount on a personal-reporting projection. Never persisted. */
+  bankAmount?: Paise;
   id: string;
   type: TransactionType;
   /** Always a positive magnitude. Direction is implied by `type`. */
@@ -317,6 +328,7 @@ export interface ClassificationRule {
 
 /** Everything the app owns, as one serialisable snapshot. */
 export interface Database {
+  moneyLinks?: MoneyLink[];
   profile: UserProfile;
   accounts: Account[];
   creditCards: CreditCardDetail[];

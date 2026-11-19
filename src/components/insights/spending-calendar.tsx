@@ -15,10 +15,10 @@ const INTENSITY=['bg-violet-100 text-violet-950','bg-violet-200 text-violet-950'
 const label=(date:string)=>formatDayMonth(monthKeyToDate(date));
 
 export function SpendingCalendar() {
-  const {db,month,cycleStartDay,now}=useFinance();
+  const { personalTransactions, db,month,cycleStartDay,now}=useFinance();
   const money=useMoneyText(),{hidden}=usePrivacy();
   const [selection,setSelection]=useState<{month:string;date:string}|null>(null);
-  const report=useMemo(()=>spendingCalendar({transactions:db?.transactions??[],accounts:db?.accounts??[],month,cycleStartDay,now}),[db?.transactions,db?.accounts,month,cycleStartDay,now]);
+  const report=useMemo(()=>spendingCalendar({transactions:personalTransactions,accounts:db?.accounts??[],month,cycleStartDay,now}),[personalTransactions,db?.accounts,month,cycleStartDay,now]);
   const selected=selection?.month===month?report.days.find(day=>day.date===selection.date&&!day.future):undefined;
   const offset=((report.days[0]?.weekday??1)+6)%7;
 

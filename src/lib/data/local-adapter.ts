@@ -1,5 +1,6 @@
+import { linkFingerprint, validateMoneyLinks } from "@/lib/engine/money-links";
 import { openDB, type IDBPDatabase } from "idb";
-import type { Database, UserProfile } from "@/lib/domain/types";
+import type { Database, UserProfile, MoneyLink } from "@/lib/domain/types";
 import {
   COLLECTION_NAMES,
   RepositoryError,
@@ -23,7 +24,7 @@ const DB_NAME = "wdmmg";
 // Bumped to 2 to add the `people`/`splits` object stores — idb's `upgrade`
 // callback only runs on a version change, so this must move whenever a new
 // store is added or existing users silently never get it.
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const META_STORE = "meta";
 const PROFILE_KEY = "profile";
 
@@ -61,6 +62,20 @@ function wrap<T>(operation: string, work: () => Promise<T>): Promise<T> {
 }
 
 export class LocalRepository implements Repository {
+  async commitMoneyLinks(expected: MoneyLink[], next: MoneyLink[]): Promise<void> {
+    const db=await connect();
+    const tx=db.transaction(['moneyLinks','transactions'],'readwrite');
+    try {
+      const current=await tx.objectStore('moneyLinks').getAll() as MoneyLink[];
+      if(JSON.stringify(linkFingerprint(current))!==JSON.stringify(linkFingerprint(expected)))throw new Error('Links changed in another tab. Reload before saving.');
+      const invalid=validateMoneyLinks(await tx.objectStore('transactions').getAll(),next);
+      if(invalid)throw new Error(invalid);
+      await tx.objectStore('moneyLinks').clear();
+      for(const link of next)await tx.objectStore('moneyLinks').put(link);
+      await tx.done;
+    }catch(e){try{tx.abort();}catch{}await tx.done.catch(()=>undefined);throw e;}
+  }
+
   async commitEnrichment(changes: EnrichmentChange[]): Promise<void> {
     const db = await connect();
     const tx = db.transaction(["transactions", "categories"], "readwrite");
@@ -115,7 +130,9 @@ export class LocalRepository implements Repository {
       ]);
       await tx.done;
 
+      const moneyLinks = await db.getAll("moneyLinks");
       return {
+        moneyLinks,
         profile,
         accounts,
         creditCards,
@@ -145,6 +162,11 @@ export class LocalRepository implements Repository {
   ): Promise<void> {
     return wrap(`put:${collection}`, async () => {
       const db = await connect();
+      if(collection==='transactions'){
+        const rows=await db.getAll('transactions');const links=await db.getAll('moneyLinks');
+        const next=[...rows.filter(t=>t.id!==row.id),row] as import('@/lib/domain/types').Transaction[];
+        const invalid=validateMoneyLinks(next,links);if(invalid)throw new Error(invalid);
+      }
       await db.put(collection, row);
     });
   }
@@ -165,7 +187,11 @@ export class LocalRepository implements Repository {
   async remove(collection: CollectionName, id: string): Promise<void> {
     return wrap(`remove:${collection}`, async () => {
       const db = await connect();
-      await db.delete(collection, id);
+      if(collection==='transactions'){
+        const tx=db.transaction(['transactions','moneyLinks'],'readwrite');
+        for(const link of await tx.objectStore('moneyLinks').getAll())if(link.incomeId===id||link.expenseId===id)await tx.objectStore('moneyLinks').delete(link.id);
+        await tx.objectStore('transactions').delete(id);await tx.done;
+      }else await db.delete(collection,id);
     });
   }
 
@@ -173,6 +199,11 @@ export class LocalRepository implements Repository {
     if (ids.length === 0) return;
     return wrap(`removeMany:${collection}`, async () => {
       const db = await connect();
+      if(collection==='transactions'){
+        const tx=db.transaction(['transactions','moneyLinks'],'readwrite');const set=new Set(ids);
+        for(const link of await tx.objectStore('moneyLinks').getAll())if(set.has(link.incomeId)||set.has(link.expenseId))await tx.objectStore('moneyLinks').delete(link.id);
+        for(const id of ids)await tx.objectStore('transactions').delete(id);await tx.done;return;
+      }
       const tx = db.transaction(collection, "readwrite");
       await Promise.all(ids.map((id) => tx.store.delete(id)));
       await tx.done;
@@ -187,7 +218,7 @@ export class LocalRepository implements Repository {
       await Promise.all(COLLECTION_NAMES.map((n) => tx.objectStore(n).clear()));
       await tx.objectStore(META_STORE).put(data.profile, PROFILE_KEY);
       for (const name of COLLECTION_NAMES) {
-        const rows = data[name] as { id: string }[];
+        const rows = (data[name] ?? []) as { id: string }[];
         const store = tx.objectStore(name);
         for (const row of rows) void store.put(row);
       }
@@ -214,6 +245,12 @@ export class LocalRepository implements Repository {
  * reload here, which is correct: there is nowhere to put it.
  */
 export class MemoryRepository implements Repository {
+  async commitMoneyLinks(expected: MoneyLink[], next: MoneyLink[]) {
+    if(!this.data)throw new Error("No data loaded");
+    if(JSON.stringify(linkFingerprint(this.data.moneyLinks??[]))!==JSON.stringify(linkFingerprint(expected)))throw new Error("Links changed. Reload before saving.");
+    const invalid=validateMoneyLinks(this.data.transactions,next);if(invalid)throw new Error(invalid);
+    this.data.moneyLinks=next;
+  }
   private data: Database | null = null;
 
   async load() {
@@ -224,7 +261,7 @@ export class MemoryRepository implements Repository {
   }
   async put<K extends CollectionName>(collection: K, row: CollectionMap[K]) {
     if (!this.data) return;
-    const rows = this.data[collection] as { id: string }[];
+    const rows = (this.data[collection] ??= []) as { id: string }[];
     const index = rows.findIndex((r) => r.id === row.id);
     if (index >= 0) rows[index] = row;
     else rows.push(row);
@@ -237,7 +274,7 @@ export class MemoryRepository implements Repository {
   }
   async remove(collection: CollectionName, id: string) {
     if (!this.data) return;
-    const rows = this.data[collection] as { id: string }[];
+    const rows = (this.data[collection] ??= []) as { id: string }[];
     const index = rows.findIndex((r) => r.id === id);
     if (index >= 0) rows.splice(index, 1);
   }

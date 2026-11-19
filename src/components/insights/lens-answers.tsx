@@ -24,24 +24,24 @@ import { cn } from "@/lib/utils";
 
 export function LensAnswers() {
   const money = useMoneyText();
-  const { monthRows, db, month, cycleStartDay } = useFinance();
+  const { personalTransactions,  monthRows, db, month, cycleStartDay } = useFinance();
   const [active, setActive] = useState<LensResult | null>(null);
 
   const results = useMemo(
-    () => lensTotals(monthRows, LENSES, db?.transactions ?? monthRows).filter((r) => r.count > 0),
-    [monthRows, db?.transactions],
+    () => lensTotals(monthRows, LENSES, personalTransactions).filter((r) => r.count > 0),
+    [monthRows, personalTransactions],
   );
 
   const comparison = useMemo(() => {
     if (!active) return null;
     return compareToAverage(
-      db?.transactions ?? [],
+      personalTransactions,
       month,
       (t) => matchesLens(t, active.lens),
       3,
       cycleStartDay,
     );
-  }, [active, db?.transactions, month, cycleStartDay]);
+  }, [active, personalTransactions, month, cycleStartDay]);
 
   if (results.length === 0) return null;
 

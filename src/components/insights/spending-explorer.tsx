@@ -28,7 +28,7 @@ const DIMENSIONS: { value: SpendingDimension; label: string }[] = [
 ];
 
 export function SpendingExplorer() {
-  const { db, month, now, cycleStartDay, categories } = useFinance();
+  const { personalTransactions,  db, month, now, cycleStartDay, categories } = useFinance();
   const money = useMoneyText();
   const [dimension, setDimension] = useState<SpendingDimension>("category");
   const [groupId, setGroupId] = useState("");
@@ -39,12 +39,12 @@ export function SpendingExplorer() {
     month: string;
   } | null>(null);
   const tags = useMemo(
-    () => savedTags(db?.transactions ?? []),
-    [db?.transactions],
+    () => savedTags(personalTransactions),
+    [personalTransactions],
   );
   const report = useMemo(
     () =>
-      spendingReport(db?.transactions ?? [], db?.categories ?? [], {
+      spendingReport(personalTransactions, db?.categories ?? [], {
         month,
         now,
         cycleStartDay,
@@ -54,7 +54,7 @@ export function SpendingExplorer() {
         contexts,
       }),
     [
-      db?.transactions,
+      personalTransactions,
       db?.categories,
       month,
       now,
@@ -67,7 +67,7 @@ export function SpendingExplorer() {
   const open = (title: string, rows: Transaction[]) =>
     setDetail({ title, ids: rows.map((t) => t.id), month });
   // Resolve against the live ledger so an edit from the drill-down is reflected immediately.
-  const detailRows = (db?.transactions ?? []).filter((t) =>
+  const detailRows = (personalTransactions).filter((t) =>
     detail?.ids.includes(t.id),
   );
   const toggle = (tag: TransactionContext) =>
@@ -161,7 +161,7 @@ export function SpendingExplorer() {
             " Current cycle includes transactions through today."}
         </p>
       </div>
-      <SpendingTrend report={report} transactions={db?.transactions ?? []} month={month} cycleStartDay={cycleStartDay} onOpen={open} />
+      <SpendingTrend report={report} transactions={personalTransactions} month={month} cycleStartDay={cycleStartDay} onOpen={open} />
       {!["category", "type", "merchant"].includes(dimension) && (
         <p className="text-[12px] text-ink-tertiary">
           An expense can appear under several tags. Tag rows overlap; the

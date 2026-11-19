@@ -1,8 +1,9 @@
+import {projectMoneyLinks} from '@/lib/engine/money-links';
 import {createServerClient} from '@supabase/ssr';
 import {NextResponse,type NextRequest} from 'next/server';
 import {completeLoad} from '@/lib/data/complete-load';
 import {domainRow} from '@/lib/gmail/learning-data';
-import type {Account,Category,IncomeSource,Transaction} from '@/lib/domain/types';
+import type {Account,Category,IncomeSource,Transaction,MoneyLink} from '@/lib/domain/types';
 import {monthKey,monthKeyToDate,toDateInputValue} from '@/lib/domain/dates';
 import {buildAIFacts} from './facts';
 
@@ -30,10 +31,10 @@ export function aiOrigin(request:NextRequest){if(request.headers.get('origin')!=
  * connection is needed. Transaction contexts/notes never enter provider facts. */
 export async function loadAIContext(session:AISession,month:string,now:Date){
  const load=(table:string)=>completeLoad<Record<string,unknown>>((from,to)=>session.client.from(table).select('*',{count:'exact'}).eq('user_id',session.userId).order('id').range(from,to),row=>String(row.id));
- const [tx,categories,accounts,sources]=await Promise.all([load('transactions'),load('categories'),load('accounts'),load('income_sources')]);
+ const [tx,categories,accounts,sources,links]=await Promise.all([load('transactions'),load('categories'),load('accounts'),load('income_sources'),load('money_links')]);
  const incomes=sources.data.map(row=>domainRow<IncomeSource>(row));
  const cycleStartDay=incomes.filter(s=>s.isActive&&s.recurring).sort((a,b)=>a.createdAt.localeCompare(b.createdAt))[0]?.dayOfMonth??1;
  const date=monthKeyToDate(month);
  if(!/^\d{4}-\d{2}-\d{2}$/.test(month)||toDateInputValue(date)!==month||monthKey(date,cycleStartDay)!==month)throw new AIRequestError(400,'period','Choose a valid pay cycle.');
- return buildAIFacts({transactions:tx.data.map(row=>domainRow<Transaction>(row)),categories:categories.data.map(row=>domainRow<Category>(row)),accounts:accounts.data.map(row=>domainRow<Account>(row)),month,cycleStartDay,now});
+ return buildAIFacts({transactions:projectMoneyLinks({transactions:tx.data.map(row=>domainRow<Transaction>(row)),moneyLinks:links.data.map(row=>domainRow<MoneyLink>(row))},now).transactions,categories:categories.data.map(row=>domainRow<Category>(row)),accounts:accounts.data.map(row=>domainRow<Account>(row)),month,cycleStartDay,now});
 }

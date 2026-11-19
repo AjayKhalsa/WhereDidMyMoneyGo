@@ -62,17 +62,17 @@ export function MoneyFlowSheet({
   open: boolean;
   onClose: () => void;
 }) {
-  const { monthRows, totals, safeToSpend, categories, month, db, cycleStartDay } = useFinance();
+  const { personalTransactions,  monthRows, totals, safeToSpend, categories, month, db, cycleStartDay } = useFinance();
   const [dimension, setDimension] = useState<Dimension>("category");
   const [drill, setDrill] = useState<DrillTarget | null>(null);
 
   const expenses = useMemo(
-    () => { const metadata = spendingAttribution(db?.transactions ?? monthRows); return monthRows.filter(t => isCategoryActivity(metadata(t))); },
-    [monthRows, db?.transactions],
+    () => { const metadata = spendingAttribution(personalTransactions); return monthRows.filter(t => isCategoryActivity(metadata(t))); },
+    [monthRows, personalTransactions],
   );
 
-  const attributed = useMemo(() => spendingAttribution(db?.transactions ?? monthRows), [db?.transactions, monthRows]);
-  const allRows = db?.transactions ?? monthRows;
+  const attributed = useMemo(() => spendingAttribution(personalTransactions), [personalTransactions, monthRows]);
+  const allRows = personalTransactions;
   const slices = useMemo<BreakdownSlice[]>(() => {
     switch (dimension) {
       case "category":
@@ -119,7 +119,7 @@ export function MoneyFlowSheet({
     );
   }, [drill, drillTransactions, categories, allRows]);
 
-  const drillSummary = spendingSummary(drillTransactions, db?.transactions ?? monthRows);
+  const drillSummary = spendingSummary(drillTransactions, personalTransactions);
 
   // Unallocated is what the month's income has not yet been claimed by.
   const unallocated = Math.max(
