@@ -70,6 +70,14 @@ export interface CreditCardDetail {
   /** Day of month payment is due. */
   dueDay: number;
   creditLimit: Paise;
+  /** Issuer's actual billed amount, distinct from ledger-derived outstanding. */
+  reportedStatement?: {
+    issuedOn: string;
+    dueOn: string;
+    amount: Paise;
+    source: string;
+    recordedAt: string;
+  };
 }
 
 export interface Category {

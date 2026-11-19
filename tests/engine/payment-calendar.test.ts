@@ -20,8 +20,8 @@ test('month-end income dates clamp; deductions reduce expected net and never imp
  assert.equal(events[0]?.date,'2026-02-28');assert.equal(events[0]?.amount,9000);assert.equal(events[0]?.status,'expected');
 });
 test('card payment reminders use remaining statement dues and exclude settled statements',()=>{
- const card={account:{id:'c',name:'Card'},dueDate:new Date(2026,9,28),lastStatement:{spent:100000,paidAmount:40000,paidInFull:false}} as CreditCardSummary;
+ const card={account:{id:'c',name:'Card'},dueDate:new Date(2026,9,28),lastStatement:{spent:100000,amount:100000,source:'ledger',paidAmount:40000,paidInFull:false}} as CreditCardSummary;
  const events=paymentCalendar([],[],[card],[],new Date(2026,9,29));
- assert.equal(events[0]?.amount,60000);assert.ok(events[0]?.note.includes('overdue'));assert.equal(events[0]?.kind,'card');
+ assert.equal(events[0]?.amount,60000);assert.ok(events[0]?.note.includes('Estimated statement'));assert.equal(events[0]?.kind,'card');
  assert.equal(paymentCalendar([],[],[{...card,lastStatement:{...card.lastStatement!,paidInFull:true}}],[],new Date(2026,9,29)).length,0);
 });

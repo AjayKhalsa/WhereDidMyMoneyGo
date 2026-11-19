@@ -746,7 +746,7 @@ export function calculateFinancialScore(input: ScoreInput): FinancialScore {
         now,
       );
       if (!lastStatement || lastStatement.paidInFull) return acc;
-      return acc + Math.max(0, lastStatement.spent - lastStatement.paidAmount);
+      return acc + Math.max(0, lastStatement.amount - lastStatement.paidAmount);
     }, 0);
   const commitmentRatio =
     basis > 0 ? unpaidStatements / basis : unpaidStatements > 0 ? 1 : 0;

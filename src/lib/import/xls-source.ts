@@ -18,7 +18,9 @@ export interface ExtractedSheet {
 export async function extractXlsRows(file: File): Promise<ExtractedSheet[]> {
   const XLSX = await import("xlsx");
   const data = new Uint8Array(await file.arrayBuffer());
-  const workbook = XLSX.read(data, { type: "array" });
+  // CSV text must keep day-first bank dates intact. SheetJS otherwise
+  // coerces ambiguous dates through its month-first date detector.
+  const workbook = XLSX.read(data, { type: "array", raw: true });
 
   return workbook.SheetNames.map((sheetName) => {
     const sheet = workbook.Sheets[sheetName]!;

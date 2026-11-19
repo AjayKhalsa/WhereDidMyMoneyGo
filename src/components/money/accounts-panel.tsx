@@ -279,6 +279,7 @@ function AccountSheet({
         statementDay: clampDay(statementDay, 20),
         dueDay: clampDay(dueDay, 15),
         creditLimit: parseAmountInput(limit) ?? 0,
+        reportedStatement: detail?.reportedStatement,
       });
     }
 

@@ -1,4 +1,5 @@
 import {reportingCycle} from './salary-cycle';
+import { validCardStatement } from "@/lib/domain/card-statement";
 import { isSpendingActivity, isCategoryActivity, investmentMovement, netSpending, netCategoryOutflow, spendingAttribution } from "./spending";
 import { actualTransactionTime, transactionOccurredBy } from "@/lib/domain/transaction-time";
 import { groupIdOf, UNCATEGORISED_ID } from "@/lib/domain/categories";
@@ -689,7 +690,9 @@ function paidInRange(
   from: Date | null,
   to: Date | null,
 ): Paise {
-  return cardActivity(transactions, cardAccountId, dateWithin(from, to)).paid;
+  const within = dateWithin(from, to);
+  const credits = transactions.reduce((total, t) => total + (t.type === "INCOME" && t.accountId === cardAccountId && within(new Date(t.date)) ? t.bankAmount ?? t.amount : 0), 0);
+  return cardActivity(transactions, cardAccountId, within).paid + credits;
 }
 
 /**
@@ -730,6 +733,11 @@ export interface CardBillingCycle {
 }
 
 export interface CardStatement extends CardBillingCycle {
+  /** Full billed balance, including carried debt; spent is cycle activity only. */
+  amount: Paise;
+  source: "issuer" | "ledger";
+  /** Issuer comparison at statement close; never changes ledger balances. */
+  ledgerDifference?: Paise;
   /** dueDay occurring on/after this statement's close — may fall in the next calendar month. */
   dueDate: Date;
   /** Payments landing on the card between this statement's close and "now". */
@@ -803,14 +811,33 @@ export function summariseCardBilling(
     );
     if (hasActivityBeforeClose) {
       const spent = chargedInRange(transactions, account.id, prevStart, prevEnd);
+      const amount = Math.max(0, netCardBalance(transactions.filter(t => new Date(t.date) <= prevEnd), account.id));
       const paidAmount = paidInRange(transactions, account.id, prevEnd, now);
       lastStatement = {
         start: prevStart,
         end: prevEnd,
         spent,
+        amount,
+        source: "ledger",
         dueDate: nextDayOnOrAfter(detail.dueDay, prevEnd),
         paidAmount,
-        paidInFull: paidAmount >= spent - PAID_IN_FULL_TOLERANCE,
+        paidInFull: paidAmount >= amount - PAID_IN_FULL_TOLERANCE,
+      };
+    }
+  }
+
+  const reported = detail?.reportedStatement;
+  if (reported && validCardStatement(reported)) {
+    const issued = new Date(`${reported.issuedOn}T00:00:00`);
+    // A dated bill applies only until the next statement is generated.
+    if (issued <= now && issued >= cycleStart) {
+      const paidAmount = paidInRange(transactions, account.id, issued, now);
+      lastStatement = {
+        start: lastStatement?.start ?? monthKeyToDate(addMonths(cycleKey, -1, cycleAnchor)),
+        end: new Date(issued.getTime() - 1), spent: lastStatement?.spent ?? 0,
+        amount: reported.amount, source: "issuer", dueDate: new Date(`${reported.dueOn}T00:00:00`),
+        ledgerDifference: netCardBalance(transactions.filter(t => new Date(t.date) < issued), account.id) - reported.amount,
+        paidAmount, paidInFull: paidAmount >= reported.amount,
       };
     }
   }

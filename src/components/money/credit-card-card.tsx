@@ -17,6 +17,8 @@ import { useToast } from "@/components/ui/toast";
 import { AccountPicker } from "@/components/pickers/pickers";
 import { TransactionList } from "@/components/transactions/transaction-list";
 import { cn } from "@/lib/utils";
+import { CardStatementEditor } from "./card-statement-editor";
+import { balanceVerification } from "@/lib/engine/reconciliation";
 
 /**
  * Credit card summary and payment (spec §17, §18).
@@ -38,6 +40,7 @@ export function CreditCardCard({
   compact?: boolean;
 }) {
   const money = useMoneyText();
+  const { db } = useFinance();
   const [detailOpen, setDetailOpen] = useState(false);
   const { daysUntilDue, outstanding, creditBalance, currentCycle, lastStatement, utilisation } =
     summary;
@@ -65,7 +68,7 @@ export function CreditCardCard({
           {owesOnLastStatement && (
             <Chip tone={overdue ? "danger" : urgent ? "warning" : "neutral"}>
               {overdue
-                ? "Overdue"
+                ? lastStatement?.source === "issuer" ? "Past due date" : "Check estimated bill"
                 : daysUntilDue === 0
                   ? "Due today"
                   : `Due in ${daysUntilDue} ${daysUntilDue === 1 ? "day" : "days"}`}
@@ -80,16 +83,17 @@ export function CreditCardCard({
             className={creditBalance > 0 ? "text-positive" : undefined}
           />
           <p className="mt-1 text-[13px] text-ink-secondary">
-            {creditBalance > 0 ? "Credit" : "Outstanding"}
+            {creditBalance > 0 ? "Ledger credit" : "Ledger outstanding"}
           </p>
         </div>
 
         {outstanding > 0 && (
           <p className="mt-2.5 text-[13px] leading-relaxed text-ink-secondary">
-            You&rsquo;ve already spent this money — it just hasn&rsquo;t left
-            your account yet.
+            Includes billed and unbilled activity. {balanceVerification(summary.account, db?.transactions ?? []).status !== "verified" ? "Not yet verified against a current issuer balance." : "Check the dated balance verification in Accounts."}
           </p>
         )}
+
+        {lastStatement?.source === "issuer" && <p className="mt-3 text-sm font-medium">Latest issuer bill · {money(Math.max(0, lastStatement.amount - lastStatement.paidAmount))} remaining · due {formatDayMonth(lastStatement.dueDate)}</p>}
 
         {creditBalance > 0 && (
           <p className="mt-2.5 text-[13px] leading-relaxed text-ink-secondary">
@@ -229,25 +233,30 @@ function CreditCardDetailSheet({
             <div className="flex items-baseline justify-between gap-3">
               <h3 className="text-[14px] font-medium text-ink">Last statement</h3>
               <span className="text-[12px] text-ink-tertiary tnum">
-                {formatDayMonth(summary.lastStatement.start)} –{" "}
-                {formatDayMonth(summary.lastStatement.end)}
+                {summary.lastStatement.source === "issuer" && summary.detail?.reportedStatement
+                  ? `Dated ${formatDayMonth(new Date(`${summary.detail.reportedStatement.issuedOn}T00:00:00`))}`
+                  : `${formatDayMonth(summary.lastStatement.start)} – ${formatDayMonth(summary.lastStatement.end)}`}
               </span>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-4">
-              <Figure label="Statement amount" value={summary.lastStatement.spent} emphasis />
+              <Figure label={summary.lastStatement.source === "issuer" ? "Issuer bill" : "Estimated bill"} value={summary.lastStatement.amount} emphasis />
               <Figure
-                label="Paid so far"
-                value={Math.min(summary.lastStatement.paidAmount, summary.lastStatement.spent)}
+                label="Payments & credits"
+                value={Math.min(summary.lastStatement.paidAmount, summary.lastStatement.amount)}
                 tone={summary.lastStatement.paidInFull ? "positive" : undefined}
               />
             </div>
             <p className="mt-2.5 text-[12.5px] leading-relaxed text-ink-secondary">
               {summary.lastStatement.paidInFull
-                ? `Paid in full — due ${formatDayMonth(summary.lastStatement.dueDate)}.`
+                ? `Recorded payments cover this ${summary.lastStatement.source === "issuer" ? "bill" : "estimate"} — due ${formatDayMonth(summary.lastStatement.dueDate)}.`
                 : `Due ${formatDayMonth(summary.lastStatement.dueDate)}.`}
+              {summary.lastStatement.source === "issuer" ? ` Source: ${summary.detail?.reportedStatement?.source}.` : " Calculated from recorded history and configured billing dates; confirm with your bank."}
             </p>
+            {summary.lastStatement.source === "issuer" && !!summary.lastStatement.ledgerDifference && <p className="mt-3 rounded-lg bg-warning-soft p-3 text-xs text-ink-secondary">The ledger at statement close differs from the issuer bill by {money(Math.abs(summary.lastStatement.ledgerDifference))}. Review the full card statement for missing entries or credits. Total outstanding remains a ledger estimate.</p>}
           </section>
         )}
+
+        {summary.detail && <CardStatementEditor key={`${summary.detail.id}:${summary.detail.reportedStatement?.recordedAt ?? ''}`} detail={summary.detail}/>}
 
         {summary.outstanding > 0 && (
           <section className="rounded-xl border border-line bg-surface p-4">

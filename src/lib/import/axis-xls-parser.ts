@@ -1,5 +1,5 @@
 import { parseAmountInput } from "@/lib/domain/money";
-import { parseFlexibleDMYDate, UnreadableStatementError, type StatementRow } from "./statement-row";
+import { parseFlexibleDMYDate, parseStatementBalance, UnreadableStatementError, validateStatementBalances, type StatementRow } from "./statement-row";
 import type { ExtractedSheet } from "./xls-source";
 
 /**
@@ -37,6 +37,7 @@ export function tryParseAxisXls(sheets: ExtractedSheet[]): StatementRow[] | null
     const narrationIdx = cells.indexOf("particulars");
     const withdrawalIdx = cells.indexOf("dr");
     const depositIdx = cells.indexOf("cr");
+    const balanceIdx = cells.findIndex(c => c === "bal" || c.includes("balance"));
     const referenceIdx = cells.findIndex((c) => /reference|utr|rrn|chq.*no/.test(c));
 
     const out: StatementRow[] = [];
@@ -47,9 +48,14 @@ export function tryParseAxisXls(sheets: ExtractedSheet[]): StatementRow[] | null
       const withdrawal = parseAmountInput(row[withdrawalIdx] ?? "") ?? 0;
       const deposit = parseAmountInput(row[depositIdx] ?? "") ?? 0;
       const hasExactlyOneAmount = (withdrawal > 0) !== (deposit > 0);
+      const balance = balanceIdx >= 0 ? parseStatementBalance(row[balanceIdx] ?? "") : null;
+      if ((!date && /^\d/.test(row[dateIdx]?.trim() ?? "") && (withdrawal > 0 || deposit > 0)) ||
+        (date && (!narration || !hasExactlyOneAmount || (balanceIdx >= 0 && balance === null)))) {
+        throw new UnreadableStatementError(1, [`Axis: invalid transaction at row ${i + 1}.`]);
+      }
 
       if (date && narration && hasExactlyOneAmount) {
-        out.push({ date, narration, withdrawal, deposit,
+        out.push({ date, narration, withdrawal, deposit, ...(balance !== null ? { balance } : {}),
           ...(referenceIdx >= 0 && row[referenceIdx]?.trim() ? { reference: row[referenceIdx]!.trim() } : {}) });
       }
     }
@@ -60,7 +66,7 @@ export function tryParseAxisXls(sheets: ExtractedSheet[]): StatementRow[] | null
         `Header row: ${header.row.join(" | ")}`,
       ]);
     }
-    return out;
+    return validateStatementBalances(out, "Axis", true);
   }
   return null;
 }

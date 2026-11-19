@@ -54,6 +54,21 @@ before(async () => {
 });
 after(async () => { await db?.close(); });
 
+test("issuer bills validate at the database boundary and survive atomic reconciliation", async () => {
+  await db.exec("grant usage on schema auth to authenticated; grant select,update on credit_cards to authenticated");
+  const statement = { issuedOn: "2026-11-13", dueOn: "2026-12-03", amount: 195900, source: "Issuer app", recordedAt: "2026-11-19T00:00:00Z" };
+  await db.query("insert into credit_cards(id,user_id,account_id,statement_day,due_day,credit_limit) values('issuer-detail',$1,'rc',13,3,0)", [user]);
+  for (const invalid of [{ ...statement, amount: -1 }, { ...statement, amount: 1.2 }, { ...statement, issuedOn: "2026-02-31" }, { ...statement, source: "" }]) {
+    await assert.rejects(asUser(() => db.query("update credit_cards set reported_statement=$1 where id='issuer-detail'", [invalid])), /valid_reported_statement/);
+  }
+  const before = (await db.query<{row: Record<string, unknown>}>("select to_jsonb(c) as row from credit_cards c where id='issuer-detail'")).rows[0]!.row;
+  const changes = { credit_cards: [{ before, after: { ...before, reported_statement: statement } }] };
+  const checks = [{ accountId: "rc", asOf: "2026-11-19", balance: 0 }];
+  for (let i = 0; i < 2; i++) await asUser(() => db.query("select commit_reconciliation($1,$2)", [changes, checks]));
+  assert.deepEqual((await db.query<{reported_statement: unknown}>("select reported_statement from credit_cards where id='issuer-detail'")).rows[0]!.reported_statement, statement);
+  assert.equal((await asUser(() => db.query("update credit_cards set reported_statement=null where id='issuer-detail' returning id"), other)).rows.length, 0);
+});
+
 test("Gmail and two different statement files share a canonical manually categorized entry", async () => {
   await mail("cross-source",20000,"0000123456789012");
   assert.equal(await gmail("cross-source"),"matched");

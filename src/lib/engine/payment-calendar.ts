@@ -22,9 +22,9 @@ export function paymentCalendar(rules:RecurringTransaction[],income:IncomeSource
  }
  for(const card of cards){
   const statement=card.lastStatement;if(!statement||!card.dueDate)continue;
-  const day=toDateInputValue(card.dueDate),remaining=Math.max(0,statement.spent-statement.paidAmount);
+  const day=toDateInputValue(card.dueDate),remaining=Math.max(0,statement.amount-statement.paidAmount);
   if(day>to||statement.paidInFull||remaining<=0)continue;
-  events.push({id:`card:${card.account.id}:${day}`,date:day,label:card.account.name,amount:remaining,kind:'card',status:'expected',transactionIds:[],note:`Ledger-derived statement remainder${day<from?' · overdue':''}. Check the bank statement for final dues.`});
+  events.push({id:`card:${card.account.id}:${day}`,date:day,label:card.account.name,amount:remaining,kind:'card',status:'expected',transactionIds:[],note:`${statement.source==='issuer'?'Issuer statement':'Estimated statement'} remainder${day<from?' · past due date':''}. Check the bank for final dues.`});
  }
  return events.sort((a,b)=>a.date.localeCompare(b.date)||a.label.localeCompare(b.label));
 }
