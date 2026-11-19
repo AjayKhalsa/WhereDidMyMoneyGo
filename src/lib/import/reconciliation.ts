@@ -1,4 +1,5 @@
 import type { Database, Transaction } from "@/lib/domain/types";
+import { validCardStatement } from "@/lib/domain/card-statement";
 import type { CollectionMap, Repository } from "@/lib/data/repository";
 import { accountBalance, creditCardOutstanding, creditCardCreditBalance } from "@/lib/engine/analytics";
 
@@ -28,7 +29,7 @@ function date(value: unknown): value is string {
 }
 const FIELDS: Record<Collection, string[]> = {
   accounts: ["id", "name", "type", "openingBalance", "isActive", "hint", "isDefault", "createdAt", "lastReconciledAt", "openingBalanceAsOf", "reconciliation"],
-  creditCards: ["id", "accountId", "statementDay", "dueDay", "creditLimit"],
+  creditCards: ["id", "accountId", "statementDay", "dueDay", "creditLimit", "reportedStatement"],
   investments: ["id", "name", "kind", "monthlyContribution", "isActive", "createdAt", "currentValue", "valuedAt"],
   transactions: ["id", "type", "amount", "description", "date", "merchant", "accountId", "toAccountId", "categoryId", "contexts", "investmentId", "goalId", "isRefund", "reversesTransactionId", "notes", "recurringId", "source", "createdAt", "updatedAt", "timing", "enrichment"],
 };
@@ -50,6 +51,7 @@ function validateRow(collection: Collection, input: unknown) {
         !["verified", "stale"].includes(String(check.status))) fail("Invalid balance evidence.");
     }
   } else if (collection === "creditCards") {
+    if (row.reportedStatement != null && !validCardStatement(row.reportedStatement)) fail("Invalid issuer statement.");
     if (!string(row.accountId) || !money(row.creditLimit) || row.creditLimit < 0 ||
         ![row.statementDay, row.dueDay].every((day) => money(day) && day >= 1 && day <= 31)) fail("Invalid card details.");
   } else if (collection === "investments") {

@@ -4,7 +4,8 @@ import { useMemo, useRef, useState } from "react";
 import { AlertTriangle, Loader2, Upload } from "lucide-react";
 import { formatDayMonth } from "@/lib/domain/dates";
 import { useMoneyText } from '@/lib/hooks/use-privacy';
-import { deleteTransactions, importTransactions } from "@/lib/data/actions";
+import { checkStatementBalance, deleteTransactions, importTransactions } from "@/lib/data/actions";
+import { balanceAt } from "@/lib/engine/reconciliation";
 import { sourceDigest } from "@/lib/import/identity";
 import {possibleRecordedSplits,recordedSplitGroups} from '@/lib/import/split-settlements';
 import {reviewCreditPurpose,reviewImportCategory,type CreditPurpose} from '@/lib/import/credit-purpose';
@@ -45,7 +46,7 @@ import {TransactionList} from '@/components/transactions/transaction-list';
  */
 
 type ReviewRow = ImportDraft & { included: boolean; wasCorrected: boolean; sourceKey: string; existingTransactionId?: string; allowSeparate?: boolean };
-type Step = "account" | "upload" | "parsing" | "review";
+type Step = "account" | "upload" | "parsing" | "review" | "result";
 
 function isoDateToLocalDate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
@@ -72,6 +73,8 @@ export function ImportStatementSheet({
   const [creditRow,setCreditRow]=useState<number|null>(null);
   const [committing, setCommitting] = useState(false);
   const [sourceHash, setSourceHash] = useState("");
+  const [closing, setClosing] = useState<{ date: string; balance: number } | null>(null);
+  const [closingDifference, setClosingDifference] = useState<number | null>(null);
   const [splitSelection,setSplitSelection]=useState<{index:number;id:string}|null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const splitGroups=useMemo(()=>recordedSplitGroups(db?.transactions??[]),[db?.transactions]);
@@ -94,6 +97,8 @@ export function ImportStatementSheet({
     setError(null);
     setRows([]);
     setSourceHash("");
+    setClosing(null);
+    setClosingDifference(null);
     setSplitSelection(null);
     setEditingRow(null);
     setRoutingRow(null);
@@ -124,7 +129,7 @@ export function ImportStatementSheet({
   async function handleFile(file: File) {
     setStep("parsing");
     setError(null);
-    const isXls = /\.xlsx?$/i.test(file.name);
+    const isXls = /\.(xlsx?|csv)$/i.test(file.name);
     try {
       const fileHash = await sourceDigest(await file.arrayBuffer());
       setSourceHash(fileHash);
@@ -137,6 +142,8 @@ export function ImportStatementSheet({
         db?.transactions ?? [],
         db?.rules ?? [],
       );
+      const last = statementRows.at(-1);
+      setClosing(last?.balance === undefined ? null : { date: last.date, balance: last.balance });
       setRows(
         drafts.map((d, index) => ({ ...d, included: !d.needsCreditReview && !d.isLikelyDuplicate && d.possibleMatchIds.length === 0 && d.possibleSplitIds.length===0,
           sourceKey: `${accountId}:${fileHash}:${index}`, wasCorrected: false })),
@@ -181,11 +188,11 @@ export function ImportStatementSheet({
   }
 
   async function handleCommit() {
-    if (!accountId || includedCount === 0 || unresolvedTransfers > 0 || unreviewedSplits>0 || unresolvedCredits>0) return;
+    if (!accountId || (includedCount === 0 && !closing) || unresolvedTransfers > 0 || unreviewedSplits>0 || unresolvedCredits>0) return;
     setCommitting(true);
     try {
       const included = rows.filter((r) => r.included);
-      const result = await importTransactions(
+      const result = included.length ? await importTransactions(
         included.map((r) => ({
           draft: {
             type: r.type,
@@ -206,10 +213,10 @@ export function ImportStatementSheet({
             date: r.date, reference: r.reference, payloadHash: sourceHash,
             existingTransactionId: r.existingTransactionId, allowSeparate: r.allowSeparate },
         })),
-      );
+      ) : { created: [], matched: 0, removed: 0 };
       toast.show({
         tone: "success",
-        title: `${result.created.length} new transaction${result.created.length === 1 ? "" : "s"} imported`,
+        title: included.length ? `${result.created.length} new transaction${result.created.length === 1 ? "" : "s"} imported` : "Checking statement balance",
         detail: `${result.matched} existing entries kept${result.removed ? `; ${result.removed} previously removed entries left for review` : ""}.`,
         action: result.created.length ? {
           label: "Undo",
@@ -218,8 +225,11 @@ export function ImportStatementSheet({
           },
         } : undefined,
       });
-      reset();
-      onClose();
+      if (closing) {
+        try { setClosingDifference(await checkStatementBalance(accountId, closing.date, closing.balance)); }
+        catch (e) { setClosingDifference(null); setError(e instanceof Error ? e.message : "Couldn't save balance verification."); }
+        setStep("result");
+      } else { reset(); onClose(); }
     } catch (err) {
       toast.show({
         tone: "error",
@@ -240,7 +250,7 @@ export function ImportStatementSheet({
           onClose();
         }}
         title="Import a statement"
-        description="HDFC, ICICI, or Axis — Excel export or HDFC PDF"
+        description="HDFC, ICICI, or Axis — Excel, CSV, or HDFC PDF"
         size="lg"
         variant="full"
         footer={
@@ -249,7 +259,7 @@ export function ImportStatementSheet({
               variant="primary"
               block
               onClick={handleCommit}
-              disabled={includedCount === 0 || committing || unresolvedTransfers > 0 || unreviewedSplits>0 || unresolvedCredits>0}
+              disabled={(includedCount === 0 && !closing) || committing || unresolvedTransfers > 0 || unreviewedSplits>0 || unresolvedCredits>0}
             >
               {committing
                 ? "Importing…"
@@ -259,7 +269,7 @@ export function ImportStatementSheet({
                   ? 'Review received money'
                 : unresolvedTransfers > 0
                   ? `${unresolvedTransfers} transfer${unresolvedTransfers === 1 ? "" : "s"} need${unresolvedTransfers === 1 ? "s" : ""} an account`
-                  : `Import ${includedCount} transaction${includedCount === 1 ? "" : "s"}`}
+                  : includedCount === 0 ? "Check closing balance" : `Import ${includedCount} transaction${includedCount === 1 ? "" : "s"}`}
             </Button>
           ) : undefined
         }
@@ -301,7 +311,7 @@ export function ImportStatementSheet({
               <Upload className="h-6 w-6 text-ink-tertiary" strokeWidth={1.5} />
               <span className="text-[14px] font-medium text-ink">Choose a statement file</span>
               <span className="text-[12.5px] text-ink-tertiary">
-                Excel (.xls/.xlsx) export from HDFC, ICICI, or Axis, or an HDFC PDF —
+                Excel (.xls/.xlsx) or CSV export from HDFC, ICICI, or Axis, or an HDFC PDF —
                 password-protected PDFs are fine, you&rsquo;ll be asked and it never leaves this
                 browser.
               </span>
@@ -309,7 +319,7 @@ export function ImportStatementSheet({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf"
+              accept=".xls,.xlsx,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -329,6 +339,11 @@ export function ImportStatementSheet({
 
         {step === "review" && (
           <div className="space-y-1 py-1">
+            {closing && <div className="mb-4 rounded-xl border border-line p-4 text-sm">
+              <p className="font-medium">Statement closing balance · {money(closing.balance)}</p>
+              <p className="mt-1 text-ink-secondary">At {closing.date}. The ledger will be checked after import. Later transactions stay in your current balance.</p>
+              {db?.accounts.find(a => a.id === accountId) && <p className="mt-1 text-ink-secondary">Current ledger at that date: {money(balanceAt(db.accounts.find(a => a.id === accountId)!, db.transactions, closing.date))}</p>}
+            </div>}
             <p className="mb-2 text-[12.5px] text-ink-tertiary">
               {rows.length} rows found. Possible existing entries are unchecked. Link a saved entry,
               or confirm a separate payment when appropriate. Tap a category to change it, or to
@@ -413,6 +428,13 @@ export function ImportStatementSheet({
             ))}
           </div>
         )}
+        {step === "result" && closing && <div className="space-y-4 py-4">
+          <h3 className="text-lg font-semibold">{closingDifference === 0 ? "Balance matches the statement" : "Imported · balance needs review"}</h3>
+          <p className="text-sm text-ink-secondary">Statement: {money(closing.balance)} at {closing.date}.</p>
+          {closingDifference !== null && closingDifference !== 0 && <p className="text-sm text-ink-secondary">The ledger differs by {money(Math.abs(closingDifference))}. Review missing entries, transfers and opening history in Accounts. No balancing entry was created.</p>}
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+          <Button onClick={() => { reset(); onClose(); }}>Done</Button>
+        </div>}
       </Sheet>
 
       <Sheet open={open&&creditRow!==null} onClose={()=>setCreditRow(null)} title="What is this money received?" size="sm">

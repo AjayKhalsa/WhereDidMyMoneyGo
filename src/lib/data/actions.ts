@@ -1,4 +1,6 @@
 import { derivedContexts, normaliseContexts } from "@/lib/domain/contexts";
+import { validCardStatement } from "@/lib/domain/card-statement";
+import { balanceAt, ledgerFingerprint } from "@/lib/engine/reconciliation";
 import { toLocalISO } from "@/lib/domain/dates";
 import type {
   Account,
@@ -589,7 +591,23 @@ export async function recordCardStartingBalance(params: {
 export async function saveCreditCardDetail(
   detail: CreditCardDetail,
 ): Promise<void> {
+  if (detail.reportedStatement && !validCardStatement(detail.reportedStatement)) throw new Error("Check the statement amount and dates.");
   await putRow("creditCards", detail);
+}
+
+/** Dated evidence is never a balancing transaction. Later ledger edits make
+ * the fingerprint stale instead of silently keeping a green verification. */
+export async function checkStatementBalance(accountId: string, asOf: string, balance: number) {
+  await refreshDatabase();
+  const db = getSnapshot().data;
+  const account = db?.accounts.find(a => a.id === accountId);
+  if (!db || !account) throw new Error("Account is unavailable; refresh and try again.");
+  const difference = balanceAt(account, db.transactions, asOf) - balance;
+  const recordedAt = new Date().toISOString();
+  await saveAccount({ ...account, reconciliation: { balance, asOf, source: "Imported bank statement", recordedAt,
+    fingerprint: ledgerFingerprint(account, db.transactions, asOf), status: difference === 0 ? "verified" : "stale" },
+    lastReconciledAt: difference === 0 ? recordedAt : account.lastReconciledAt });
+  return difference;
 }
 
 export async function saveGoal(goal: Goal): Promise<void> {
