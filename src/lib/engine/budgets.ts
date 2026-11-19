@@ -1,6 +1,6 @@
 import type { Database, Transaction } from "@/lib/domain/types";
 import { monthTransactions } from "./analytics";
-import { daysInMonth, elapsedDaysInMonth } from "@/lib/domain/dates";
+import { daysInMonth, elapsedDaysInMonth, addMonths, monthKeyToDate } from "@/lib/domain/dates";
 
 export interface BudgetBucket {
   id: string;
@@ -11,16 +11,17 @@ export interface BudgetBucket {
 export interface BudgetPlan {
   effectiveFrom: string;
   salary: number;
-  gold: number;
-  mutualFunds: number;
+  investment: number;
+  /** Read compatibility for previously saved plans. */
+  gold?: number;
+  mutualFunds?: number;
   emergency: number;
   buckets: BudgetBucket[];
 }
 const rupees = (v: number) => v * 100;
 export function defaultBudget(): BudgetPlan {
-  return { effectiveFrom: "0000-01-01", salary: rupees(140000), gold: rupees(30000), mutualFunds: rupees(40000), emergency: rupees(10000), buckets: [
-    { id: "food", label: "Personal food & delivery", limit: rupees(10000), categoryIds: ["dining", "essentials"] },
-    { id: "dates", label: "Dates & entertainment", limit: rupees(12000), categoryIds: ["entertainment"] },
+  return { effectiveFrom: "0000-01-01", salary: rupees(140000), investment: rupees(70000), emergency: rupees(10000), buckets: [
+    { id: "food", label: "Dining, delivery & outings", limit: rupees(22000), categoryIds: ["dining", "essentials", "entertainment"] },
     { id: "transport", label: "Transport", limit: rupees(8000), categoryIds: ["transport"] },
     { id: "shopping", label: "Shopping & personal care", limit: rupees(6000), categoryIds: ["shopping"] },
     { id: "bills", label: "Mobile & subscriptions", limit: rupees(4000), categoryIds: ["bills"] },
@@ -30,13 +31,13 @@ export function defaultBudget(): BudgetPlan {
   ] };
 }
 export function planFor(plans: BudgetPlan[] | undefined, month: string): BudgetPlan {
-  return [...(plans ?? [])].filter(p => p.effectiveFrom <= month).sort((a,b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0] ?? defaultBudget();
+  return normalizeBudget([...(plans ?? [])].filter(p => p.effectiveFrom <= month).sort((a,b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0] ?? defaultBudget());
 }
 export function allocation(plan: BudgetPlan): number {
-  return plan.gold + plan.mutualFunds + plan.emergency + plan.buckets.reduce((s,b) => s+b.limit,0);
+  return normalizeBudget(plan).investment + plan.emergency + plan.buckets.reduce((s,b) => s+b.limit,0);
 }
 export function validateBudget(plan: BudgetPlan): string | null {
-  const values = [plan.salary, plan.gold, plan.mutualFunds, plan.emergency, ...plan.buckets.map(b=>b.limit)];
+  const values = [plan.salary, normalizeBudget(plan).investment, plan.emergency, ...plan.buckets.map(b=>b.limit)];
   if (values.some(v=>!Number.isSafeInteger(v)||v<0) || plan.salary<=0) return "Enter valid, non-negative amounts and a positive salary.";
   if (allocation(plan)>plan.salary) return "Your allocations exceed your salary. Reduce a limit or target before saving.";
   const ids=plan.buckets.flatMap(b=>b.categoryIds);
@@ -50,19 +51,16 @@ export function budgetPerformance(db: Database, month: string, now: Date, cycleS
   const rows = monthTransactions(db.transactions, month, cycleStartDay).filter(t=>new Date(t.date)<=now);
   const actuals = new Map<string,number>();
   const transactionIds = new Map<string,string[]>();
-  let invested=0, gold=0, emergency=0;
-  const investments = new Map(db.investments.map(i=>[i.id,i]));
+  let invested=0, emergency=0;
   function bucketFor(t: Transaction): string {
     const c=categories.get(t.categoryId??"");
     // Explicit leaf mappings take priority over group mappings.
     const exact=plan.buckets.find(b=>b.categoryIds.includes(t.categoryId??""));
     const grouped=plan.buckets.find(b=>b.categoryIds.includes(c?.parentId??""));
-    const dining=c?.id==="dining"||c?.parentId==="dining";
-    if(dining && t.contexts.some(c=>c.type==="PEOPLE"&&c.value==="dating")) return "dates";
     return exact?.id??grouped?.id??"unmapped";
   }
   for(const t of rows) {
-    if(t.type==="INVESTMENT") { if(investments.get(t.investmentId??"")?.kind==="GOLD") gold+=t.amount; else invested+=t.amount; continue; }
+    if(t.type==="INVESTMENT") { invested+=t.amount; continue; }
     if(t.type==="TRANSFER") {
       const goal=db.goals.find(g=>g.id===t.goalId);
       if(goal && /emergency/i.test(goal.name)) emergency+=t.amount;
@@ -90,5 +88,32 @@ export function budgetPerformance(db: Database, month: string, now: Date, cycleS
   const overshoot=buckets.reduce((s,b)=>s+Math.max(0,b.actual-b.limit),0);
   // Individual overshoots cannot be hidden by unused money in other buckets.
   const score=rows.some(t=>t.type==="EXPENSE")&&elapsed>=5&&limit>0?Math.round(Math.max(0,100-100*overshoot/limit)):null;
-  return {plan,buckets,spent,limit,remaining:limit-spent,projected,overshoot,score,invested,gold,emergency,elapsed,days};
+  return {plan,buckets,spent,limit,remaining:limit-spent,projected,overshoot,score,invested,emergency,elapsed,days};
+}
+
+/** Upgrade old plans without changing allocations or requiring transaction retagging. */
+export function normalizeBudget(plan: BudgetPlan): BudgetPlan {
+  const {gold,mutualFunds,...rest}=plan;
+  const dates=rest.buckets.find(b=>b.id==="dates");
+  const food=rest.buckets.find(b=>b.id==="food");
+  const buckets=dates && food ? rest.buckets.filter(b=>b.id!=="dates").map(b=>b.id==="food"?{...b,label:"Dining, delivery & outings",limit:b.limit+dates.limit,categoryIds:[...new Set([...b.categoryIds,...dates.categoryIds])]}:b) : rest.buckets;
+  return {...rest, investment:plan.investment??((gold??0)+(mutualFunds??0)),buckets};
+}
+
+/** Compare the same number of days using today's mappings on both periods. */
+export function compareBudgets(db: Database, month: string, now: Date, cycleStartDay=1) {
+  const current=budgetPerformance(db,month,now,cycleStartDay);
+  const priorMonth=addMonths(month,-1,cycleStartDay);
+  const start=monthKeyToDate(priorMonth);
+  const matchedDays=Math.min(current.elapsed,daysInMonth(priorMonth,cycleStartDay));
+  const cutoff=new Date(start.getFullYear(),start.getMonth(),start.getDate()+Math.max(0,matchedDays-1),23,59,59,999);
+  const prior=budgetPerformance({...db,profile:{...db.profile,budgetPlans:[{...current.plan,effectiveFrom:"0000-01-01"}]}},priorMonth,cutoff,cycleStartDay);
+  // Shorter prior months require matching the current side to the same span too.
+  const currentStart=monthKeyToDate(month);
+  const currentCutoff=new Date(currentStart.getFullYear(),currentStart.getMonth(),currentStart.getDate()+Math.max(0,matchedDays-1),23,59,59,999);
+  const matched=budgetPerformance(db,month,currentCutoff<now?currentCutoff:now,cycleStartDay);
+  const hasPrior=prior.buckets.some(b=>b.transactionIds.length>0);
+  const delta=matched.spent-prior.spent;
+  const changes=matched.buckets.map(b=>({...b,previous:prior.buckets.find(p=>p.id===b.id)?.actual??0,delta:b.actual-(prior.buckets.find(p=>p.id===b.id)?.actual??0)})).filter(b=>b.delta!==0).sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));
+  return {current,prior,matched,matchedDays,hasPrior,delta,percent:prior.spent>0?Math.round(delta/prior.spent*100):null,changes};
 }
