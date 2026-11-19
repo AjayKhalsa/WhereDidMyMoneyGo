@@ -2,6 +2,7 @@
 import {projectMoneyLinks} from "@/lib/engine/money-links";
 import { transactionOccurredBy } from "@/lib/domain/transaction-time";
 import { budgetPerformance } from "@/lib/engine/budgets";
+import { transactionIndex } from "@/lib/engine/transaction-index";
 
 import {
   createContext,
@@ -74,6 +75,7 @@ export interface FinanceContextValue {
   error: string | null;
   db: Database | null;
   personalTransactions: Database["transactions"];
+  transactionIndex: ReturnType<typeof transactionIndex>;
   moneyHeld: number;
 
   month: MonthKey;
@@ -271,6 +273,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       error: state.error,
       db,
       personalTransactions,
+      transactionIndex: transactionIndex(db?.transactions ?? [], personalTransactions, db?.accounts ?? [], db?.moneyLinks),
       moneyHeld:moneyProjection.held,
       month,
       setMonth: setPinnedMonth,

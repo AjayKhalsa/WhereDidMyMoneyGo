@@ -11,9 +11,10 @@ import { DataLoadError } from '@/components/layout/data-load-error';
 import { DataQualityCard } from '@/components/home/data-quality-card';
 import { InfoButton } from '@/components/ui/info-button';
 import { InsightCard } from '@/components/insights/insight-card';
-import { InsightDetailSheet } from '@/components/insights/insight-detail-sheet';
 import { SpendingDrivers } from '@/components/insights/spending-drivers';
 import { EmptyState, Section, Skeleton } from '@/components/ui/primitives';
+
+const InsightDetailSheet = dynamic(() => import('@/components/insights/insight-detail-sheet').then(m => m.InsightDetailSheet));
 
 const SpendingExplorer = dynamic(() => import('@/components/insights/spending-explorer').then(m => m.SpendingExplorer));
 const SpendingCalendar = dynamic(() => import('@/components/insights/spending-calendar').then(m => m.SpendingCalendar));
@@ -51,6 +52,6 @@ export default function InsightsPage() {
       {view === 'explore' && <div className="space-y-6 chart-reveal"><Section title="Follow the money"><SpendingExplorer/></Section><Section title="Quick answers"><LensAnswers/></Section>{rest.length > 0 && <Section title="Patterns"><div className="grid gap-3 sm:grid-cols-2">{rest.map(insight => <InsightCard key={insight.id} insight={insight} onSelect={setActive} compact/>)}</div></Section>}</div>}
       {view === 'tools' && <div className="space-y-6 chart-reveal"><Section title="Can I afford it?"><AffordabilityCheck/></Section><details className="visual-card"><summary className="cursor-pointer font-medium">Financial score</summary><div className="mt-4"><FinancialScoreCard/></div></details><details className="visual-card"><summary className="cursor-pointer font-medium">Cycle totals</summary><div className="mt-4"><MonthlyRecap/></div></details><div className="visual-card"><button type="button" aria-expanded={showAI} onClick={() => setShowAI(v => !v)} className="min-h-11 w-full text-left font-medium">{showAI ? 'Hide optional AI analysis' : 'Optional AI analysis'}</button>{showAI && <AIInsights/>}</div></div>}
     </>}
-    <InsightDetailSheet insight={active} onClose={() => setActive(null)}/>
+    {active && <InsightDetailSheet insight={active} onClose={() => setActive(null)}/>}
   </div>;
 }

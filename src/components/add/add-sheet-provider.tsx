@@ -9,9 +9,11 @@ import {
   type ReactNode,
 } from "react";
 import type { Transaction, TransactionType } from "@/lib/domain/types";
+import dynamic from "next/dynamic";
 import {getSnapshot} from "@/lib/data/store";
-import { MoneyLinkSheet } from "@/components/transactions/money-link-sheet";
-import { AddTransactionSheet } from "./add-transaction-sheet";
+
+const MoneyLinkSheet = dynamic(() => import("@/components/transactions/money-link-sheet").then(m => m.MoneyLinkSheet), { ssr: false });
+const AddTransactionSheet = dynamic(() => import("./add-transaction-sheet").then(m => m.AddTransactionSheet), { ssr: false });
 
 /**
  * Global access to the add/edit sheet.
@@ -68,20 +70,15 @@ export function AddSheetProvider({ children }: { children: ReactNode }) {
   return (
     <AddSheetContext.Provider value={value}>
       {children}
-      <AddTransactionSheet
+      {state.open && <AddTransactionSheet
         // Remounting per invocation guarantees a clean slate every time —
         // no stale amount left over from a half-finished entry.
-        key={
-          state.open
-            ? (state.options.transaction?.id ??
-              `new:${state.options.initialType ?? "EXPENSE"}`)
-            : "closed"
-        }
+        key={state.options.transaction?.id ?? `new:${state.options.initialType ?? "EXPENSE"}`}
         open={state.open}
         onClose={close}
         options={state.options}
         onLinkMoney={(id)=>{close();setLinkId(id);}}
-      />
+      />}
       {linkId&&<MoneyLinkSheet key={linkId} transactionId={linkId} onClose={()=>setLinkId(null)} onNavigate={setLinkId}/>}
     </AddSheetContext.Provider>
   );

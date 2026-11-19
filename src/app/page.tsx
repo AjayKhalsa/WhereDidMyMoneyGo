@@ -2,6 +2,7 @@
 
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ArrowRight, Plus, Sparkles } from "lucide-react";
 import { useFinance } from "@/lib/hooks/use-finance";
@@ -9,9 +10,7 @@ import { useAddSheet } from "@/components/add/add-sheet-provider";
 import type { Insight } from "@/lib/engine/insights";
 import { FinancialHero } from "@/components/home/financial-hero";
 import { MoneySnapshot } from "@/components/home/money-snapshot";
-import { MoneyFlowSheet } from "@/components/flow/money-flow-sheet";
 import { InsightCard } from "@/components/insights/insight-card";
-import { InsightDetailSheet } from "@/components/insights/insight-detail-sheet";
 import { CreditCardCard } from "@/components/money/credit-card-card";
 import { GoalCard } from "@/components/money/goal-card";
 import { TransactionList } from "@/components/transactions/transaction-list";
@@ -23,7 +22,10 @@ import {
   TextAction,
 } from "@/components/ui/primitives";
 import { HomeSkeleton } from "@/components/home/home-skeleton";
-import { WelcomeScreen } from "@/components/home/welcome-screen";
+
+const MoneyFlowSheet = dynamic(() => import("@/components/flow/money-flow-sheet").then(m => m.MoneyFlowSheet));
+const InsightDetailSheet = dynamic(() => import("@/components/insights/insight-detail-sheet").then(m => m.InsightDetailSheet));
+const WelcomeScreen = dynamic(() => import("@/components/home/welcome-screen").then(m => m.WelcomeScreen));
 
 /**
  * Home — the financial command centre (spec §6, §50).
@@ -216,11 +218,11 @@ export default function HomePage() {
         </div>
       </div>
 
-      <MoneyFlowSheet open={flowOpen} onClose={() => setFlowOpen(false)} />
-      <InsightDetailSheet
+      {flowOpen && <MoneyFlowSheet open onClose={() => setFlowOpen(false)} />}
+      {activeInsight && <InsightDetailSheet
         insight={activeInsight}
         onClose={() => setActiveInsight(null)}
-      />
+      />}
     </div>
   );
 }

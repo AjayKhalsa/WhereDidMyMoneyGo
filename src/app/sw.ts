@@ -2,7 +2,7 @@
 
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
-import { NetworkOnly, Serwist } from "serwist";
+import { CacheFirst, ExpirationPlugin, NetworkOnly, Serwist } from "serwist";
 
 /**
  * The app's service worker.
@@ -44,6 +44,14 @@ const serwist = new Serwist({
         url.searchParams.has("code") ||
         url.hostname.endsWith(".supabase.co"),
       handler: new NetworkOnly(),
+    },
+    {
+      matcher: ({ url }) => url.origin === self.location.origin &&
+        url.pathname.startsWith("/_next/static/media/pdf.worker") && url.pathname.endsWith(".mjs"),
+      handler: new CacheFirst({
+        cacheName: "optional-pdf-worker",
+        plugins: [new ExpirationPlugin({ maxEntries: 2, maxAgeSeconds: 30 * 24 * 60 * 60 })],
+      }),
     },
     ...defaultCache,
   ],

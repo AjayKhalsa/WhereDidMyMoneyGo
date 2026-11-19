@@ -23,6 +23,11 @@ import { Amount } from "@/components/ui/amount";
  */
 
 const TYPE_MARKERS = {
+  ADJUSTMENT: {
+    icon: ArrowLeftRight,
+    label: "Balance adjustment",
+    className: "bg-surface-sunken text-ink-secondary",
+  },
   INCOME: {
     icon: ArrowDownLeft,
     label: "Income",
@@ -52,23 +57,25 @@ export function TransactionRow({
   className?: string;
 }) {
   const money=useMoneyText();
-  const { categories, db, personalTransactions } = useFinance();
-  const original=db?.transactions.find(t=>t.id===transaction.id)??transaction;
-  const personal=personalTransactions.find(t=>t.id===transaction.id)?.amount??transaction.amount;
-  const links=(db?.moneyLinks??[]).filter(l=>l.incomeId===transaction.id||l.expenseId===transaction.id);
+  const { categories, transactionIndex: index } = useFinance();
+  const original=index.originalById.get(transaction.id)??transaction;
+  const personal=index.personalById.get(transaction.id)?.amount??transaction.amount;
+  const links=index.linksByTransactionId.get(transaction.id)??[];
   const linked=links.length>0;
   const linkLabel=links.some(l=>l.kind==="PASS_THROUGH")?"Held / forwarded money":"Linked contribution";
   const forwarded=transaction.type==='EXPENSE'&&linked&&personal===0&&links.every(l=>l.kind==='PASS_THROUGH');
-  const marker = forwarded?TYPE_MARKERS.TRANSFER:
+  const adjustment = transaction.categoryId === "adjustment";
+  const marker = adjustment ? TYPE_MARKERS.ADJUSTMENT : forwarded?TYPE_MARKERS.TRANSFER:
     transaction.type !== "EXPENSE" ? TYPE_MARKERS[transaction.type] : null;
   const Icon = marker?.icon;
 
-  const account = db?.accounts.find((a) => a.id === transaction.accountId);
-  const toAccount = db?.accounts.find((a) => a.id === transaction.toAccountId);
+  const account = transaction.accountId ? index.accountsById.get(transaction.accountId) : undefined;
+  const toAccount = transaction.toAccountId ? index.accountsById.get(transaction.toAccountId) : undefined;
 
   const meta: string[] = [];
+  if (adjustment) meta.push("Balance adjustment · excluded from budget");
   if(forwarded)meta.push("Forwarded money");
-  if (!forwarded && transaction.type === "EXPENSE" && transaction.categoryId) {
+  if (!adjustment && !forwarded && transaction.type === "EXPENSE" && transaction.categoryId) {
     meta.push(categories.groupNameOf(transaction.categoryId));
   }
   for (const context of transaction.contexts) {
@@ -133,7 +140,7 @@ export function TransactionRow({
         size="sm"
         className={cn(
           "shrink-0",
-          transaction.type === "INCOME" && "text-positive",
+          transaction.type === "INCOME" && !adjustment && "text-positive",
           (transaction.type === "TRANSFER" || transaction.type === "INVESTMENT") &&
             "text-ink-secondary",
         )}
