@@ -11,8 +11,8 @@ import {TransactionList} from '@/components/transactions/transaction-list';
 
 const FOCUS:Record<AIFocus,string>={overview:'My money',food:'Food & dining',changes:'What changed?'};
 export function AIInsights(){
- const {db,month,now,cycleStartDay}=useFinance();const money=useMoneyText();
- const context=useMemo(()=>buildAIFacts({transactions:db?.transactions??[],categories:db?.categories??[],accounts:db?.accounts??[],month,cycleStartDay,now}),[db?.transactions,db?.categories,db?.accounts,month,cycleStartDay,now]);
+ const {db,month,now,cycleStartDay,personalTransactions}=useFinance();const money=useMoneyText();
+ const context=useMemo(()=>buildAIFacts({transactions:personalTransactions,categories:db?.categories??[],accounts:db?.accounts??[],month,cycleStartDay,now}),[personalTransactions,db?.categories,db?.accounts,month,cycleStartDay,now]);
  const [configured,setConfigured]=useState<boolean|null>(null),[focus,setFocus]=useState<AIFocus>('overview'),[result,setResult]=useState<(AIResult&{owner:string})|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState<string|null>(null);
  const [selected,setSelected]=useState<string|null>(null),[period,setPeriod]=useState<'current'|'previous'>('current');
  const controller=useRef<AbortController|null>(null);
@@ -21,7 +21,7 @@ export function AIInsights(){
  const current=result?.owner===db?.profile.id&&result?.snapshot===context.snapshot&&result.focus===focus?result:null;
  const fact=current?context.facts.find(f=>f.id===selected):undefined;
  const ids=fact?.currentIds?(period==='current'?fact.currentIds:fact.previousIds??[]):fact?.transactionIds??[];
- const idSet=new Set(ids),rows=(db?.transactions??[]).filter(t=>idSet.has(t.id));
+ const idSet=new Set(ids),rows=(personalTransactions).filter(t=>idSet.has(t.id));
  async function generate(){
   if(loading)return;const c=new AbortController();controller.current=c;setLoading(true);setError(null);
   try{const response=await fetch('/api/ai/insights',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month,snapshot:context.snapshot,focus}),signal:c.signal});const data=await response.json();if(!response.ok){if(response.status===409){setResult(null);setSelected(null);}throw new Error(data.error??'AI could not generate insights.');}if(data.snapshot!==context.snapshot||data.focus!==focus||!Array.isArray(data.insights))throw new Error('Your ledger changed. Refresh before generating again.');setResult({...data,owner:db?.profile.id??''});}

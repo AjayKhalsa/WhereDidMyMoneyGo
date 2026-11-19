@@ -1,5 +1,6 @@
 "use client";
 
+import {LinkedMoneyPanel} from "@/components/money/linked-money-panel";
 import { DataLoadError } from "@/components/layout/data-load-error";
 import { PaymentCalendar } from "@/components/money/payment-calendar";
 
@@ -116,6 +117,7 @@ export default function MoneyPage() {
         />
       </div>
 
+      <LinkedMoneyPanel />
       <PaymentCalendar />
 
       {creditCards.length > 0 && (

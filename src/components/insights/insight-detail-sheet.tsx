@@ -25,9 +25,9 @@ export function InsightDetailSheet({
   insight: Insight | null;
   onClose: () => void;
 }) {
-  const { db } = useFinance();
+  const { personalTransactions,  db } = useFinance();
   const rows = insight?.transactions ?? [];
-  const evidenceAmount = insight?.basis === "balance" ? insight.amount ?? 0 : insight?.basis === "investment" ? netInvestment(rows) : insight?.basis === "gross" ? rows.reduce((sum, t) => sum + (t.type === "EXPENSE" ? t.amount : 0), 0) : insight?.basis === "category-flow" ? netCategoryOutflow(rows, db?.transactions ?? rows) : netSpending(rows, db?.transactions ?? rows);
+  const evidenceAmount = insight?.basis === "balance" ? insight.amount ?? 0 : insight?.basis === "investment" ? netInvestment(rows) : insight?.basis === "gross" ? rows.reduce((sum, t) => sum + (t.type === "EXPENSE" ? t.amount : 0), 0) : insight?.basis === "category-flow" ? netCategoryOutflow(rows, personalTransactions) : netSpending(rows, personalTransactions);
   const prose = useMaskedProse();
   const money = useMoneyText();
   const comparison = insight?.comparison;

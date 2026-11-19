@@ -9,7 +9,7 @@ export function spendingAttribution(transactions: Transaction[]) {
   };
 }
 export function isSpendingActivity(t: Transaction): boolean {
-  return t.categoryId !== 'adjustment' && (t.type === 'EXPENSE' || (t.type === 'INCOME' && !!t.isRefund));
+  return t.amount>0 && t.categoryId !== 'adjustment' && (t.type === 'EXPENSE' || (t.type === 'INCOME' && !!t.isRefund));
 }
 /** Category cash flow includes explicitly categorized credits; salary without
  * a spending category is never subtracted from consumption spending. */

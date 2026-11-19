@@ -1,4 +1,4 @@
-import type { Database, UserProfile } from "@/lib/domain/types";
+import type { Database, UserProfile, MoneyLink } from "@/lib/domain/types";
 import { getRepository } from "./local-adapter";
 import type { CollectionMap, CollectionName } from "./repository";
 import { missingBuiltInCategories, remapLegacyCategories } from "./category-migration";
@@ -188,7 +188,7 @@ export async function putRow<K extends CollectionName>(
   await commit(
     (db) => ({
       ...db,
-      [collection]: upsert(db[collection] as { id: string }[], row),
+      [collection]: upsert((db[collection] ?? []) as { id: string }[], row),
     }),
     () => getRepository().put(collection, row),
   );
@@ -201,7 +201,7 @@ export async function putRows<K extends CollectionName>(
   if (rows.length === 0) return;
   await commit(
     (db) => {
-      let current = db[collection] as { id: string }[];
+      let current = (db[collection] ?? []) as { id: string }[];
       for (const row of rows) current = upsert(current, row);
       return { ...db, [collection]: current };
     },
@@ -216,7 +216,7 @@ export async function removeRow(
   await commit(
     (db) => ({
       ...db,
-      [collection]: (db[collection] as { id: string }[]).filter(
+      [collection]: ((db[collection] ?? []) as { id: string }[]).filter(
         (r) => r.id !== id,
       ),
     }),
@@ -233,7 +233,7 @@ export async function removeRows(
   await commit(
     (db) => ({
       ...db,
-      [collection]: (db[collection] as { id: string }[]).filter(
+      [collection]: ((db[collection] ?? []) as { id: string }[]).filter(
         (r) => !idSet.has(r.id),
       ),
     }),
@@ -258,13 +258,13 @@ export async function applyBatch(change: BatchChange): Promise<void> {
       const next: Database = { ...db };
       if (change.profile) next.profile = change.profile;
       for (const [name, rows] of Object.entries(change.puts ?? {})) {
-        let current = next[name as CollectionName] as { id: string }[];
+        let current = (next[name as CollectionName] ?? []) as { id: string }[];
         for (const row of rows as { id: string }[]) current = upsert(current, row);
         (next as unknown as Record<string, unknown>)[name] = current;
       }
       for (const [name, ids] of Object.entries(change.deletes ?? {})) {
         const idSet = new Set(ids as string[]);
-        const current = next[name as CollectionName] as { id: string }[];
+        const current = (next[name as CollectionName] ?? []) as { id: string }[];
         (next as unknown as Record<string, unknown>)[name] = current.filter(
           (r) => !idSet.has(r.id),
         );
@@ -303,4 +303,14 @@ export async function replaceDatabase(next: Database): Promise<void> {
 
 export function clearStoreError(): void {
   if (state.error) emit({ ...state, error: null });
+}
+
+/** Commit links as a single version-checked financial change, never partial rows. */
+export async function saveMoneyLinks(expected: MoneyLink[], next: MoneyLink[]): Promise<void> {
+  const repo=getRepository();
+  if(!repo.commitMoneyLinks)throw new Error('This storage backend cannot save links.');
+  const current=requireData();
+  await repo.commitMoneyLinks(expected,next);
+  if(requireData().profile.id!==current.profile.id)throw new Error("Account changed. Reload to view your links.");
+  emit({status:'ready',data:{...requireData(),moneyLinks:next},error:null});
 }

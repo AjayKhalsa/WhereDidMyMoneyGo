@@ -24,9 +24,9 @@ const ART:Record<MoneyStory['kind'],{gradient:string;icon:LucideIcon}>={
 };
 
 export function MoneyReplay() {
- const {db,month,cycleStartDay,now}=useFinance();
+ const { personalTransactions, db,month,cycleStartDay,now}=useFinance();
  const money=useMoneyText(),reduceMotion=useReducedMotion();
- const stories=useMemo(()=>moneyReplay({transactions:db?.transactions??[],categories:db?.categories??[],accounts:db?.accounts??[],month,cycleStartDay,now}),[db?.transactions,db?.categories,db?.accounts,month,cycleStartDay,now]);
+ const stories=useMemo(()=>moneyReplay({transactions:personalTransactions,categories:db?.categories??[],accounts:db?.accounts??[],month,cycleStartDay,now}),[personalTransactions,db?.categories,db?.accounts,month,cycleStartDay,now]);
  const [session,setSession]=useState<{month:string;id:string}|null>(null);
  const [evidence,setEvidence]=useState(false),[period,setPeriod]=useState<'current'|'previous'>('current');
  const index=stories.findIndex(s=>s.id===session?.id);
@@ -47,7 +47,7 @@ export function MoneyReplay() {
   document.addEventListener('keydown',handler);return()=>document.removeEventListener('keydown',handler);
  },[open,evidence,index,stories,month]);
  const rows=story?.basis==='difference'?(period==='current'?story.currentRows:story.previousRows)??[]:story?.rows??[];
- const detailAmount=story?.basis==='difference'?spendingSummary(rows,db?.transactions??[]).spending:story?.amount??0;
+ const detailAmount=story?.basis==='difference'?spendingSummary(rows,personalTransactions).spending:story?.amount??0;
 
  if(!stories.length)return null;
  return <>

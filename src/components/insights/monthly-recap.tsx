@@ -26,9 +26,9 @@ import { cn } from "@/lib/utils";
 
 export function MonthlyRecap() {
   const money = useMoneyText();
-  const { db, month, cycleStartDay, totals, safeToSpend, monthRows, categories } = useFinance();
+  const { personalTransactions,  db, month, cycleStartDay, totals, safeToSpend, monthRows, categories } = useFinance();
 
-  const transactions = db?.transactions ?? [];
+  const transactions = personalTransactions;
   const categoryFlows = spendByGroup(monthRows, id => categories.byId.get(id)?.name ?? "Other", transactions, true, id => categories.groupOf(id)?.id ?? "other");
   const top = categoryFlows.slice(0, 5);
 

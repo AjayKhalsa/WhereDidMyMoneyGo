@@ -39,7 +39,7 @@ export function TransactionList({
   className?: string;
   onSelect?: (transaction: Transaction) => void;
 }) {
-  const { db } = useFinance();
+  const { db, personalTransactions } = useFinance();
   const money = useMoneyText();
   const { open } = useAddSheet();
 
@@ -73,7 +73,7 @@ export function TransactionList({
       {groups.map(([key, rows]) => {
         // Only expenses contribute to the day's spend — a salary landing on
         // the 1st must not read as a ₹1,52,660 day.
-        const daySpend = dayTotalBasis === "category-flow" ? netCategoryOutflow(rows, db?.transactions ?? transactions) : netSpending(rows, db?.transactions ?? transactions);
+        const daySpend = dayTotalBasis === "category-flow" ? netCategoryOutflow(rows.map(t=>personalTransactions.find(p=>p.id===t.id)??t), personalTransactions) : netSpending(rows.map(t=>personalTransactions.find(p=>p.id===t.id)??t), personalTransactions);
 
         return (
           <section key={key}>

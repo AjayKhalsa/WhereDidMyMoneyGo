@@ -1,3 +1,5 @@
+import {projectMoneyLinks} from "./money-links";
+import type {MoneyLink} from "@/lib/domain/types";
 import {salaryTimingAdjustments} from './salary-cycle';
 import {resolveRecurringPayments} from './recurring-payments';
 import { transactionOccurredBy } from "@/lib/domain/transaction-time";
@@ -128,6 +130,7 @@ export interface SafeToSpendResult {
 }
 
 export interface SafeToSpendInput {
+  moneyLinks?: MoneyLink[];
   transactions: Transaction[];
   accounts: Account[];
   incomeSources: IncomeSource[];
@@ -249,7 +252,12 @@ export function calculateSafeToSpend(
   const { accounts, month, now, cycleStartDay } = input;
   const transactions = input.transactions.filter(t => transactionOccurredBy(t, now));
 
-  const totals = monthTotals(transactions, month, cycleStartDay);
+  const projection=projectMoneyLinks({transactions:input.transactions,moneyLinks:input.moneyLinks},now);
+  const personalTransactions=projection.transactions.filter(t=>transactionOccurredBy(t,now));
+  const heldNow=projection.held;
+  const heldBefore=projectMoneyLinks({transactions:input.transactions,moneyLinks:input.moneyLinks},new Date(new Date(month+"T00:00:00").getTime()-1)).held;
+  const rawTotals=monthTotals(transactions,month,cycleStartDay);
+  const totals = monthTotals(personalTransactions, month, cycleStartDay);
 
   // --- Income basis -------------------------------------------------------
   // Plan against expected salary even before it lands, but if actual income
@@ -285,20 +293,22 @@ export function calculateSafeToSpend(
     cardOutstanding -
     upcomingTotal -
     plannedInvestmentsLeft -
-    goalMoney;
+    goalMoney -
+    heldNow;
 
   // Strictly what happened inside this cycle — actual income, not the
   // expected-or-actual basis, and nothing forward-looking. Linked redemptions
   // reduce net invested. Compare this operating delta with the position
   // endpoints; adjustments or incomplete account coverage can differ.
   const salaryTiming=salaryTimingAdjustments(transactions,month,cycleStartDay);
-  const monthlySurplus = totals.income - salaryTiming.difference - totals.invested - totals.spent;
+  const linkTimingAdjustment=(rawTotals.income-rawTotals.spent)-(totals.income-totals.spent)-(heldNow-heldBefore);
+  const monthlySurplus = totals.income - salaryTiming.difference - totals.invested - totals.spent + linkTimingAdjustment;
 
   const priorTransactions = transactions.filter(t => t.date.slice(0,10) < month);
-  const positionAtCycleStart = netPosition(accounts, priorTransactions);
+  const positionAtCycleStart = netPosition(accounts, priorTransactions)-heldBefore;
   const periodEnd = endOfMonth(month, cycleStartDay);
   const positionRows = transactions.filter(t => t.date.slice(0,10) <= toDateInputValue(periodEnd));
-  const positionNow = netPosition(accounts, positionRows);
+  const positionNow = netPosition(accounts, positionRows)-heldNow;
   const cardDebtCleared = Math.max(
     0,
     cardDebtOf(accounts, priorTransactions) - cardDebtOf(accounts, positionRows),
@@ -308,7 +318,7 @@ export function calculateSafeToSpend(
   const dailyAllowance =
     safeAmount > 0 ? Math.floor(safeAmount / remainingDays) : 0;
 
-  const velocity = spendingVelocity(transactions, month, now, cycleStartDay);
+  const velocity = spendingVelocity(personalTransactions, month, now, cycleStartDay);
   const projectedRemainingSpend = Math.max(0, velocity.perDay) * Math.max(0, remainingDays - 1);
   const projectedSurplus = safeAmount - projectedRemainingSpend;
 
@@ -330,6 +340,8 @@ export function calculateSafeToSpend(
       hint: "You've spent this money — it just hasn't left your account yet",
     },
   ];
+
+  if(heldNow>0)breakdown.push({id:"money-held",label:"Linked money held aside",amount:heldNow,direction:"subtract",hint:"Money held for someone else or reserved purchase funding; not available for personal spending"});
 
   if (upcomingTotal > 0) {
     breakdown.push({
@@ -364,6 +376,7 @@ export function calculateSafeToSpend(
   // Separate contributions and principal returned, mirroring `monthlySurplus`
   // term for term so the arithmetic on screen is the arithmetic in code.
   const monthlySurplusBreakdown: BreakdownLine[] = [
+    ...(linkTimingAdjustment!==0?[{id:"link-timing",label:"Linked-money timing adjustment",amount:Math.abs(linkTimingAdjustment),direction:(linkTimingAdjustment>0?"add":"subtract") as "add"|"subtract",hint:"Purchase attribution and money received or forwarded can belong to different cycles"}]:[]),
     {
       id: "income",
       label: "Income this month",
@@ -420,7 +433,7 @@ export function calculateSafeToSpend(
     isOverspent: safeAmount <= 0,
     bankBalance,
     cardOutstanding,
-    unencumberedCash: bankBalance - cardOutstanding,
+    unencumberedCash: bankBalance - cardOutstanding - heldNow,
     breakdown,
     monthlySurplusBreakdown,
   };

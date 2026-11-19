@@ -1,4 +1,5 @@
 import type {
+  MoneyLink,
   Account,
   ClassificationRule,
   CreditCardDetail,
@@ -30,6 +31,7 @@ import type { StatementImportEntry, StatementImportResult } from "@/lib/import/i
  */
 
 export interface CollectionMap {
+  moneyLinks: MoneyLink;
   accounts: Account;
   creditCards: CreditCardDetail;
   categories: Category;
@@ -46,6 +48,7 @@ export interface CollectionMap {
 export type CollectionName = keyof CollectionMap;
 
 export const COLLECTION_NAMES: CollectionName[] = [
+  "moneyLinks",
   "accounts",
   "creditCards",
   "categories",
@@ -60,6 +63,7 @@ export const COLLECTION_NAMES: CollectionName[] = [
 ];
 
 export interface Repository {
+  commitMoneyLinks?(expected: MoneyLink[], next: MoneyLink[]): Promise<void>;
   commitEnrichment(changes: EnrichmentChange[]): Promise<void>;
   /** Cloud financial writes compare/match and commit atomically. */
   commitStatementImport?(rows: StatementImportEntry[]): Promise<StatementImportResult>;

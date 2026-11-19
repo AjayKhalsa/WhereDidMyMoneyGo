@@ -39,7 +39,7 @@ import type {
  */
 
 export function isExpense(t: Transaction): boolean {
-  return t.type === "EXPENSE" && t.categoryId !== "adjustment";
+  return t.type === "EXPENSE" && t.amount>0 && t.categoryId !== "adjustment";
 }
 
 export function inMonth(t: Transaction, key: MonthKey, cycleStartDay = 1): boolean {
@@ -649,7 +649,8 @@ function cardActivity(
 ): CardActivity {
   let charged = 0;
   let paid = 0;
-  for (const t of transactions) {
+  for (const row of transactions) {
+    const t = row.bankAmount === undefined ? row : {...row, amount:row.bankAmount};
     if (!inRange(new Date(t.date))) continue;
     if ((t.type === "EXPENSE" || t.type === "INVESTMENT") && t.accountId === cardAccountId) {
       charged += t.amount;
@@ -907,7 +908,8 @@ export function accountBalance(
   transactions: Transaction[],
 ): Paise {
   let balance = account.openingBalance;
-  for (const t of transactions) {
+  for (const row of transactions) {
+    const t = row.bankAmount === undefined ? row : {...row, amount:row.bankAmount};
     if (t.accountId === account.id) {
       if (t.type === "INCOME") balance += t.amount;
       else balance -= t.amount; // expense, transfer out, investment out

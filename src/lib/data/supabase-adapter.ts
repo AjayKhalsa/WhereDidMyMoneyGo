@@ -1,6 +1,7 @@
+import { linkFingerprint } from "@/lib/engine/money-links";
 import { completeLoad } from "./complete-load";
 import { writeTransactionCompatible } from "./transaction-write";
-import type { Database, TransactionContext, UserProfile } from "@/lib/domain/types";
+import type { Database, TransactionContext, UserProfile, MoneyLink } from "@/lib/domain/types";
 import { getSupabaseBrowserClient } from "./supabase-client";
 import type { ReconciliationBundle } from "@/lib/import/reconciliation";
 import type { EnrichmentChange } from "@/lib/engine/history-enrichment";
@@ -27,6 +28,7 @@ import {
  */
 
 const TABLE_NAMES: Record<CollectionName, string> = {
+  moneyLinks: "money_links",
   accounts: "accounts",
   creditCards: "credit_cards",
   categories: "categories",
@@ -61,7 +63,7 @@ function toCamelCase(obj: Record<string, unknown>): Record<string, unknown> {
 
 /** Strips `contexts` before writing the parent row — it lives in its own table. */
 function toRow(item: Record<string, unknown>): Record<string, unknown> {
-  const { contexts: _contexts, ...rest } = item;
+  const { contexts: _contexts, bankAmount: _bankAmount, ...rest } = item;
   return toSnakeCase(rest);
 }
 
@@ -180,6 +182,7 @@ export class SupabaseRepository implements Repository {
         ruleContextsRes,
         peopleRes,
         splitsRes,
+        moneyLinksRes,
       ] = await Promise.all([
         this.client.from("profiles").select("*").eq("id", userId).maybeSingle(),
         this.loadCollection("accounts", userId),
@@ -195,6 +198,7 @@ export class SupabaseRepository implements Repository {
         this.loadCollection("rule_contexts", userId, ["rule_id", "type", "value"]),
         this.loadCollection("people", userId),
         this.loadCollection("splits", userId),
+        this.loadCollection("money_links", userId),
       ]);
 
       for (const [name, res] of Object.entries({
@@ -212,6 +216,7 @@ export class SupabaseRepository implements Repository {
         ruleContexts: ruleContextsRes,
         people: peopleRes,
         splits: splitsRes,
+        moneyLinks: moneyLinksRes,
       })) {
         assertNoError(`load:${name}`, res.error);
       }
@@ -242,6 +247,7 @@ export class SupabaseRepository implements Repository {
       });
 
       return {
+        moneyLinks: (moneyLinksRes.data ?? []).map(r=>fromRow<MoneyLink>(r)),
         profile: fromRow<UserProfile>(profileRes.data),
         accounts: (accountsRes.data ?? []).map((r) => fromRow(r)),
         creditCards: (creditCardsRes.data ?? []).map((r) => fromRow(r)),
@@ -256,6 +262,11 @@ export class SupabaseRepository implements Repository {
         splits: (splitsRes.data ?? []).map((r) => fromRow(r)),
       } as Database;
     });
+  }
+
+  async commitMoneyLinks(expected: MoneyLink[], next: MoneyLink[]): Promise<void> {
+    const { error }=await this.client.rpc('commit_money_links',{p_expected:linkFingerprint(expected),p_next:next.map(l=>({id:l.id,kind:l.kind,income_id:l.incomeId,expense_id:l.expenseId??null,amount:l.amount,created_at:l.createdAt}))});
+    assertNoError('commitMoneyLinks',error);
   }
 
   async saveProfile(profile: UserProfile): Promise<void> {
@@ -401,6 +412,7 @@ export class SupabaseRepository implements Repository {
       }
       // Splits reference both transactions and people, so they go last.
       for (const row of db.splits) await this.putOne("splits", row, userId);
+      for (const row of db.moneyLinks ?? []) await this.putOne("moneyLinks", row, userId);
     });
   }
 
@@ -409,6 +421,7 @@ export class SupabaseRepository implements Repository {
     // cascade, since some FKs (account_id, category_id on transactions) are
     // `on delete set null`, not cascade.
     const order: (CollectionName | "transaction_contexts" | "rule_contexts")[] = [
+      "moneyLinks",
       "splits",
       "transaction_contexts",
       "rule_contexts",

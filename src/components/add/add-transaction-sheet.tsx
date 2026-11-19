@@ -154,10 +154,12 @@ export function AddTransactionSheet({
   open,
   onClose,
   options,
+  onLinkMoney,
 }: {
   open: boolean;
   onClose: () => void;
   options: AddSheetOptions;
+  onLinkMoney?: (id:string)=>void;
 }) {
   const { db, categories } = useFinance();
   const toast = useToast();
@@ -545,6 +547,7 @@ export function AddTransactionSheet({
     >
       <div className="space-y-5 pt-1">
         {saveError && <p role="alert" className="rounded-xl border border-danger/30 bg-danger/5 p-3 text-sm text-danger break-words">{saveError}</p>}
+        {editing&&['EXPENSE','INCOME'].includes(editing.type)&&!editing.isRefund&&editing.categoryId!=='adjustment'&&onLinkMoney&&<button type="button" onClick={()=>onLinkMoney(editing.id)} className="flex min-h-12 w-full items-center justify-between rounded-xl border border-accent/30 bg-accent-soft px-4 text-left text-sm font-medium text-accent">{editing.type==='EXPENSE'?'Link received money':'Link money'}<span aria-hidden="true">↗</span></button>}
         {/* Amount is the loudest thing on the sheet. */}
         <div className="flex min-h-[68px] items-center justify-center pt-1">
           <AnimatePresence mode="popLayout" initial={false}>

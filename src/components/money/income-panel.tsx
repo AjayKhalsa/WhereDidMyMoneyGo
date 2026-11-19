@@ -35,13 +35,13 @@ import { MoneyRow } from "./disclosure-panel";
 
 export function IncomePanel() {
   const money = useMoneyText();
-  const { db, month, cycleStartDay } = useFinance();
+  const { db, month, cycleStartDay, personalTransactions } = useFinance();
   const [editing, setEditing] = useState<IncomeSource | null>(null);
   const [creating, setCreating] = useState(false);
   const [oneOff, setOneOff] = useState(false);
 
   const sources = db?.incomeSources ?? [];
-  const transactions = db?.transactions ?? [];
+  const transactions = personalTransactions;
   const recurring = sources.filter((s) => s.recurring);
 
   const history = [...previousMonths(month, 5, cycleStartDay), month].map((m) => ({

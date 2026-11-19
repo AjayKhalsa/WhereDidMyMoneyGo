@@ -40,7 +40,7 @@ import { pluralise } from "@/lib/utils";
 
 export default function TransactionsPage() {
   const money = useMoneyText();
-  const { status, error, db, now, categories, cycleStartDay } = useFinance();
+  const { status, error, db, now, categories, cycleStartDay, personalTransactions } = useFinance();
 
   const [query, setQuery] = useState("");
   const [barFilter, setBarFilter] = useState<TransactionFilter>({});
@@ -73,7 +73,10 @@ export default function TransactionsPage() {
     [transactions, filter],
   );
 
-  const summary = useMemo(() => summariseResults(results), [results]);
+  const summary = useMemo(() => {
+    const personal=new Map(personalTransactions.map(t=>[t.id,t]));
+    return summariseResults(results.map(t=>personal.get(t.id)??t).filter(t=>t.amount>0));
+  }, [results,personalTransactions]);
 
   if (status === "loading" || status === "idle") {
     return (
@@ -119,6 +122,7 @@ export default function TransactionsPage() {
         hasFilters={narrowed}
       />
 
+      {!!db?.moneyLinks?.length&&<p className="text-xs text-ink-secondary">Totals show personal spending and income after linked money. Each row keeps its original bank amount.</p>}
       {results.length > 0 && (
         <ResultSummary
           headline={describeResults(parsed.terms.map((t) => t.label))}

@@ -23,12 +23,12 @@ const dayLabel=(day:string)=>formatDayMonth(monthKeyToDate(day));
 type Detail={kind:'comparison'|'category'|'merchant'|'source';id:string;month:string};
 
 export function SpendingDrivers(){
- const {db,month,now,cycleStartDay}=useFinance();
+ const { personalTransactions, db,month,now,cycleStartDay}=useFinance();
  const money=useMoneyText(),{hidden}=usePrivacy();
  const [detail,setDetail]=useState<Detail|null>(null),[period,setPeriod]=useState<'current'|'previous'>('current');
  const [dayDetail,setDayDetail]=useState<{title:string;ids:string[];month:string}|null>(null);
  const [allDrivers,setAllDrivers]=useState(false),[allMerchants,setAllMerchants]=useState(false);
- const report=useMemo(()=>spendingDrivers({transactions:db?.transactions??[],categories:db?.categories??[],accounts:db?.accounts??[],month,now,cycleStartDay}),[db?.transactions,db?.categories,db?.accounts,month,now,cycleStartDay]);
+ const report=useMemo(()=>spendingDrivers({transactions:personalTransactions,categories:db?.categories??[],accounts:db?.accounts??[],month,now,cycleStartDay}),[personalTransactions,db?.categories,db?.accounts,month,now,cycleStartDay]);
  const open=(kind:Detail['kind'],id='')=>{setDetail({kind,id,month});setPeriod('current');};
  const driver=report.drivers.find(row=>row.id===detail?.id);
  const merchant=report.merchants.find(row=>row.id===detail?.id);
@@ -47,7 +47,7 @@ export function SpendingDrivers(){
 
  if(!report.currentRows.length&&!report.previousRows.length)return null;
  return <section aria-label="Spending drivers" className="space-y-4">
-  <SpendingPulse key={month} report={report} transactions={db?.transactions??[]} month={month} cycleStartDay={cycleStartDay} onOpen={openDay}/>
+  <SpendingPulse key={month} report={report} transactions={personalTransactions} month={month} cycleStartDay={cycleStartDay} onOpen={openDay}/>
   <SpendingExplanation report={report} onOpen={openDay}/>
   <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">What moved your spending</h2></div><InfoButton title="Spending drivers"><p>Figures use recorded purchases minus posted refunds. Salary, investments, ordinary credits and card repayments are excluded.</p><p>Changes compare the first {report.days} days of each pay cycle. Different cycle lengths use their shared number of days. Merchant and payment-source totals cover the full selected cycle to date.</p><p>Refunds stay on their posting date and use the original purchase's category and merchant when linked. Account types include archived accounts; missing information stays unknown.</p><p>Change bars extend left for lower spending and right for higher spending. Merchant bars show positive net spending; negative amounts represent net refunds. Recorded history provides the comparison, while bank statements establish coverage.</p></InfoButton></div>
   <div className="visual-card space-y-3">
@@ -67,10 +67,10 @@ export function SpendingDrivers(){
    <div className="visual-card min-w-0"><h3 className="font-semibold">Top merchants</h3><p className="mt-1 text-xs text-ink-tertiary">This cycle · after refunds</p><div className="mt-2 divide-y divide-line">{(allMerchants?report.merchants:report.merchants.slice(0,5)).map(row=><button key={row.id} type="button" onClick={()=>open('merchant',row.id)} aria-label={`Explore merchant ${row.label}`} className="flex min-h-16 w-full items-center justify-between gap-3 py-3 text-left"><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{row.label}</span><span className="mt-1 block text-xs text-ink-tertiary">{row.count?`${row.count} ${row.count===1?'payment':'payments'}${row.count>1?` · avg ${money(row.average)}`:''}`:'Refunds only'}</span>{!hidden&&row.net>0&&<span aria-hidden="true" className="mt-2 block h-1.5 rounded-full bg-surface-sunken"><span className="block h-full rounded-full bg-accent/70 visual-bar" style={{width:`${row.net/maxMerchant*100}%`}}/></span>}</span><span className="shrink-0 text-sm tnum">{money(row.net)}</span></button>)}</div>{report.merchants.length>5&&<button type="button" onClick={()=>setAllMerchants(value=>!value)} className="min-h-11 text-sm underline underline-offset-4">{allMerchants?'Show fewer merchants':`All ${report.merchants.length} merchants`}</button>}</div>
    <PaymentMix key={month} report={report} onSelect={id=>open('source',id)}/>
   </div>
-  <Sheet open={!!dayDetail&&dayDetail.month===month} onClose={()=>setDayDetail(null)} title={dayDetail?.title} size="lg"><TransactionList transactions={(db?.transactions??[]).filter(row=>dayDetail?.ids.includes(row.id))} showDayTotals={false} showTime/></Sheet>
+  <Sheet open={!!dayDetail&&dayDetail.month===month} onClose={()=>setDayDetail(null)} title={dayDetail?.title} size="lg"><TransactionList transactions={(personalTransactions).filter(row=>dayDetail?.ids.includes(row.id))} showDayTotals={false} showTime/></Sheet>
   <Sheet open={!!detail&&detail.month===month&&!!currentRows} onClose={()=>setDetail(null)} title={title} description={`${dayLabel(range.from)}–${dayLabel(range.to)} · recorded spending after refunds`} size="lg">
    {compare&&<div className="mb-4 flex gap-2"><button type="button" onClick={()=>setPeriod('current')} aria-pressed={period==='current'} className={`min-h-11 rounded-lg border border-line px-3 text-sm ${period==='current'?'bg-ink text-white':''}`}>This cycle</button><button type="button" onClick={()=>setPeriod('previous')} aria-pressed={period==='previous'} className={`min-h-11 rounded-lg border border-line px-3 text-sm ${period==='previous'?'bg-ink text-white':''}`}>Previous cycle</button></div>}
-   <p className="mb-4 text-lg font-semibold">{money(spendingSummary(rows,db?.transactions??[]).spending)}</p>
+   <p className="mb-4 text-lg font-semibold">{money(spendingSummary(rows,personalTransactions).spending)}</p>
    <TransactionList transactions={rows} showDayTotals={false} showTime emptyTitle="No spending in this period"/>
   </Sheet>
  </section>;

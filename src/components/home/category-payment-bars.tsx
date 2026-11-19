@@ -18,12 +18,12 @@ const SOURCES = [
 ] as const;
 
 export function CategoryPaymentBars({slices, limit=8}: {slices:BreakdownSlice[]; limit?:number}) {
-  const {db, monthRows, categories, now} = useFinance();
+  const { personalTransactions, db, monthRows, categories, now} = useFinance();
   const money = useMoneyText();
   const {hidden}=usePrivacy();
   const [selected, setSelected] = useState<string|null>(null);
   const [source, setSource] = useState<PaymentSource|null>(null);
-  const groups = useMemo(() => categoryPaymentSources(monthRows, (db?.transactions ?? []).filter(t => transactionOccurredBy(t, now)), db?.accounts ?? [], id => categories.groupOf(id)?.id ?? 'other'), [monthRows, db?.transactions, db?.accounts, categories, now]);
+  const groups = useMemo(() => categoryPaymentSources(monthRows, (personalTransactions).filter(t => transactionOccurredBy(t, now)), db?.accounts ?? [], id => categories.groupOf(id)?.id ?? 'other'), [monthRows, personalTransactions, db?.accounts, categories, now]);
   const visible = slices.slice(0,limit);
   const parts = (id:string) => groups.get(id) ?? [];
   const maxPositive = Math.max(1,...visible.map(s => parts(s.id).reduce((n,p) => n+Math.max(0,p.net),0)));
