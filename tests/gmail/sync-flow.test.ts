@@ -23,10 +23,10 @@ test('expired paging cursor replays fixed scan without deleting receipts or adva
  globalThis.fetch=async(input,init)=>{
   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url),method=init?.method??'GET';
   if(url.hostname==='oauth2.googleapis.com')return json({access_token:'synthetic'});
-  if(url.hostname==='gmail.googleapis.com'){if(!url.searchParams.get('q')?.includes('noreply@zomato.com'))queries.push(url.searchParams);return url.searchParams.has('pageToken')?json({error:'Synthetic invalid cursor'},upstreamStatus):json({messages:[],...(financialMore?{nextPageToken:'continue-financial'}:{})});}
+  if(url.hostname==='gmail.googleapis.com'){if(!url.searchParams.get('q')?.includes('noreply@zomato.com')&&!url.searchParams.get('q')?.includes('from:(@'))queries.push(url.searchParams);return url.searchParams.has('pageToken')?json({error:'Synthetic invalid cursor'},upstreamStatus):json({messages:[],...(financialMore?{nextPageToken:'continue-financial'}:{})});}
   const body=init?.body?JSON.parse(String(init.body)):undefined;
   if(url.pathname.endsWith('/rpc/gmail_acquire_lease'))return json(true);
-  if(url.pathname.endsWith('/gmail_connections')){if(method==='GET')return json(connection);updates.push(body);return json(body?.receipt_scan?{user_id:user}:null);}
+  if(url.pathname.endsWith('/gmail_connections')){if(method==='GET')return json(connection);updates.push(body);return json(body?.receipt_scan||body?.statement_scan?{user_id:user}:null);}
   assert.equal(method==='GET'||method==='HEAD',true,'Replay may not delete receipts or write financial rows');
   if(url.pathname.endsWith('/profiles'))return json(null);
   if(method==='HEAD')return new Response(null,{headers:{'content-range':'*/0'}});
@@ -79,7 +79,7 @@ test('real sync retries review upgrades, matches before categorization and dispa
   if(url.pathname.endsWith('/rpc/gmail_commit_identified_credit')){
    assert.equal(body.p_authenticated,true);assert.ok(bodyKind==='salary'||bodyKind==='posted-refund');mail.status='logged';return json('logged');
   }
-  if(url.pathname.endsWith('/gmail_connections'))return json(method==='GET'?connection:body?.receipt_scan?{user_id:user}:null);
+  if(url.pathname.endsWith('/gmail_connections'))return json(method==='GET'?connection:body?.receipt_scan||body?.statement_scan?{user_id:user}:null);
   if(url.pathname.endsWith('/accounts'))return json([{id:'bank',name:'HDFC',type:'BANK',hint:'1234',is_active:true},{id:'card',name:'HDFC Card',type:'CREDIT_CARD',hint:'5678',is_active:true}]);
   if(url.pathname.endsWith('/categories'))return json([{id:'other'},{id:'dining'}]);
   if(url.pathname.endsWith('/rules')||url.pathname.endsWith('/rule_contexts')||url.pathname.endsWith('/transactions')){
