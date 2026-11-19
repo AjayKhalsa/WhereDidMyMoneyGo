@@ -9,7 +9,7 @@ import { google, unseal } from "./server";
 import { parseIssuerStatement, statementAccount } from "./statement-parser";
 import { statementPdfText } from "./statement-pdf";
 
-export const STATEMENT_PARSER_VERSION = 1;
+export const STATEMENT_PARSER_VERSION = 2;
 type Evidence = { message_id: string; bank: string; subject: string; body_text: string; received_at: string; attachments: { name: string }[]; pdf_text?: string; pdf_status: string };
 
 async function checkIssuerClosing(db: SupabaseClient, userId: string, accountId: string, issuedOn: string, balance: number, source: string) {

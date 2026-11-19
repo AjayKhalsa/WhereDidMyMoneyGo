@@ -3,6 +3,14 @@ import withSerwistInit from "@serwist/next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // PDF.js resolves its optional native polyfills relative to its own module.
+  // Keep that module external and explicitly trace the Linux runtime binary.
+  serverExternalPackages: ["pdfjs-dist/legacy", "@napi-rs/canvas"],
+  outputFileTracingIncludes: {
+    "/api/cron/gmail": ["./node_modules/@napi-rs/canvas/**/*", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*"],
+    "/api/gmail/sync": ["./node_modules/@napi-rs/canvas/**/*", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*"],
+    "/api/gmail/statements": ["./node_modules/@napi-rs/canvas/**/*", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*"],
+  },
 };
 
 /**
