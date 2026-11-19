@@ -269,6 +269,7 @@ export async function applyBatch(change: BatchChange): Promise<void> {
           (r) => !idSet.has(r.id),
         );
       }
+      if(change.deletes?.transactions){const ids=new Set(next.transactions.map(t=>t.id));next.moneyLinks=next.moneyLinks?.filter(l=>ids.has(l.incomeId)&&(!l.expenseId||ids.has(l.expenseId)));}
       return next;
     },
     async () => {

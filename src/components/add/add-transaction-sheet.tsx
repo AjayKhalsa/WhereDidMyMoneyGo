@@ -487,7 +487,7 @@ export function AddTransactionSheet({
           ? {
               label: "Undo",
               onClick: () => {
-                void restoreTransaction(deleted);
+                void restoreTransaction(deleted).catch(error=>toast.show({tone:"error",title:"Could not completely undo deletion",detail:error instanceof Error?error.message:"Reload and review the transaction links."}));
               },
             }
           : undefined,

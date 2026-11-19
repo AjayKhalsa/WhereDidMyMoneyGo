@@ -31,6 +31,7 @@ import {
   putRows,
   removeRow,
   saveProfile,
+  saveMoneyLinks,
   refreshDatabase,
 } from "./store";
 
@@ -359,9 +360,12 @@ export async function restoreTransaction(
   await applyBatch({
     puts: {
       transactions: [deleted.transaction, ...deleted.detachedRefunds],
-      moneyLinks: deleted.moneyLinks??[],
     },
   });
+  if(deleted.moneyLinks?.length){
+    const current=getSnapshot().data?.moneyLinks??[];
+    await saveMoneyLinks(current,[...current,...deleted.moneyLinks.filter(l=>!current.some(c=>c.id===l.id))]);
+  }
 }
 
 /** Removes a batch of transactions — the undo half of an import. */
