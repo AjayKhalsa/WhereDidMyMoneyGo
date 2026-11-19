@@ -54,6 +54,13 @@ before(async () => {
 });
 after(async () => { await db?.close(); });
 
+test("financial email evidence is owner-readable and cannot be forged through the browser", async () => {
+  await db.query("insert into financial_mail_evidence(user_id,message_id,bank,sender,subject,received_at,body_text) values($1,'bill-evidence','HDFC','statements@hdfcbank.net','Statement','2026-11-13','Private source')", [user]);
+  assert.equal((await asUser(() => db.query("select message_id from financial_mail_evidence"))).rows.length, 1);
+  assert.equal((await asUser(() => db.query("select message_id from financial_mail_evidence"), other)).rows.length, 0);
+  await assert.rejects(asUser(() => db.query("update financial_mail_evidence set body_text='forged'")), /permission denied/);
+});
+
 test("issuer bills validate at the database boundary and survive atomic reconciliation", async () => {
   await db.exec("grant usage on schema auth to authenticated; grant select,update on credit_cards to authenticated");
   const statement = { issuedOn: "2026-11-13", dueOn: "2026-12-03", amount: 195900, source: "Issuer app", recordedAt: "2026-11-19T00:00:00Z" };
