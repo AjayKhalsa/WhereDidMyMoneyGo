@@ -47,7 +47,7 @@ test("three equal-value allocations stay separate, reminders create no payment a
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     if (url.pathname.endsWith("/rpc/gmail_acquire_lease")) return json(true);
     assert.ok(!url.pathname.includes("/rpc/"), "Investment notices must not call a cash-commit or bank matcher RPC");
-    if (url.pathname.endsWith("/gmail_connections")) return json(method === "GET" ? { refresh_token: seal("synthetic", user), start_date: "2026-10-01", aliases: {} } : body?.receipt_scan?{user_id:user}:null);
+    if (url.pathname.endsWith("/gmail_connections")) return json(method === "GET" ? { refresh_token: seal("synthetic", user), start_date: "2026-10-01", aliases: {} } : body?.receipt_scan||body?.statement_scan?{user_id:user}:null);
     if (url.pathname.endsWith("/gmail_messages")) {
       if (method === "POST") { assert.match(url.searchParams.get("on_conflict")!, /user_id,message_id/); return json(null); }
       if (method === "HEAD") return new Response(null, { headers: { "content-range": "*/0" } });
