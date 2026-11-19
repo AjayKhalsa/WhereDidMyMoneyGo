@@ -2,11 +2,13 @@
  * rendering or embedded files. The password stays in server memory. */
 export async function statementPdfText(bytes: Uint8Array, password?: string): Promise<{ status: "read"; text: string } | { status: "locked" | "unsupported" }> {
   if (bytes.byteLength > 5_000_000 || bytes.byteLength < 5) return { status: "unsupported" };
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const { WorkerMessageHandler } = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
-  (globalThis as typeof globalThis & { pdfjsWorker?: unknown }).pdfjsWorker = { WorkerMessageHandler };
-  const task = pdfjs.getDocument({ data: bytes, password, disableFontFace: true, useSystemFonts: true });
+  let destroy: (() => Promise<void>) | undefined;
   try {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const { WorkerMessageHandler } = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+    (globalThis as typeof globalThis & { pdfjsWorker?: unknown }).pdfjsWorker = { WorkerMessageHandler };
+    const task = pdfjs.getDocument({ data: bytes, password, disableFontFace: true, useSystemFonts: true });
+    destroy = () => task.destroy();
     const doc = await task.promise;
     if (doc.numPages > 30) return { status: "unsupported" };
     let text = "";
@@ -19,5 +21,5 @@ export async function statementPdfText(bytes: Uint8Array, password?: string): Pr
     return { status: "read", text };
   } catch (error) {
     return { status: error instanceof Error && error.name === "PasswordException" ? "locked" : "unsupported" };
-  } finally { await task.destroy(); }
+  } finally { await destroy?.(); }
 }
