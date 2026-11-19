@@ -18,6 +18,7 @@ import { AccountPicker } from "@/components/pickers/pickers";
 import { TransactionList } from "@/components/transactions/transaction-list";
 import { cn } from "@/lib/utils";
 import { CardStatementEditor } from "./card-statement-editor";
+import { StatementSyncPanel } from "./statement-sync-panel";
 import { balanceVerification } from "@/lib/engine/reconciliation";
 
 /**
@@ -257,6 +258,7 @@ function CreditCardDetailSheet({
         )}
 
         {summary.detail && <CardStatementEditor key={`${summary.detail.id}:${summary.detail.reportedStatement?.recordedAt ?? ''}`} detail={summary.detail}/>}
+        <StatementSyncPanel accountId={summary.account.id}/>
 
         {summary.outstanding > 0 && (
           <section className="rounded-xl border border-line bg-surface p-4">

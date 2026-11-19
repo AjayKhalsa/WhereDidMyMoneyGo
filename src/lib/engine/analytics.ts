@@ -830,7 +830,7 @@ export function summariseCardBilling(
   if (reported && validCardStatement(reported)) {
     const issued = new Date(`${reported.issuedOn}T00:00:00`);
     // A dated bill applies only until the next statement is generated.
-    if (issued <= now && issued >= cycleStart) {
+    if (issued <= now && issued.getTime() >= cycleStart.getTime() - 3 * 86400000) {
       const paidAmount = paidInRange(transactions, account.id, issued, now);
       lastStatement = {
         start: lastStatement?.start ?? monthKeyToDate(addMonths(cycleKey, -1, cycleAnchor)),

@@ -29,6 +29,7 @@ test('expired paging cursor replays fixed scan without deleting receipts or adva
   if(url.pathname.endsWith('/gmail_connections')){if(method==='GET')return json(connection);updates.push(body);return json(body?.receipt_scan||body?.statement_scan?{user_id:user}:null);}
   assert.equal(method==='GET'||method==='HEAD',true,'Replay may not delete receipts or write financial rows');
   if(url.pathname.endsWith('/profiles'))return json(null);
+  if(url.pathname.endsWith('/financial_mail_evidence'))return method==='HEAD'?new Response(null,{headers:{'content-range':'*/0'}}):json([]);
   if(method==='HEAD')return new Response(null,{headers:{'content-range':'*/0'}});
   return json([]);
  };
@@ -81,6 +82,7 @@ test('real sync retries review upgrades, matches before categorization and dispa
   }
   if(url.pathname.endsWith('/gmail_connections'))return json(method==='GET'?connection:body?.receipt_scan||body?.statement_scan?{user_id:user}:null);
   if(url.pathname.endsWith('/accounts'))return json([{id:'bank',name:'HDFC',type:'BANK',hint:'1234',is_active:true},{id:'card',name:'HDFC Card',type:'CREDIT_CARD',hint:'5678',is_active:true}]);
+  if(url.pathname.endsWith('/financial_mail_evidence'))return method==='HEAD'?new Response(null,{headers:{'content-range':'*/0'}}):json([]);
   if(url.pathname.endsWith('/categories'))return json([{id:'other'},{id:'dining'}]);
   if(url.pathname.endsWith('/rules')||url.pathname.endsWith('/rule_contexts')||url.pathname.endsWith('/transactions')){
    assert.equal(method,'GET','Sync must not write financial rows while matching');return json([]);

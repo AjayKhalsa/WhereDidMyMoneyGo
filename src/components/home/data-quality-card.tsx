@@ -14,6 +14,7 @@ interface SyncStatus {
   reviewCount?: number;
   financialReviewCount?: number;
   categoryReviewCount?: number;
+  lockedStatementCount?: number;
   health?: { state: string; pending: number };
 }
 
@@ -79,6 +80,7 @@ export function DataQualityCard() {
           })} IST.</>
         )}
       </p>
+      {!!sync?.lockedStatementCount && <p className="text-xs text-ink-secondary">{sync.lockedStatementCount} statement PDFs need access. <Link href="/money" className="underline">Set up PDF access in the card details</Link> to enable automatic checks.</p>}
       {!failed && ((sync?.financialReviewCount ?? sync?.reviewCount ?? 0) > 0 || (sync?.categoryReviewCount ?? 0) > 0) && (
         <p className="text-xs text-ink-secondary">
           {sync?.financialReviewCount ?? sync?.reviewCount ?? 0} emails need matching or financial review
