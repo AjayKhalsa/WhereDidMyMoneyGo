@@ -16,7 +16,7 @@ import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/data/supab
 import { useFinance } from "@/lib/hooks/use-finance";
 import { usePrivacy } from "@/lib/hooks/use-privacy";
 import { PageHeader } from "@/components/layout/month-switcher";
-import { ImportStatementSheet } from "@/components/settings/import-statement-sheet";
+import dynamic from "next/dynamic";
 import { ReconciliationImport } from "@/components/settings/reconciliation-import";
 import { PushNotifications } from "@/components/settings/push-notifications";
 import { InfoButton } from "@/components/ui/info-button";
@@ -29,6 +29,8 @@ import { Button, Card, Chip, Section, Skeleton } from "@/components/ui/primitive
 import { Sheet } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
 import { pluralise } from "@/lib/utils";
+
+const ImportStatementSheet = dynamic(() => import("@/components/settings/import-statement-sheet").then(m => m.ImportStatementSheet), { ssr: false });
 
 /**
  * Settings (spec §43).
@@ -497,7 +499,7 @@ function DataPanel() {
         </div>
       </Sheet>
 
-      <ImportStatementSheet open={importing} onClose={() => setImporting(false)} />
+      {importing && <ImportStatementSheet open onClose={() => setImporting(false)} />}
     </>
   );
 }

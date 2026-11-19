@@ -3,14 +3,6 @@ import withSerwistInit from "@serwist/next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  // PDF.js resolves its optional native polyfills relative to its own module.
-  // Keep that module external and explicitly trace the Linux runtime binary.
-  serverExternalPackages: ["pdfjs-dist/legacy", "@napi-rs/canvas"],
-  outputFileTracingIncludes: {
-    "/api/cron/gmail": ["./node_modules/@napi-rs/canvas/**/*", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*"],
-    "/api/gmail/sync": ["./node_modules/@napi-rs/canvas/**/*", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*"],
-    "/api/gmail/statements": ["./node_modules/@napi-rs/canvas/**/*", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*"],
-  },
 };
 
 /**
@@ -26,6 +18,9 @@ const nextConfig: NextConfig = {
 const withSerwist = withSerwistInit({
   swSrc: "src/app/sw.ts",
   swDest: "public/sw.js",
+  // The optional bank-PDF importer needs this 1.2 MB worker only when used.
+  // Keep core offline logging cached without downloading it on every install.
+  exclude: [/pdf\.worker.*\.mjs$/],
   // In development the code changes constantly; caching it only produces
   // confusing stale reloads.
   disable: process.env.NODE_ENV === "development",
