@@ -30,7 +30,7 @@ test("three equal-value allocations stay separate, reminders create no payment a
     if (url.hostname === "oauth2.googleapis.com") return json({ access_token: "synthetic" });
     if (url.hostname === "gmail.googleapis.com") {
       if (url.pathname.endsWith("/messages")) {
-        if(url.searchParams.get('q')?.includes('noreply@zomato.com'))return json({messages:[]});
+        if(url.searchParams.get('q')?.includes('noreply@zomato.com')||url.searchParams.get('q')?.includes('from:(@'))return json({messages:[]});
         assert.match(url.searchParams.get("q")!, /from:noreply@groww.in/);
         return json({ messages: Object.keys(rows).map(id => ({ id })) });
       }
