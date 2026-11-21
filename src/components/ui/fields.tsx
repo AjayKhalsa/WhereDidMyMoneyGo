@@ -21,9 +21,9 @@ import { cn } from "@/lib/utils";
  */
 
 const CONTROL = cn(
-  "w-full rounded-xl border border-line bg-surface px-3.5 text-[15px] text-ink",
+  "w-full rounded-[var(--radius-control)] border border-line bg-surface px-3.5 text-base text-ink sm:text-[15px]",
   "placeholder:text-ink-faint",
-  "transition-all duration-150 ease-[var(--ease-out-soft)]",
+  "transition-[border-color,box-shadow,background-color,color] duration-150 ease-[var(--ease-out-soft)]",
   "hover:border-line-strong",
   "focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/12",
   "disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-ink-tertiary",
@@ -237,7 +237,7 @@ export function SegmentedControl<T extends string>({
 }: {
   value: T;
   onChange: (value: T) => void;
-  options: { value: T; label: string }[];
+  options: { value: T; label: ReactNode }[];
   className?: string;
   label?: string;
 }) {
@@ -245,10 +245,24 @@ export function SegmentedControl<T extends string>({
     <div
       role="radiogroup"
       aria-label={label}
-      className={cn(
-        "inline-flex w-full gap-1 rounded-xl bg-surface-sunken p-1",
-        className,
-      )}
+      className={cn("segmented-control w-full", className)}
+      onKeyDown={event => {
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+        const index = options.findIndex(option => option.value === value);
+        let next: number;
+        switch (event.key) {
+          case "ArrowRight": case "ArrowDown": next = (index + 1) % options.length; break;
+          case "ArrowLeft": case "ArrowUp": next = (index - 1 + options.length) % options.length; break;
+          case "Home": next = 0; break;
+          case "End": next = options.length - 1; break;
+          default: return;
+        }
+        const option = options[next];
+        if (!option) return;
+        event.preventDefault();
+        onChange(option.value);
+        event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+      }}
     >
       {options.map((option) => {
         const selected = option.value === value;
@@ -258,14 +272,8 @@ export function SegmentedControl<T extends string>({
             type="button"
             role="radio"
             aria-checked={selected}
+            tabIndex={selected ? 0 : -1}
             onClick={() => onChange(option.value)}
-            className={cn(
-              "flex-1 rounded-lg px-3 py-1.5 text-[13px] font-medium",
-              "transition-all duration-200 ease-[var(--ease-out-soft)]",
-              selected
-                ? "bg-surface text-ink shadow-[var(--shadow-subtle)]"
-                : "text-ink-secondary hover:text-ink",
-            )}
           >
             {option.label}
           </button>

@@ -1,7 +1,6 @@
 "use client";
 import { netSpending, netCategoryOutflow } from "@/lib/engine/spending";
 
-import { groupIdOf } from "@/lib/domain/categories";
 import { useMoneyText } from "@/lib/hooks/use-privacy";
 import { formatMonthLabel, previousMonths } from "@/lib/domain/dates";
 import { percentOf } from "@/lib/domain/money";
@@ -26,7 +25,7 @@ import { cn } from "@/lib/utils";
 
 export function MonthlyRecap() {
   const money = useMoneyText();
-  const { personalTransactions,  db, month, cycleStartDay, totals, safeToSpend, monthRows, categories } = useFinance();
+  const { personalTransactions, month, cycleStartDay, totals, safeToSpend, monthRows, categories } = useFinance();
 
   const transactions = personalTransactions;
   const categoryFlows = spendByGroup(monthRows, id => categories.byId.get(id)?.name ?? "Other", transactions, true, id => categories.groupOf(id)?.id ?? "other");

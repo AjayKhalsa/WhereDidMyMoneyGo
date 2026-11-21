@@ -8,6 +8,7 @@ import { addMonths, formatDayMonth, monthKeyToDate } from '@/lib/domain/dates';
 import type { spendingDrivers } from '@/lib/engine/spending-drivers';
 import { spendingTrend } from '@/lib/engine/spending-trend';
 import { useMoneyText, useMoneyTextCompact, usePrivacy } from '@/lib/hooks/use-privacy';
+import { SegmentedControl } from '@/components/ui/fields';
 import { InfoButton } from '@/components/ui/info-button';
 
 type Report = ReturnType<typeof spendingDrivers>;
@@ -43,7 +44,7 @@ export function SpendingPulse({ report, transactions, month, cycleStartDay, onOp
     </div>
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
       <span className="rounded-full bg-surface/80 px-3 py-1.5 text-xs font-medium">{report.hasComparison ? `${money(Math.abs(difference))} ${difference > 0 ? 'more' : difference < 0 ? 'less' : 'change'} · first ${report.days} days` : 'Comparison appears with more history'}</span>
-      <div className="chart-toggle" aria-label="Chart view">{(['cumulative', 'net'] as const).map(value => <button key={value} type="button" aria-pressed={mode === value} onClick={() => setMode(value)}>{value === 'cumulative' ? 'Total' : 'Daily'}</button>)}</div>
+      <SegmentedControl label="Chart view" className="w-auto" value={mode} onChange={setMode} options={[{value:'cumulative',label:'Total'},{value:'net',label:'Daily'}]}/>
     </div>
     {hidden ? <p className="py-16 text-center text-sm text-ink-secondary">Chart hidden while balances are private.</p> : <motion.div key={mode} initial={reduced ? false : {opacity:0}} animate={{opacity:1}} transition={{duration:reduced ? 0 : .25}} className="mt-3">
       <svg viewBox="0 0 560 204" className="w-full" role="img" aria-label={`${mode === 'cumulative' ? 'Cumulative' : 'Daily'} spending. This cycle solid purple; previous cycle dashed grey. Use the day slider for exact amounts.`}>

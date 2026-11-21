@@ -1,7 +1,7 @@
 "use client";
 import {isSalaryIncome} from '@/lib/engine/salary-cycle';
 import {useMemo,useState} from 'react';
-import {Link2,ArrowDownLeft,ArrowUpRight,ShieldCheck,Search,Unlink} from 'lucide-react';
+import {Link2,ShieldCheck,Search,Unlink} from 'lucide-react';
 import {Sheet} from '@/components/ui/sheet';
 import {useFinance} from '@/lib/hooks/use-finance';
 import {useMoneyText} from '@/lib/hooks/use-privacy';

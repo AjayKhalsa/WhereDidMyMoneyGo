@@ -26,8 +26,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
 };
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: "h-8 px-3 text-[13px] gap-1.5 rounded-lg",
-  md: "h-10 px-4 text-sm gap-2 rounded-xl",
+  sm: "h-11 sm:h-8 px-3 text-[13px] gap-1.5 rounded-lg",
+  md: "h-11 sm:h-10 px-4 text-sm gap-2 rounded-xl",
   lg: "h-12 px-5 text-[15px] gap-2 rounded-xl",
 };
 
@@ -47,7 +47,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         className={cn(
           "inline-flex items-center justify-center font-medium",
-          "transition-all duration-150 ease-[var(--ease-out-soft)]",
+          "transition-[background-color,color,border-color,box-shadow,transform] duration-150 ease-[var(--ease-out-soft)]",
           "active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40",
           VARIANTS[variant],
           SIZES[size],
@@ -73,8 +73,8 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         aria-label={label}
         title={label}
         className={cn(
-          "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-          "transition-all duration-150 ease-[var(--ease-out-soft)] active:scale-95",
+          "inline-flex h-11 w-11 shrink-0 sm:h-9 sm:w-9 items-center justify-center rounded-lg",
+          "transition-[background-color,color,border-color,box-shadow,transform] duration-150 ease-[var(--ease-out-soft)] active:scale-95",
           "disabled:pointer-events-none disabled:opacity-40",
           VARIANTS[variant],
           className,
@@ -101,7 +101,7 @@ export function Card({
         "rounded-[var(--radius-card)] border border-line bg-surface",
         "shadow-[var(--shadow-subtle)]",
         interactive &&
-          "transition-all duration-200 ease-[var(--ease-out-soft)] hover:border-line-strong hover:shadow-[var(--shadow-raised)]",
+          "transition-[background-color,color,border-color,box-shadow,transform] duration-200 ease-[var(--ease-out-soft)] hover:border-line-strong hover:shadow-[var(--shadow-raised)]",
         className,
       )}
       {...props}
@@ -210,7 +210,7 @@ export function SelectableChip({
       aria-pressed={selected}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5",
-        "text-[13px] font-medium transition-all duration-150 ease-[var(--ease-out-soft)]",
+        "text-[13px] font-medium transition-[background-color,color,border-color,box-shadow,transform] duration-150 ease-[var(--ease-out-soft)]",
         "active:scale-[0.97]",
         selected
           ? "border-ink bg-ink text-canvas"

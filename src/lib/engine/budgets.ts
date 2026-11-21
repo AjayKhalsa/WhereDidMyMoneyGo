@@ -102,8 +102,8 @@ export function normalizeBudget(plan: BudgetPlan): BudgetPlan {
 }
 
 /** Compare the same number of days using today's mappings on both periods. */
-export function compareBudgets(db: Database, month: string, now: Date, cycleStartDay=1) {
-  const current=budgetPerformance(db,month,now,cycleStartDay);
+export function compareBudgets(db: Database, month: string, now: Date, cycleStartDay=1,
+  current=budgetPerformance(db,month,now,cycleStartDay)) {
   const priorMonth=addMonths(month,-1,cycleStartDay);
   const start=monthKeyToDate(priorMonth);
   const matchedDays=Math.min(current.elapsed,daysInMonth(priorMonth,cycleStartDay));
@@ -112,7 +112,7 @@ export function compareBudgets(db: Database, month: string, now: Date, cycleStar
   // Shorter prior months require matching the current side to the same span too.
   const currentStart=monthKeyToDate(month);
   const currentCutoff=new Date(currentStart.getFullYear(),currentStart.getMonth(),currentStart.getDate()+Math.max(0,matchedDays-1),23,59,59,999);
-  const matched=budgetPerformance(db,month,currentCutoff<now?currentCutoff:now,cycleStartDay);
+  const matched=currentCutoff<now?budgetPerformance(db,month,currentCutoff,cycleStartDay):current;
   const hasPrior=prior.buckets.some(b=>b.transactionIds.length>0);
   const delta=matched.spent-prior.spent;
   const changes=matched.buckets.map(b=>({...b,previous:prior.buckets.find(p=>p.id===b.id)?.actual??0,delta:b.actual-(prior.buckets.find(p=>p.id===b.id)?.actual??0)})).filter(b=>b.delta!==0).sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));

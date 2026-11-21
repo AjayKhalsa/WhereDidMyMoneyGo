@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 
 export function LensAnswers() {
   const money = useMoneyText();
-  const { personalTransactions,  monthRows, db, month, cycleStartDay } = useFinance();
+  const { personalTransactions,  monthRows, month, cycleStartDay } = useFinance();
   const [active, setActive] = useState<LensResult | null>(null);
 
   const results = useMemo(
