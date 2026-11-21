@@ -4,7 +4,7 @@ import {createEmptyDatabase} from '@/lib/data/seed';
 import {monthTotals,accountBalance,creditCardOutstanding} from '@/lib/engine/analytics';
 import {budgetPerformance} from '@/lib/engine/budgets';
 import {calculateSafeToSpend} from '@/lib/engine/safe-to-spend';
-import {expense,income,makeAccount,makeCard,rs,at} from '../helpers/factories';
+import {expense,income,makeAccount,rs,at} from '../helpers/factories';
 import type {MoneyLink} from '@/lib/domain/types';
 const now=new Date(2026,10,19),month='2026-11-01';
 const link=(id:string,incomeId:string,expenseId:string|undefined,amount:number,kind:MoneyLink['kind']='CONTRIBUTION'):MoneyLink=>({id,incomeId,expenseId,amount:rs(amount),kind,createdAt:at('2026-11-10')});

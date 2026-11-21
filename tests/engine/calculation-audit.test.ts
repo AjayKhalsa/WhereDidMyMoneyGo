@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildCategorySeed } from '@/lib/domain/categories';
-import { spendingSummary, netSpending, netCategoryOutflow } from '@/lib/engine/spending';
+import { spendingSummary, netSpending } from '@/lib/engine/spending';
 import { spendingReport } from '@/lib/engine/spending-report';
 import { spendByGroup, spendByCategory, spendByContext, spendByMerchant, spendByAccount, monthTotals, compareToAverage, monthlySpendHistory, spendingVelocity, creditCardOutstanding, netWorth, valueInvestments, lensTotals } from '@/lib/engine/analytics';
 import { calculateSafeToSpend, upcomingRecurring } from '@/lib/engine/safe-to-spend';

@@ -50,3 +50,19 @@ test("shorter prior months clamp both sides, and empty history does not invent i
  db.transactions=[expense({amount:rs(1000),date:at('2026-03-28'),categoryId:'dining'}),expense({amount:rs(9999),date:at('2026-03-30'),categoryId:'dining'}),expense({amount:rs(2000),date:at('2026-02-28'),categoryId:'dining'})];
  const c=compareBudgets(db,'2026-03-01',new Date(2026,3,1));assert.equal(c.matchedDays,28);assert.equal(c.matched.spent,rs(1000));assert.equal(c.delta,rs(-1000));
 });
+
+test('comparison reuses the current budget snapshot while keeping shorter-month comparisons correct',()=>{
+  const db=createEmptyDatabase();
+  db.transactions=[expense({amount:rs(1200),categoryId:'dining',date:at('2026-11-04')}),expense({amount:rs(1500),categoryId:'dining',date:at('2026-10-04')})];
+  const current=budgetPerformance(db,month,now);
+  const cached=compareBudgets(db,month,now,1,current);
+  assert.deepEqual(cached,compareBudgets(db,month,now));
+  assert.equal(cached.current,current);
+  assert.equal(cached.matched,current);
+  const shortNow=new Date(2026,3,1);
+  const march=budgetPerformance(db,'2026-03-01',shortNow);
+  const clamped=compareBudgets(db,'2026-03-01',shortNow,1,march);
+  assert.deepEqual(clamped,compareBudgets(db,'2026-03-01',shortNow));
+  assert.notEqual(clamped.matched,march);
+  assert.equal(clamped.matchedDays,28);
+});

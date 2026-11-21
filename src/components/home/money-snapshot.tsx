@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 
 export function MoneySnapshot() {
   const money = useMoneyText();
-  const { personalTransactions,  totals, safeToSpend, db, month, cycleStartDay, now } = useFinance();
+  const { personalTransactions,  totals, safeToSpend, month, cycleStartDay, now } = useFinance();
   const [incomeOpen,setIncomeOpen]=useState(false);
   const evidence=incomeEvidence(personalTransactions,month,cycleStartDay,now);
 

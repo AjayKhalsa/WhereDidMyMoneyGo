@@ -13,11 +13,8 @@ import {
   at,
   expense,
   income,
-  investmentTxn,
   makeAccount,
   makeCard,
-  makeGoal,
-  makeInvestment,
   makeRecurring,
   rs,
 } from "../helpers/factories";

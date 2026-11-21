@@ -20,7 +20,6 @@ import {
   expense,
   income,
   investmentTxn,
-  makeAccount,
   rs,
   transfer,
 } from "../helpers/factories";
@@ -33,7 +32,6 @@ import {
 
 const PAYDAY = 24;
 const MONTH = "2026-07-24";
-const bank = makeAccount();
 
 describe("inMonth and monthTransactions", () => {
   test("a cycle runs from its start day to the day before the next", () => {

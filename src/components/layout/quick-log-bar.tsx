@@ -47,8 +47,8 @@ export function QuickLogBar() {
       <div
         className={cn(
           "pointer-events-auto mx-auto flex max-w-md items-center gap-1",
-          "rounded-2xl border border-line bg-surface/95 p-1.5 pl-3.5",
-          "shadow-[var(--shadow-raised)] backdrop-blur-xl",
+          "rounded-[24px] border border-line bg-surface/95 p-1.5 pl-3.5",
+          "shadow-[var(--shadow-raised)] backdrop-blur-md",
         )}
       >
         <button
@@ -76,7 +76,7 @@ export function QuickLogBar() {
               aria-label={label}
               title={label}
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-xl",
+                "flex h-11 w-11 items-center justify-center rounded-[18px]",
                 "transition-colors hover:bg-surface-sunken active:scale-90",
                 tone,
               )}

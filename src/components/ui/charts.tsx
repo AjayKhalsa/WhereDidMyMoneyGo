@@ -110,54 +110,7 @@ export function BarList({
   );
 }
 
-/**
- * A single proportional track, e.g. progress through the month or toward a
- * goal. Deliberately thin — it is context, not the headline.
- */
-export function ProgressTrack({
-  value,
-  tone = "accent",
-  className,
-  height = "h-1.5",
-  animate = true,
-}: {
-  /** 0–100. */
-  value: number;
-  tone?: "accent" | "positive" | "warning" | "danger" | "ink";
-  className?: string;
-  height?: string;
-  animate?: boolean;
-}) {
-  const clamped = Math.max(0, Math.min(100, value));
-  const tones = {
-    accent: "bg-accent",
-    positive: "bg-positive",
-    warning: "bg-warning",
-    danger: "bg-danger",
-    ink: "bg-ink",
-  };
-
-  return (
-    <div
-      className={cn(
-        "w-full overflow-hidden rounded-full bg-surface-sunken",
-        height,
-        className,
-      )}
-      role="progressbar"
-      aria-valuenow={Math.round(clamped)}
-      aria-valuemin={0}
-      aria-valuemax={100}
-    >
-      <motion.div
-        className={cn("h-full rounded-full", tones[tone])}
-        initial={animate ? { width: 0 } : false}
-        animate={{ width: `${clamped}%` }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-      />
-    </div>
-  );
-}
+export { ProgressTrack } from "./progress-track";
 
 /**
  * A stacked proportional bar — the money-flow visual on the drill-down.

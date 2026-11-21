@@ -25,7 +25,7 @@ export function InsightDetailSheet({
   insight: Insight | null;
   onClose: () => void;
 }) {
-  const { personalTransactions,  db } = useFinance();
+  const { personalTransactions } = useFinance();
   const rows = insight?.transactions ?? [];
   const evidenceAmount = insight?.basis === "balance" ? insight.amount ?? 0 : insight?.basis === "investment" ? netInvestment(rows) : insight?.basis === "gross" ? rows.reduce((sum, t) => sum + (t.type === "EXPENSE" ? t.amount : 0), 0) : insight?.basis === "category-flow" ? netCategoryOutflow(rows, personalTransactions) : netSpending(rows, personalTransactions);
   const prose = useMaskedProse();

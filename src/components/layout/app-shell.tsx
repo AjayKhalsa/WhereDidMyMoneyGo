@@ -157,7 +157,7 @@ function MobileTabBar() {
       aria-label="Main"
       className={cn(
         "fixed inset-x-0 bottom-0 z-40 lg:hidden",
-        "border-t border-line bg-surface/85 backdrop-blur-xl",
+        "border-t border-line bg-surface/95 backdrop-blur-md",
         "pb-safe",
       )}
     >

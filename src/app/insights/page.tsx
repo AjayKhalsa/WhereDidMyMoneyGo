@@ -1,6 +1,8 @@
 "use client";
 
-import { BudgetPanel } from "@/components/insights/budget-panel";
+import { LazyDetails } from "@/components/ui/lazy-details";
+import { SegmentedControl } from "@/components/ui/fields";
+import { BudgetSummary } from "@/components/insights/budget-summary";
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { BarChart3, Search, SlidersHorizontal, Lightbulb } from 'lucide-react';
@@ -41,8 +43,8 @@ export default function InsightsPage() {
   const empty = !monthRows.some(t => t.type === 'EXPENSE' || (t.type === 'INCOME' && t.isRefund)) && insights.length === 0;
   return <div className="space-y-6">
     <PageHeader title="Insights" description="Your money, at a glance." action={<div className="flex items-center gap-1"><InfoButton title="Data quality"><DataQualityCard/></InfoButton><MonthSwitcher/></div>}/>
-    <div className="insight-navigation" role="group" aria-label="Insight views">{VIEWS.map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-pressed={view === id} onClick={() => setView(id)}><Icon aria-hidden="true" className="h-4 w-4"/>{label}</button>)}</div>
-    {view === 'overview' && <BudgetPanel compact/>}
+    <SegmentedControl label="Insight views" value={view} onChange={setView} options={VIEWS.map(({ id, label, icon: Icon }) => ({value: id, label: <><Icon aria-hidden="true" className="h-4 w-4" strokeWidth={1.75}/>{label}</>}))}/>
+    {view === 'overview' && <BudgetSummary/>}
     {empty ? <EmptyState icon={<Lightbulb className="h-5 w-5"/>} title="Your patterns start here" description="Record some spending to see your daily chart, merchants and payment mix."/> : <>
       {view === 'overview' && <div className="space-y-6 chart-reveal">
         <SpendingDrivers/>
@@ -50,7 +52,7 @@ export default function InsightsPage() {
         <SpendingCalendar/>
       </div>}
       {view === 'explore' && <div className="space-y-6 chart-reveal"><Section title="Follow the money"><SpendingExplorer/></Section><Section title="Quick answers"><LensAnswers/></Section>{rest.length > 0 && <Section title="Patterns"><div className="grid gap-3 sm:grid-cols-2">{rest.map(insight => <InsightCard key={insight.id} insight={insight} onSelect={setActive} compact/>)}</div></Section>}</div>}
-      {view === 'tools' && <div className="space-y-6 chart-reveal"><Section title="Can I afford it?"><AffordabilityCheck/></Section><details className="visual-card"><summary className="cursor-pointer font-medium">Financial score</summary><div className="mt-4"><FinancialScoreCard/></div></details><details className="visual-card"><summary className="cursor-pointer font-medium">Cycle totals</summary><div className="mt-4"><MonthlyRecap/></div></details><div className="visual-card"><button type="button" aria-expanded={showAI} onClick={() => setShowAI(v => !v)} className="min-h-11 w-full text-left font-medium">{showAI ? 'Hide optional AI analysis' : 'Optional AI analysis'}</button>{showAI && <AIInsights/>}</div></div>}
+      {view === 'tools' && <div className="space-y-6 chart-reveal"><Section title="Can I afford it?"><AffordabilityCheck/></Section><LazyDetails className="visual-card" summary="Financial score"><FinancialScoreCard/></LazyDetails><LazyDetails className="visual-card" summary="Cycle totals"><MonthlyRecap/></LazyDetails><div className="visual-card"><button type="button" aria-expanded={showAI} onClick={() => setShowAI(v => !v)} className="min-h-11 w-full text-left font-medium">{showAI ? 'Hide optional AI analysis' : 'Optional AI analysis'}</button>{showAI && <AIInsights/>}</div></div>}
     </>}
     {active && <InsightDetailSheet insight={active} onClose={() => setActive(null)}/>}
   </div>;
