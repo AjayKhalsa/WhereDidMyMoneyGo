@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useAddSheet } from "@/components/add/add-sheet-provider";
+import { monthTransactions } from "@/lib/engine/analytics";
 import { Plus } from "lucide-react";
 import { daysBetween, toDateInputValue } from "@/lib/domain/dates";
 import { useMoneyText } from "@/lib/hooks/use-privacy";
@@ -50,6 +52,7 @@ const KINDS: { value: InvestmentKind; label: string }[] = [
 export function InvestmentsPanel() {
   const money = useMoneyText();
   const { db, month, cycleStartDay, totals, now } = useFinance();
+  const { open: editTransaction } = useAddSheet();
   const [editing, setEditing] = useState<Investment | null>(null);
   const [creating, setCreating] = useState(false);
   const [contributing, setContributing] = useState<Investment | null>(null);
@@ -75,12 +78,15 @@ export function InvestmentsPanel() {
     .reduce((acc, v) => acc + v.contributed, 0);
   const totalGain = valuations.filter(v => v.investment.isActive).reduce((sum, v) => sum + v.gain, 0);
 
+  const unlinked = monthTransactions(db?.transactions ?? [], month, cycleStartDay).filter(t=>t.type==="INVESTMENT"&&!t.investmentId);
   const rate = totals.income > 0 ? totals.investmentContributions / totals.income * 100 : 0;
 
   return (
     <>
+      <p className="text-sm text-ink-secondary">Tap an investment to edit its monthly plan. The plan is money still reserved, not a payment already made.</p>
+      {unlinked.length>0&&<div className="rounded-xl border border-warning/30 p-3 space-y-2"><p className="text-sm font-medium">Choose an investment for recorded payments</p><p className="text-xs text-ink-secondary">These payments already reduced your bank balance. Assign them to Gold or Mutual Funds instead of recording them again.</p>{unlinked.map(t=><button type="button" key={t.id} onClick={()=>editTransaction({transaction:t})} className="min-h-11 w-full text-left text-sm text-accent">{t.description} · {money(t.amount)} ↗</button>)}</div>}
       <div className="-mx-3">
-        {breakdown.map(({ investment, planned }) => {
+        {breakdown.map(({ investment, planned, contributed: recorded }) => {
           const valuation = valuations.find(
             (v) => v.investment.id === investment.id,
           );
@@ -91,12 +97,13 @@ export function InvestmentsPanel() {
             <MoneyRow
               key={investment.id}
               label={investment.name}
+              wrapSublabel
               sublabel={
-                valued
+                `${money(recorded)} recorded this cycle · ${money(planned)} planned · ${money(Math.max(0,planned-recorded))} still reserved. ` + (valued
                   ? `${money(contributed)} in · ${gain >= 0 ? "+" : "−"}${money(Math.abs(gain))} ${gain >= 0 ? "gain" : "loss"}`
                   : planned > 0
                     ? `${money(planned)}/month planned · value not set`
-                    : "Value not set"
+                    : "Value not set")
               }
               onClick={() => setEditing(investment)}
               value={

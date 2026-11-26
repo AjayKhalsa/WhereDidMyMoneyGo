@@ -12,6 +12,7 @@ import type { Transaction, TransactionType } from "@/lib/domain/types";
 import dynamic from "next/dynamic";
 import {getSnapshot} from "@/lib/data/store";
 
+const SubscriptionPaymentSheet = dynamic(() => import("@/components/money/subscription-payment-sheet").then(m => m.SubscriptionPaymentSheet), { ssr: false });
 const MoneyLinkSheet = dynamic(() => import("@/components/transactions/money-link-sheet").then(m => m.MoneyLinkSheet), { ssr: false });
 const AddTransactionSheet = dynamic(() => import("./add-transaction-sheet").then(m => m.AddTransactionSheet), { ssr: false });
 
@@ -47,6 +48,7 @@ interface AddSheetContextValue {
 const AddSheetContext = createContext<AddSheetContextValue | null>(null);
 
 export function AddSheetProvider({ children }: { children: ReactNode }) {
+  const [subscriptionId, setSubscriptionId] = useState<string|null>(null);
   const [linkId,setLinkId]=useState<string|null>(null);
   const [state, setState] = useState<{
     open: boolean;
@@ -78,7 +80,9 @@ export function AddSheetProvider({ children }: { children: ReactNode }) {
         onClose={close}
         options={state.options}
         onLinkMoney={(id)=>{close();setLinkId(id);}}
+        onLinkSubscription={id=>{close();setSubscriptionId(id);}}
       />}
+      {subscriptionId&&<SubscriptionPaymentSheet transactionId={subscriptionId} onClose={()=>setSubscriptionId(null)}/>}
       {linkId&&<MoneyLinkSheet key={linkId} transactionId={linkId} onClose={()=>setLinkId(null)} onNavigate={setLinkId}/>}
     </AddSheetContext.Provider>
   );

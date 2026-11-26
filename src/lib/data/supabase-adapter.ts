@@ -1,7 +1,8 @@
 import { linkFingerprint } from "@/lib/engine/money-links";
 import { completeLoad } from "./complete-load";
 import { writeTransactionCompatible } from "./transaction-write";
-import type { Database, TransactionContext, UserProfile, MoneyLink } from "@/lib/domain/types";
+import { assertSubscriptionPayment } from "@/lib/engine/subscription-payments";
+import type { Database, Transaction, TransactionContext, UserProfile, MoneyLink } from "@/lib/domain/types";
 import { getSupabaseBrowserClient } from "./supabase-client";
 import type { ReconciliationBundle } from "@/lib/import/reconciliation";
 import type { EnrichmentChange } from "@/lib/engine/history-enrichment";
@@ -106,6 +107,23 @@ function assertNoError(operation: string, error: { message: string } | null): vo
 }
 
 export class SupabaseRepository implements Repository {
+  async linkSubscriptionPayment(input: { transactionId: string; ruleId: string; amount: number; accountId: string; recurringId?: string }) {
+    const user = await this.requireUserId();
+    const [payment, rule] = await Promise.all([
+      this.client.from('transactions').select('*').eq('user_id', user).eq('id', input.transactionId).single(),
+      this.client.from('recurring').select('*').eq('user_id', user).eq('id', input.ruleId).single(),
+    ]);
+    assertNoError('linkPayment:read', payment.error || rule.error);
+    const current = fromRow<Transaction>(payment.data);
+    const schedule = fromRow<Database['recurring'][number]>(rule.data);
+    assertSubscriptionPayment(current, schedule, input);
+    let update = this.client.from('transactions').update({ recurring_id: schedule.id, category_id: schedule.categoryId ?? null, updated_at: new Date().toISOString() })
+      .eq('user_id', user).eq('id', input.transactionId).eq('type', 'EXPENSE').eq('amount', input.amount).eq('account_id', input.accountId);
+    update = current.recurringId ? update.eq('recurring_id', current.recurringId) : update.is('recurring_id', null);
+    const result = await update.select('id').maybeSingle();
+    assertNoError('linkPayment:write', result.error);
+    if (!result.data) throw new Error('The payment changed. Reload and choose it again.');
+  }
   private client = getSupabaseBrowserClient();
 
   async commitStatementImport(rows: StatementImportEntry[]): Promise<StatementImportResult> {

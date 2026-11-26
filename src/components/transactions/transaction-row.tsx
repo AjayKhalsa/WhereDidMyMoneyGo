@@ -57,7 +57,7 @@ export function TransactionRow({
   className?: string;
 }) {
   const money=useMoneyText();
-  const { categories, transactionIndex: index } = useFinance();
+  const { categories, db, transactionIndex: index } = useFinance();
   const original=index.originalById.get(transaction.id)??transaction;
   const personal=index.personalById.get(transaction.id)?.amount??transaction.amount;
   const links=index.linksByTransactionId.get(transaction.id)??[];
@@ -72,7 +72,11 @@ export function TransactionRow({
   const account = transaction.accountId ? index.accountsById.get(transaction.accountId) : undefined;
   const toAccount = transaction.toAccountId ? index.accountsById.get(transaction.toAccountId) : undefined;
 
+  const subscription = db?.recurring.find(r => r.id === transaction.recurringId);
+  const investment = db?.investments.find(i => i.id === transaction.investmentId);
   const meta: string[] = [];
+  if (transaction.type === "INVESTMENT") meta.push(investment?.name ?? "Choose an investment");
+  if (subscription && transaction.merchant && transaction.merchant !== subscription.description) meta.push(transaction.merchant);
   if (adjustment) meta.push("Balance adjustment · excluded from budget");
   if(forwarded)meta.push("Forwarded money");
   if (!adjustment && !forwarded && transaction.type === "EXPENSE" && transaction.categoryId) {
@@ -117,7 +121,7 @@ export function TransactionRow({
 
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[14.5px] font-medium text-ink">
-          {transaction.description || "Untitled"}
+          {subscription?.description || transaction.description || "Untitled"}
         </span>
         <span className="mt-0.5 flex items-center gap-1.5 truncate text-[12.5px] text-ink-tertiary">
           {meta.length > 0 && <span className="truncate">{meta.join(" · ")}</span>}

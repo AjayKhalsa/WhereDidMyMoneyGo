@@ -1,6 +1,7 @@
 import { linkFingerprint, validateMoneyLinks } from "@/lib/engine/money-links";
+import { assertSubscriptionPayment } from "@/lib/engine/subscription-payments";
 import { openDB, type IDBPDatabase } from "idb";
-import type { Database, UserProfile, MoneyLink } from "@/lib/domain/types";
+import type { Database, UserProfile, MoneyLink, Transaction } from "@/lib/domain/types";
 import {
   COLLECTION_NAMES,
   RepositoryError,
@@ -62,6 +63,17 @@ function wrap<T>(operation: string, work: () => Promise<T>): Promise<T> {
 }
 
 export class LocalRepository implements Repository {
+  async linkSubscriptionPayment(input: { transactionId: string; ruleId: string; amount: number; accountId: string; recurringId?: string }) {
+    const db = await connect();
+    const tx = db.transaction(['transactions', 'recurring'], 'readwrite');
+    try {
+      const payment = await tx.objectStore('transactions').get(input.transactionId) as Transaction | undefined;
+      const rule = await tx.objectStore('recurring').get(input.ruleId);
+      assertSubscriptionPayment(payment, rule, input);
+      await tx.objectStore('transactions').put({ ...payment!, recurringId: rule.id, categoryId: rule.categoryId, updatedAt: new Date().toISOString() });
+      await tx.done;
+    } catch (error) { try { tx.abort(); } catch {} await tx.done.catch(() => undefined); throw error; }
+  }
   async commitMoneyLinks(expected: MoneyLink[], next: MoneyLink[]): Promise<void> {
     const db=await connect();
     const tx=db.transaction(['moneyLinks','transactions'],'readwrite');
@@ -245,6 +257,13 @@ export class LocalRepository implements Repository {
  * reload here, which is correct: there is nowhere to put it.
  */
 export class MemoryRepository implements Repository {
+  async linkSubscriptionPayment(input: { transactionId: string; ruleId: string; amount: number; accountId: string; recurringId?: string }) {
+    const payment = this.data?.transactions.find(t => t.id === input.transactionId);
+    const rule = this.data?.recurring.find(r => r.id === input.ruleId);
+    assertSubscriptionPayment(payment, rule, input);
+    this.data!.transactions = this.data!.transactions.map(t => t.id === input.transactionId
+      ? { ...t, recurringId: rule!.id, categoryId: rule!.categoryId, updatedAt: new Date().toISOString() } : t);
+  }
   async commitMoneyLinks(expected: MoneyLink[], next: MoneyLink[]) {
     if(!this.data)throw new Error("No data loaded");
     if(JSON.stringify(linkFingerprint(this.data.moneyLinks??[]))!==JSON.stringify(linkFingerprint(expected)))throw new Error("Links changed. Reload before saving.");

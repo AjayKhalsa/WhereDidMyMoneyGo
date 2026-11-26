@@ -20,12 +20,13 @@ import type {
   UserProfile,
 } from "@/lib/domain/types";
 import { learnFromEntry } from "@/lib/engine/learning";
-import { factualTimeContexts, timingFor, UNKNOWN_TIMING } from "@/lib/domain/transaction-time";
+import { factualTimeContexts, indiaNow, timingFor, UNKNOWN_TIMING } from "@/lib/domain/transaction-time";
 import { validateEnrichmentChange, type EnrichmentChange } from "@/lib/engine/history-enrichment";
 import { getRepository } from "./local-adapter";
 import { assertStatementDirection, bankReference, possibleExistingTransactions, sourceDigest, type SourceObservation, type StatementImportResult } from "@/lib/import/identity";
 import {assertSplitReview} from '@/lib/import/split-settlements';
 import { createId } from "@/lib/utils";
+import { subscriptionPaymentCandidates } from "@/lib/engine/subscription-payments";
 import {
   applyBatch,
   getSnapshot,
@@ -790,17 +791,29 @@ export async function updateProfile(
 export async function markRecurringPaid(
   rule: RecurringTransaction,
   date = new Date(),
+  options: { allowSeparate?: boolean } = {},
 ): Promise<Transaction> {
+  const fresh = await getRepository().load();
+  if (!fresh) throw new Error('Load your transactions before recording a payment.');
+  const currentRule = fresh.recurring.find(r => r.id === rule.id);
+  if (!currentRule || currentRule.amount !== rule.amount || currentRule.accountId !== rule.accountId) {
+    await refreshDatabase();
+    throw new Error('The bill changed. Reopen it before recording a payment.');
+  }
+  if (!options.allowSeparate && subscriptionPaymentCandidates(currentRule, fresh.transactions, date).length) {
+    await refreshDatabase();
+    throw new Error('A matching charge is already recorded. Link that payment instead of adding it again.');
+  }
   const transaction: Transaction = {
     id: createId("txn"),
     type: rule.type,
     amount: rule.amount,
     description: rule.description,
-    date: toLocalISO(date),
+    date: indiaNow(date),
     merchant: rule.merchant,
     accountId: rule.accountId,
     categoryId: rule.type === "EXPENSE" ? rule.categoryId : undefined,
-    contexts: derivedContexts(toLocalISO(date)),
+    contexts: derivedContexts(indiaNow(date)),
     recurringId: rule.id,
     source: "recurring",
     createdAt: new Date().toISOString(),
@@ -808,6 +821,15 @@ export async function markRecurringPaid(
   };
   await putRow("transactions", transaction);
   return transaction;
+}
+
+export async function linkSubscriptionPayment(transactionId: string, ruleId: string) {
+  const payment = getSnapshot().data?.transactions.find(t => t.id === transactionId);
+  if (!payment?.accountId) throw new Error('Choose a recorded payment with an account.');
+  const repository = getRepository();
+  if (!repository.linkSubscriptionPayment) throw new Error('Payment linking is unavailable. Reload the app.');
+  await repository.linkSubscriptionPayment({ transactionId, ruleId, amount: payment.amount, accountId: payment.accountId, recurringId: payment.recurringId });
+  await refreshDatabase();
 }
 
 /**

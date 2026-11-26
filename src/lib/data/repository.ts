@@ -63,6 +63,7 @@ export const COLLECTION_NAMES: CollectionName[] = [
 ];
 
 export interface Repository {
+  linkSubscriptionPayment?(input: { transactionId: string; ruleId: string; amount: number; accountId: string; recurringId?: string }): Promise<void>;
   commitMoneyLinks?(expected: MoneyLink[], next: MoneyLink[]): Promise<void>;
   commitEnrichment(changes: EnrichmentChange[]): Promise<void>;
   /** Cloud financial writes compare/match and commit atomically. */

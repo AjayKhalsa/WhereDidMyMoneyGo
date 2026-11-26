@@ -42,6 +42,8 @@ export function subscriptionOverview(input:{transactions:Transaction[];rules:Rec
  const {rules,categories,month,cycleStartDay,now}=input;
  const all=input.transactions.filter(t=>transactionOccurredBy(t,now));
  const meta=spendingAttribution(all);
+ const linkedRules=new Map(rules.map(rule=>[rule.id,rule]));
+ const serviceFor=(t:Transaction)=>{const rule=t.recurringId?linkedRules.get(t.recurringId):undefined;return serviceIdentity(rule?.description||meta(t).merchant||meta(t).description);};
  const today=monthKeyToDate(indiaNow(now).slice(0,10));
  const elapsed=elapsedDaysInMonth(today,month,cycleStartDay);
  const end=elapsed>0?monthKeyToDate(month):endOfMonth(month,cycleStartDay);
@@ -60,13 +62,13 @@ export function subscriptionOverview(input:{transactions:Transaction[];rules:Rec
  }
  const serviceRows=new Map<string,{label:string;accountId?:string;rows:Transaction[]}>();
  for(const row of rows){
-  const m=meta(row),identity=serviceIdentity(m.merchant||m.description),id=JSON.stringify([identity.key,row.accountId??'']);
+  const identity=serviceFor(row),id=JSON.stringify([identity.key,row.accountId??'']);
   const value=serviceRows.get(id)??{label:identity.label,accountId:row.accountId,rows:[]};value.rows.push(row);serviceRows.set(id,value);
  }
  const refunded=new Set(all.filter(t=>t.type==='INCOME'&&t.isRefund&&t.reversesTransactionId).map(t=>t.reversesTransactionId));
  const services:SubscriptionService[]=[...serviceRows].map(([id,value])=>{
   const [key]=JSON.parse(id);
-  const history=eligible.filter(t=>t.type==='EXPENSE'&&t.amount>0&&t.date.slice(0,10)<=periodEnd&&t.accountId===value.accountId&&serviceIdentity(meta(t).merchant||t.description).key===key).sort((a,b)=>b.date.localeCompare(a.date)||a.id.localeCompare(b.id));
+  const history=eligible.filter(t=>t.type==='EXPENSE'&&t.amount>0&&t.date.slice(0,10)<=periodEnd&&t.accountId===value.accountId&&serviceFor(t).key===key).sort((a,b)=>b.date.localeCompare(a.date)||a.id.localeCompare(b.id));
   const summary=spendingSummary(value.rows,all);
   const change=value.accountId&&history[0]&&value.rows.some(t=>t.id===history[0]!.id)?chargeChange(history,refunded):undefined;
   return {id,label:value.label,accountId:value.accountId,net:summary.spending,count:summary.count,rows:value.rows,history,chargeChange:change};
@@ -74,7 +76,7 @@ export function subscriptionOverview(input:{transactions:Transaction[];rules:Rec
  const horizonEnd=new Date(today);horizonEnd.setDate(horizonEnd.getDate()+29);
  const upcoming=resolveRecurringPayments(rules,all,today,horizonEnd,now).filter(slot=>active.some(rule=>rule.id===slot.rule.id)).map(slot=>{
   const possible=slot.transaction?[]:possibleRecurringPayments(slot.rule,all,slot.dueDate,now);
-  const history=slot.rule.accountId?eligible.filter(t=>t.type==='EXPENSE'&&t.amount>0&&t.accountId===slot.rule.accountId&&serviceIdentity(meta(t).merchant||t.description).key===serviceIdentity(slot.rule.merchant||slot.rule.description).key).sort((a,b)=>b.date.localeCompare(a.date)||a.id.localeCompare(b.id)):[];
+  const history=slot.rule.accountId?eligible.filter(t=>t.type==='EXPENSE'&&t.amount>0&&t.accountId===slot.rule.accountId&&serviceFor(t).key===serviceIdentity(slot.rule.description).key).sort((a,b)=>b.date.localeCompare(a.date)||a.id.localeCompare(b.id)):[];
   const change=slot.rule.frequency==='MONTHLY'?chargeChange(history,refunded):undefined;
   const chargeEvidence=change&&change.latest.amount!==slot.rule.amount?change.evidence:[];
   const dueDay=Date.parse(toDateInputValue(slot.dueDate)+'T12:00:00Z');
