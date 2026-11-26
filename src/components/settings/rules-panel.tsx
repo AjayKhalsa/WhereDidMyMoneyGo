@@ -32,7 +32,7 @@ export function RulesPanel() {
       <EmptyState
         icon={<Brain className="h-5 w-5" strokeWidth={1.5} />}
         title="Nothing learned yet"
-        description="When you correct a category the app remembers the word behind it, and stops guessing wrong. Those rules will appear here."
+        description="Category rules saved from your corrections will appear here."
       />
     );
   }

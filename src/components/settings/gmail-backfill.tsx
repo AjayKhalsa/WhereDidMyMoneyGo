@@ -85,12 +85,12 @@ export function GmailBackfill({ email }: { email?: string }) {
   return (
     <div className="space-y-3 border-t border-line pt-4">
       <h3 className="text-sm font-medium">Check for missing transactions</h3>
-      <p className="text-xs text-ink-secondary">Compares supported Gmail messages with your ledger. Recorded payments stay hidden; only possible gaps, uncertain matches and failures appear here.</p>
+      <p className="text-xs text-ink-secondary">Find possible gaps in older alerts. Saved payments are hidden from the results.</p>
       {report?.run && <p className="text-xs text-ink-tertiary">Last checked period: {report.run.start_date} – {report.run.end_date}</p>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {report?.run?.last_error && <p role="alert" className="text-sm text-danger">{report.run.last_error}</p>}
       {summary && <p role="status" className="text-sm">
-        {counts || (summary.complete ? "No proposed additions or unresolved items in this scan." : "Check unfinished; continue to cover every page.")}
+        {counts || (summary.complete ? "No unresolved items in this scan." : "Check unfinished. Continue scanning.")}
         {!summary.complete && counts ? " Check unfinished." : ""}
       </p>}
       <Button disabled={busy} onClick={() => void scan()}>

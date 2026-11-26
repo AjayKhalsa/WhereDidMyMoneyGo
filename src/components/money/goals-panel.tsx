@@ -39,7 +39,7 @@ export function GoalsPanel() {
         <EmptyState
           icon={<Target className="h-5 w-5" strokeWidth={1.5} />}
           title="No goals yet"
-          description="A goal is just a number with a deadline. Set one and the app will hold money back for it each month before telling you what's safe to spend."
+          description="Set a target and monthly contribution. Planned contributions reduce safe-to-spend."
           action={
             <Button variant="primary" onClick={() => setCreating(true)}>
               <Plus className="h-4 w-4" strokeWidth={2} />
@@ -190,7 +190,7 @@ function NewGoalSheet({
         <TextField
           label="Target date"
           type="date"
-          hint="Optional. Only used to pace the goal, never to nag."
+          hint="Optional. Used to pace your goal."
           value={targetDate}
           onChange={(e) => setTargetDate(e.target.value)}
         />

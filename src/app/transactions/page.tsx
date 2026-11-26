@@ -126,7 +126,7 @@ export default function TransactionsPage() {
         hasFilters={narrowed}
       />
 
-      {!!db?.moneyLinks?.length&&<p className="text-xs text-ink-secondary">Totals show personal spending and income after linked money. Each row keeps its original bank amount.</p>}
+      {!!db?.moneyLinks?.length&&<p className="text-xs text-ink-secondary">Totals reflect your share; rows show the full bank amount.</p>}
       {results.length > 0 && (
         <ResultSummary
           headline={describeResults(parsed.terms.map((t) => t.label))}

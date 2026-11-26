@@ -142,7 +142,7 @@ export function FinancialHero() {
         open={explaining}
         onClose={() => setExplaining(false)}
         title="How safe-to-spend is calculated"
-        description="Every line comes from your own transactions"
+        description="Recorded balances, less upcoming commitments"
         size="md"
       >
         <SafeToSpendExplainer />

@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoButton } from "@/components/ui/info-button";
 import type { BreakdownLine } from "@/lib/engine/safe-to-spend";
 import { useMoneyText } from "@/lib/hooks/use-privacy";
 import { useFinance } from "@/lib/hooks/use-finance";
@@ -67,13 +68,7 @@ export function SafeToSpendExplainer() {
       </div>
 
       <section>
-        <h3 className="mb-2.5 text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">
-          This month
-        </h3>
-        <p className="mb-1 text-[13px] leading-relaxed text-ink-secondary">
-          Cycle income, adjusted for salary paid before the window, plus returned investment principal, minus contributions and spending.
-          This is a change in cash and card position, not investment gains or net worth.
-        </p>
+        <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">This cycle</h3><InfoButton title="Cycle totals"><p>Income and returned investment principal, minus spending and investment contributions. Salary paid early is assigned to its intended cycle.</p><p>This measures the change in cash and card position, not investment gains or net worth.</p></InfoButton></div>
         <BreakdownList lines={monthlySurplusBreakdown} />
         <div className="mt-3 rounded-xl bg-surface-sunken p-4">
           <div className="flex items-baseline justify-between gap-4">

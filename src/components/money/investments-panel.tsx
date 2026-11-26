@@ -83,8 +83,8 @@ export function InvestmentsPanel() {
 
   return (
     <>
-      <p className="text-sm text-ink-secondary">Tap an investment to edit its monthly plan. The plan is money still reserved, not a payment already made.</p>
-      {unlinked.length>0&&<div className="rounded-xl border border-warning/30 p-3 space-y-2"><p className="text-sm font-medium">Choose an investment for recorded payments</p><p className="text-xs text-ink-secondary">These payments already reduced your bank balance. Assign them to Gold or Mutual Funds instead of recording them again.</p>{unlinked.map(t=><button type="button" key={t.id} onClick={()=>editTransaction({transaction:t})} className="min-h-11 w-full text-left text-sm text-accent">{t.description} · {money(t.amount)} ↗</button>)}</div>}
+      <p className="text-sm text-ink-secondary">Monthly plans reserve cash. Tap an investment to edit.</p>
+      {unlinked.length>0&&<div className="rounded-xl border border-warning/30 p-3 space-y-2"><p className="text-sm font-medium">Choose an investment for recorded payments</p><p className="text-xs text-ink-secondary">Already recorded. Choose Gold, Mutual Funds or another investment; don’t add the payment again.</p>{unlinked.map(t=><button type="button" key={t.id} onClick={()=>editTransaction({transaction:t})} className="min-h-11 w-full text-left text-sm text-accent">{t.description} · {money(t.amount)} ↗</button>)}</div>}
       <div className="-mx-3">
         {breakdown.map(({ investment, planned, contributed: recorded }) => {
           const valuation = valuations.find(
@@ -194,8 +194,7 @@ export function InvestmentsPanel() {
       </div>
 
       <p className="text-[12.5px] leading-relaxed text-ink-tertiary">
-        Money moved into investments is never counted as spending — it&rsquo;s
-        still yours, just somewhere else.
+        Contributions count as investments, not expenses.
       </p>
 
       <InvestmentSheet
