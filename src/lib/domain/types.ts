@@ -241,6 +241,8 @@ export interface Investment {
   kind: InvestmentKind;
   /** Planned monthly contribution. Actuals come from transactions. */
   monthlyContribution: Paise;
+  /** Exact-cycle targets. Missing cycles use monthlyContribution; zero pauses one cycle. */
+  cycleTargets?: Record<string, Paise>;
   isActive: boolean;
   createdAt: string;
   /**

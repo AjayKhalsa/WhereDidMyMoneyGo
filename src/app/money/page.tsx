@@ -1,6 +1,7 @@
 "use client";
 
 import {LinkedMoneyPanel} from "@/components/money/linked-money-panel";
+import { cycleInvestmentTotal } from "@/lib/domain/investment-targets";
 import { DataLoadError } from "@/components/layout/data-load-error";
 import { PaymentCalendar } from "@/components/money/payment-calendar";
 
@@ -72,9 +73,7 @@ export default function MoneyPage() {
   );
 
   const income = expectedMonthlyIncome(db?.incomeSources ?? []);
-  const planned = (db?.investments ?? [])
-    .filter((i) => i.isActive)
-    .reduce((acc, i) => acc + i.monthlyContribution, 0);
+  const planned = cycleInvestmentTotal(db?.investments ?? [], month);
   const bills = monthlyRecurringTotal(db?.recurring ?? []);
   const earmarked = goalAllocations(db?.goals ?? [], db?.transactions ?? [], month, cycleStartDay);
   const goalCount = (db?.goals ?? []).length;
@@ -160,7 +159,7 @@ export default function MoneyPage() {
           title="Investments"
           summary={
             planned > 0 ? (
-              <SummaryFigure value={planned} suffix="/month" />
+              <SummaryFigure value={planned} suffix="this cycle" />
             ) : (
               <SummaryHint>No plan set</SummaryHint>
             )

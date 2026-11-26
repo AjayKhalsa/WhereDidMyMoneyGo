@@ -1,4 +1,5 @@
 import { projectMoneyLinks } from "./money-links";
+import { cycleInvestmentTotal, hasCycleTarget } from "@/lib/domain/investment-targets";
 import type { Database, Transaction } from "@/lib/domain/types";
 import { monthTransactions } from "./analytics";
 import { daysInMonth, elapsedDaysInMonth, addMonths, monthKeyToDate } from "@/lib/domain/dates";
@@ -47,6 +48,8 @@ export function validateBudget(plan: BudgetPlan): string | null {
 }
 export function budgetPerformance(db: Database, month: string, now: Date, cycleStartDay = 1) {
   const plan = planFor(db.profile.budgetPlans, month);
+  const investmentOverride = db.investments.some(i => i.isActive && hasCycleTarget(i, month));
+  const investmentTarget = investmentOverride ? cycleInvestmentTotal(db.investments, month) : plan.investment;
   const categories = new Map(db.categories.map(c=>[c.id,c]));
   const all = new Map(db.transactions.map(t=>[t.id,t]));
   const rows = monthTransactions(projectMoneyLinks(db,now).transactions, month, cycleStartDay).filter(t=>new Date(t.date)<=now);
@@ -89,7 +92,7 @@ export function budgetPerformance(db: Database, month: string, now: Date, cycleS
   const overshoot=buckets.reduce((s,b)=>s+Math.max(0,b.actual-b.limit),0);
   // Individual overshoots cannot be hidden by unused money in other buckets.
   const score=rows.some(t=>t.type==="EXPENSE")&&elapsed>=5&&limit>0?Math.round(Math.max(0,100-100*overshoot/limit)):null;
-  return {plan,buckets,spent,limit,remaining:limit-spent,projected,overshoot,score,invested,emergency,elapsed,days};
+  return {plan,investmentTarget,investmentOverride,buckets,spent,limit,remaining:limit-spent,projected,overshoot,score,invested,emergency,elapsed,days};
 }
 
 /** Upgrade old plans without changing allocations or requiring transaction retagging. */

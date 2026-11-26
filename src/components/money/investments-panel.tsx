@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useAddSheet } from "@/components/add/add-sheet-provider";
 import { monthTransactions } from "@/lib/engine/analytics";
 import { Plus } from "lucide-react";
-import { daysBetween, toDateInputValue } from "@/lib/domain/dates";
+import { daysBetween, monthKey, toDateInputValue } from "@/lib/domain/dates";
+import { cycleInvestmentTotal, hasCycleTarget, investmentTarget } from "@/lib/domain/investment-targets";
+import { transactionOccurredBy } from "@/lib/domain/transaction-time";
 import { useMoneyText } from "@/lib/hooks/use-privacy";
 import { parseAmountInput } from "@/lib/domain/money";
 import type { Investment, InvestmentKind } from "@/lib/domain/types";
@@ -18,6 +20,7 @@ import {
   deleteInvestment,
   saveInvestment,
 } from "@/lib/data/actions";
+import { InvestmentTargetSheet } from "./investment-target-sheet";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { Amount } from "@/components/ui/amount";
 import { ProgressTrack } from "@/components/ui/charts";
@@ -56,10 +59,11 @@ export function InvestmentsPanel() {
   const [editing, setEditing] = useState<Investment | null>(null);
   const [creating, setCreating] = useState(false);
   const [contributing, setContributing] = useState<Investment | null>(null);
+  const [targetId, setTargetId] = useState<string | null>(null);
 
   const breakdown = investmentContributions(
     db?.investments ?? [],
-    db?.transactions ?? [],
+    (db?.transactions ?? []).filter(t => transactionOccurredBy(t, now)),
     month,
     cycleStartDay,
   );
@@ -83,7 +87,10 @@ export function InvestmentsPanel() {
 
   return (
     <>
-      <p className="text-sm text-ink-secondary">Monthly plans reserve cash. Tap an investment to edit.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-ink-secondary">{money(cycleInvestmentTotal(db?.investments ?? [], month))} targeted this cycle.</p>
+        {breakdown.length > 0 && <Button size="sm" onClick={() => setTargetId(breakdown.find(b => b.investment.kind === "MUTUAL_FUND")?.investment.id ?? breakdown[0]!.investment.id)}>Adjust this month</Button>}
+      </div>
       {unlinked.length>0&&<div className="rounded-xl border border-warning/30 p-3 space-y-2"><p className="text-sm font-medium">Choose an investment for recorded payments</p><p className="text-xs text-ink-secondary">Already recorded. Choose Gold, Mutual Funds or another investment; don’t add the payment again.</p>{unlinked.map(t=><button type="button" key={t.id} onClick={()=>editTransaction({transaction:t})} className="min-h-11 w-full text-left text-sm text-accent">{t.description} · {money(t.amount)} ↗</button>)}</div>}
       <div className="-mx-3">
         {breakdown.map(({ investment, planned, contributed: recorded }) => {
@@ -99,11 +106,9 @@ export function InvestmentsPanel() {
               label={investment.name}
               wrapSublabel
               sublabel={
-                `${money(recorded)} recorded this cycle · ${money(planned)} planned · ${money(Math.max(0,planned-recorded))} still reserved. ` + (valued
+                `${money(recorded)} recorded · ${money(planned)} target · ${money(Math.max(0,planned-recorded))} reserved. ` + (hasCycleTarget(investment, month) ? `This cycle only; usual ${money(investment.monthlyContribution)}. ` : '') + (valued
                   ? `${money(contributed)} in · ${gain >= 0 ? "+" : "−"}${money(Math.abs(gain))} ${gain >= 0 ? "gain" : "loss"}`
-                  : planned > 0
-                    ? `${money(planned)}/month planned · value not set`
-                    : "Value not set")
+                  : "Value not set")
               }
               onClick={() => setEditing(investment)}
               value={
@@ -209,6 +214,7 @@ export function InvestmentsPanel() {
         investment={contributing}
         onClose={() => setContributing(null)}
       />
+      {targetId && <InvestmentTargetSheet investmentId={targetId} onClose={() => setTargetId(null)} />}
     </>
   );
 }
@@ -258,6 +264,7 @@ function InvestmentSheet({
   async function handleSave() {
     if (!name.trim()) return;
     await saveInvestment({
+      ...investment,
       id: investment?.id ?? createId("inv"),
       name: name.trim(),
       kind,
@@ -319,8 +326,8 @@ function InvestmentSheet({
           ))}
         </SelectField>
         <MoneyField
-          label="Planned monthly contribution"
-          hint="Held back from safe-to-spend every cycle until it's actually paid. Leave blank for a one-off like a fixed deposit."
+          label="Usual monthly target"
+          hint="Used in cycles without a custom target. To change just this month, use Adjust this month."
           value={monthly}
           onChange={(e) => setMonthly(e.target.value)}
           placeholder="30000"
@@ -356,7 +363,7 @@ function ContributionSheet({
   onClose: () => void;
 }) {
   const money = useMoneyText();
-  const { db } = useFinance();
+  const { db, now, cycleStartDay } = useFinance();
   const toast = useToast();
   const [amount, setAmount] = useState("");
   const [selected, setSelected] = useState<string | undefined>(investment?.id);
@@ -366,15 +373,18 @@ function ContributionSheet({
   );
 
   const [lastId, setLastId] = useState(investment?.id);
+  function suggestedAmount(item: Investment | null) {
+    if (!item) return "";
+    const cycle = monthKey(now, cycleStartDay);
+    const recorded = investmentContributions([item], (db?.transactions ?? []).filter(t => transactionOccurredBy(t, now)), cycle, cycleStartDay)[0]?.contributed ?? 0;
+    const remaining = Math.max(0, investmentTarget(item, cycle) - recorded);
+    return remaining > 0 ? String(remaining / 100) : "";
+  }
   if (investment?.id !== lastId) {
     setLastId(investment?.id);
     setSelected(investment?.id);
     setDate(toDateInputValue(new Date()));
-    setAmount(
-      investment?.monthlyContribution
-        ? String(investment.monthlyContribution / 100)
-        : "",
-    );
+    setAmount(suggestedAmount(investment));
   }
 
   const value = parseAmountInput(amount) ?? 0;
