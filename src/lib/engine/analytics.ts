@@ -1,4 +1,5 @@
 import {reportingCycle} from './salary-cycle';
+import { investmentTarget } from "@/lib/domain/investment-targets";
 import { validCardStatement } from "@/lib/domain/card-statement";
 import { isSpendingActivity, isCategoryActivity, investmentMovement, netSpending, netCategoryOutflow, spendingAttribution } from "./spending";
 import { actualTransactionTime, transactionOccurredBy } from "@/lib/domain/transaction-time";
@@ -1062,7 +1063,7 @@ export function investmentContributions(
     .map((investment) => ({
       investment,
       contributed: total(monthly.filter((t) => t.investmentId === investment.id)),
-      planned: investment.monthlyContribution,
+      planned: investmentTarget(investment, key),
     }))
     .sort((a, b) => b.contributed - a.contributed || b.planned - a.planned);
 }

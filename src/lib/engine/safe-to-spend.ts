@@ -1,4 +1,5 @@
 import {projectMoneyLinks} from "./money-links";
+import { investmentTarget } from "@/lib/domain/investment-targets";
 import type {MoneyLink} from "@/lib/domain/types";
 import {salaryTimingAdjustments} from './salary-cycle';
 import {resolveRecurringPayments} from './recurring-payments';
@@ -194,7 +195,7 @@ export function remainingPlannedInvestments(
     const contributed = total(
       monthly.filter((t) => t.investmentId === investment.id),
     );
-    remaining += Math.max(0, investment.monthlyContribution - contributed);
+    remaining += Math.max(0, investmentTarget(investment, month) - contributed);
   }
   return remaining;
 }

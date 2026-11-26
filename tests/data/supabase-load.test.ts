@@ -13,6 +13,7 @@ function repository(failSecondPage = false) {
   const rows: Record<string, Record<string, unknown>[]> = {
     transactions,
     accounts: [{ id: "bank", type: "BANK", opening_balance: 200000, is_active: true }],
+    investments: [{id:"mf", monthly_contribution:3000000, cycle_targets:{"2026-11-24":1000000}}],
     transaction_contexts: transactions.map(t => ({ transaction_id: t.id, type: "PURPOSE", value: "work" })),
     rule_contexts: [{ rule_id: "rule", type: "PURPOSE", value: "work" }],
     rules: [{ id: "rule", pattern: "my payee", category_id: "transport.auto" }],
@@ -62,6 +63,8 @@ test("repository loads all ledger/context pages with stable ordering and user sc
   assert.ok(db.transactions.every(t => t.notes === "Manual note" && t.description === "Manual description"));
   assert.ok(db.transactions.every(t => t.contexts[0]?.value === "work"));
   assert.equal(db.rules[0]?.contexts[0]?.value, "work");
+  assert.deepEqual(db.investments[0]?.cycleTargets, {"2026-11-24":1000000});
+  assert.equal(db.investments[0]?.monthlyContribution, 3000000);
 });
 
 test("repository rejects a failed later page instead of returning partial financial data", async () => {

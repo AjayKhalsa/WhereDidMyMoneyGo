@@ -1,5 +1,6 @@
 import { derivedContexts, normaliseContexts } from "@/lib/domain/contexts";
 import { validCardStatement } from "@/lib/domain/card-statement";
+import { validCycleTargets, withCycleTarget } from "@/lib/domain/investment-targets";
 import { balanceAt, ledgerFingerprint } from "@/lib/engine/reconciliation";
 import { toLocalISO } from "@/lib/domain/dates";
 import type {
@@ -630,7 +631,15 @@ export async function deleteGoal(id: string): Promise<void> {
 }
 
 export async function saveInvestment(investment: Investment): Promise<void> {
+  if (!Number.isSafeInteger(investment.monthlyContribution) || investment.monthlyContribution < 0 ||
+      investment.cycleTargets != null && !validCycleTargets(investment.cycleTargets)) throw new Error("Enter valid investment targets.");
   await putRow("investments", investment);
+}
+
+export async function saveInvestmentCycleTarget(id: string, cycle: string, amount: Paise | null): Promise<void> {
+  const investment = getSnapshot().data?.investments.find(i => i.id === id && i.isActive);
+  if (!investment) throw new Error("Investment no longer exists. Reload and try again.");
+  await saveInvestment(withCycleTarget(investment, cycle, amount));
 }
 
 export async function deleteInvestment(id: string): Promise<void> {
