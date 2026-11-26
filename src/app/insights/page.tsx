@@ -42,7 +42,7 @@ export default function InsightsPage() {
   const rest = insights.filter(i => i.tone !== 'alert' && i.tone !== 'warning');
   const empty = !monthRows.some(t => t.type === 'EXPENSE' || (t.type === 'INCOME' && t.isRefund)) && insights.length === 0;
   return <div className="space-y-6">
-    <PageHeader title="Insights" description="Your money, at a glance." action={<div className="flex items-center gap-1"><InfoButton title="Data quality"><DataQualityCard/></InfoButton><MonthSwitcher/></div>}/>
+    <PageHeader title="Insights" description="Spending patterns and changes." action={<div className="flex items-center gap-1"><InfoButton title="Data quality"><DataQualityCard/></InfoButton><MonthSwitcher/></div>}/>
     <SegmentedControl label="Insight views" value={view} onChange={setView} options={VIEWS.map(({ id, label, icon: Icon }) => ({value: id, label: <><Icon aria-hidden="true" className="h-4 w-4" strokeWidth={1.75}/>{label}</>}))}/>
     {view === 'overview' && <BudgetSummary/>}
     {empty ? <EmptyState icon={<Lightbulb className="h-5 w-5"/>} title="Your patterns start here" description="Record some spending to see your daily chart, merchants and payment mix."/> : <>

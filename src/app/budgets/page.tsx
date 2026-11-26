@@ -9,5 +9,5 @@ export default function BudgetsPage() {
   const { status, error, month }=useFinance();
   if(status==="error") return <DataLoadError error={error}/>;
   if(status!=="ready") return <Skeleton className="h-80 w-full"/>;
-  return <div className="space-y-6"><PageHeader title="Budgets" description="Give every rupee a job. Adjust limits and see where you stand." action={<MonthSwitcher/>}/><BudgetPanel key={month}/></div>;
+  return <div className="space-y-6"><PageHeader title="Budgets" description="Limits, spending and monthly progress." action={<MonthSwitcher/>}/><BudgetPanel key={month}/></div>;
 }

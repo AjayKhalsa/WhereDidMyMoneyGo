@@ -39,7 +39,7 @@ export function SubscriptionPaymentSheet({ transactionId, ruleId, onClose }: {
   return (
     <Sheet open onClose={onClose} title={rule ? `Payment for ${rule.description}` : 'Link bill or subscription'} size="sm">
       <div className="space-y-4 py-1">
-        <p className="text-sm text-ink-secondary">Link an existing charge to its bill. Its bank amount and payment date stay intact; linking adds no new expense.</p>
+        <p className="text-sm text-ink-secondary">Link a recorded charge to its bill without adding another expense.</p>
         {transaction && <div className="rounded-xl bg-surface-sunken p-3 text-sm">{transaction.description} · {money(transaction.amount)} · {transaction.date.slice(0, 10)}{transaction.recurringId&&<p className="mt-2 text-xs text-ink-secondary">Currently linked to {db?.recurring.find(r=>r.id===transaction.recurringId)?.description}. Choosing another bill changes the link.</p>}</div>}
         {transaction ? (
           <div className="space-y-2">{rules.map(schedule => (
@@ -49,7 +49,7 @@ export function SubscriptionPaymentSheet({ transactionId, ruleId, onClose }: {
           ))}{rules.length === 0 && <p className="text-sm">Add your subscription under Money → Bills & subscriptions first.</p>}</div>
         ) : rule ? <>
           <h3 className="text-sm font-medium">Recorded charges this calendar month</h3>
-          <p className="text-xs text-ink-secondary">Suggestions match the saved amount and account. Confirm the service yourself: Apple can bill multiple subscriptions.</p>
+          <p className="text-xs text-ink-secondary">Check which service each charge belongs to—Apple bills several subscriptions.</p>
           <div className="space-y-2">{candidates.map(payment => (
             <button key={payment.id} type="button" disabled={busy} onClick={() => void save(payment.id, rule.id)} className="min-h-14 w-full rounded-xl border border-line p-3 text-left text-sm disabled:opacity-50">
               <span className="block font-medium">{payment.description} · {money(payment.amount)}</span>
@@ -60,7 +60,7 @@ export function SubscriptionPaymentSheet({ transactionId, ruleId, onClose }: {
           <Button block disabled={busy || candidates.length > 0 && !separate} onClick={() => void record()}>
             Record new payment · {money(rule.amount)}
           </Button>
-          <p className="text-xs text-ink-secondary">A new payment debits your account. To change future dates or amounts, edit the bill itself.</p>
+          <p className="text-xs text-ink-secondary">A new payment debits your account. Edit the bill to change its schedule.</p>
         </> : null}
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       </div>

@@ -61,7 +61,7 @@ export default function SettingsPage() {
     <div className="space-y-10">
       <PageHeader
         title="Settings"
-        description="Who you are, what the app has learned, and where your data lives."
+        description="Profile, preferences and data."
       />
 
       <Section title="You">
@@ -74,7 +74,6 @@ export default function SettingsPage() {
 
       <Section
         title="Financial setup"
-        description="Accounts, income, investments, bills and goals all live on the Money screen."
       >
         <Link
           href="/money"
@@ -82,7 +81,7 @@ export default function SettingsPage() {
         >
           <span className="min-w-0">
             <span className="block text-[14px] font-medium text-ink">
-              Manage your money setup
+              Accounts, bills & investments
             </span>
             <span className="mt-0.5 block truncate text-[12.5px] text-ink-tertiary">
               {db.accounts.length} {pluralise(db.accounts.length, "account")} ·{" "}
@@ -107,7 +106,7 @@ export default function SettingsPage() {
       {isSupabaseConfigured && <CloudMigrationPanel />}
       {isSupabaseConfigured && <><div id="gmail"><GmailPanel /></div><PushNotifications /></>}
 
-      <Section title="Transaction times & smarter rules">
+      <Section title="Time & category rules">
         <HistoryEnrichment />
       </Section>
 
@@ -149,7 +148,7 @@ function ProfileCard() {
       <div className="flex flex-wrap items-end gap-3">
         <TextField
           label="Your name"
-          hint="Only used to greet you on Home."
+          hint="Shown on Home."
           value={name}
           onChange={(e) => setName(e.target.value)}
           wrapperClassName="min-w-[12rem] flex-1"
@@ -263,7 +262,7 @@ function CloudMigrationPanel() {
         <DataRow
           icon={<CloudUpload className="h-4 w-4" strokeWidth={1.75} />}
           title="Move your local data to the cloud"
-          description={`Found ${localCount} ${pluralise(localCount, "transaction")} stored only in this browser. Copy them to your Supabase account so every device sees the same data.`}
+          description={`Found ${localCount} ${pluralise(localCount, "transaction")} on this browser. Move them to your account to use them across devices.`}
           action={
             <Button size="sm" onClick={() => setConfirming(true)}>
               Migrate
@@ -395,7 +394,7 @@ function DataPanel() {
         <DataRow
           icon={<Download className="h-4 w-4" strokeWidth={1.75} />}
           title="Export everything"
-          description="A JSON file with every transaction, account and rule. Yours to keep."
+          description="Download your data, including transactions, accounts and rules, as JSON."
           action={
             <Button size="sm" onClick={handleExport}>
               Export
@@ -521,7 +520,7 @@ function PrivacyPanel() {
           )
         }
         title="Hide balances"
-        description="Masks every figure in the app so you can hand your phone over. This device only — it won't hide them elsewhere."
+        description="Hide amounts on this device. Other devices stay unchanged."
         action={
           <Button size="sm" onClick={toggle} aria-pressed={hidden}>
             {hidden ? "Show" : "Hide"}

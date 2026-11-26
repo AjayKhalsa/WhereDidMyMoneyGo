@@ -84,7 +84,7 @@ export default function MoneyPage() {
     <div className="space-y-9">
       <PageHeader
         title="Money"
-        description="Accounts, income, investments and everything you've committed to."
+        description="Accounts and monthly commitments."
         action={<MonthSwitcher />}
       />
 
@@ -214,12 +214,6 @@ export default function MoneyPage() {
           <PeoplePanel />
         </DisclosurePanel>
       </div>
-
-      <p className="pb-2 text-[12.5px] leading-relaxed text-ink-tertiary">
-        Everything here feeds safe-to-spend. Income sets the ceiling; planned
-        investments, unpaid bills and goal contributions are held back before
-        you&rsquo;re told what&rsquo;s left.
-      </p>
     </div>
   );
 }

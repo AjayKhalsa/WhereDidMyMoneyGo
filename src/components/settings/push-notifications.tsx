@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from 'react';
+import { InfoButton } from '@/components/ui/info-button';
 import { Button, Card, Section } from '@/components/ui/primitives';
 
 interface PushStatus {configured:boolean;publicKey?:string;devices?:{endpoint_hash:string;delivery_failed:boolean;last_sent_at?:string}[]}
@@ -9,9 +10,11 @@ async function request(action?:string,subscription?:PushSubscription){
 }
 async function hash(endpoint:string){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(endpoint)))).map(b=>b.toString(16).padStart(2,'0')).join('');}
 export function PushNotifications(){
+ const [needsInstall,setNeedsInstall]=useState(false);
  const [status,setStatus]=useState<PushStatus>();const [supported,setSupported]=useState(false);const [subscription,setSubscription]=useState<PushSubscription|null>(null);const [enabled,setEnabled]=useState(false);const [deliveryFailed,setDeliveryFailed]=useState(false);const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');
  async function load(){
   const next:PushStatus=await request();setStatus(next);
+  setNeedsInstall(/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.matchMedia('(display-mode: standalone)').matches&&!(navigator as Navigator & {standalone?:boolean}).standalone);
   const supported='Notification' in window&&'serviceWorker' in navigator&&'PushManager' in window;setSupported(supported);
   if(!supported)return;
   const reg=await navigator.serviceWorker.getRegistration();const sub=await reg?.pushManager.getSubscription()??null;setSubscription(sub);
@@ -32,21 +35,20 @@ export function PushNotifications(){
    if(!sub)throw new Error('Enable notifications on this device first.');
    await request(action,sub);
    if(action==='disable')await sub.unsubscribe();
-   await load();setMessage(action==='test'?'Test notification sent to your push provider. Check this device.':action==='enable'?'Sync alerts enabled on this device.':'Sync alerts disabled on this device.');
+   await load();setMessage(action==='test'?'Test notification requested. Check this device.':action==='enable'?'Sync alerts enabled on this device.':'Sync alerts disabled on this device.');
   }catch(error){setMessage(error instanceof Error?error.message:'Could not configure notifications.');}finally{setBusy(false);}
  }
- return <Section title="Phone & browser notifications" description="Get an alert when a scheduled Gmail sync fails or leaves a backlog.">
+ return <Section title="Sync notifications" description="Alerts when email imports need attention." action={<InfoButton title="Sync notifications"><p>Alerts can arrive while the app is closed. They include no amounts or transaction details, and are limited to one sync-issue alert a day.</p><p>Alerts depend on the scheduled check running. They cannot report a check that never starts; use Gmail’s last-checked time to monitor freshness.</p></InfoButton>}>
   <Card className="space-y-3 p-4 sm:p-5">
-   <p className="text-sm text-ink-secondary">Alerts can arrive while the app is closed. They contain no amounts or transaction details. On iPhone or iPad, add this app to your Home Screen and open it there before enabling notifications.</p>
-   {status&&!status.configured&&<p className="text-sm text-ink-secondary">Push notifications are not ready on the server yet. Once setup is complete, you can enable this device here.</p>}
-   {status?.configured&&!supported&&<p className="text-sm text-ink-secondary">This browser does not currently support push notifications. Try the installed Home Screen app on a supported device.</p>}
+   {needsInstall&&!enabled&&<p className="text-sm text-ink-secondary">On iPhone or iPad, open the installed Home Screen app to enable alerts.</p>}
+   {status&&!status.configured&&<p className="text-sm text-ink-secondary">Notifications are not set up yet.</p>}
+   {status?.configured&&!supported&&<p className="text-sm text-ink-secondary">Notifications are unavailable in this browser. Try the installed app.</p>}
    {deliveryFailed&&<p role="alert" className="text-sm text-danger">The last delivery attempt failed. Send a test notification or reconnect this device.</p>}
    {status?.configured&&supported&&<div className="flex flex-wrap gap-2">
     <Button disabled={busy} onClick={()=>void act(enabled?'disable':'enable')}>{enabled?'Disable on this device':'Enable on this device'}</Button>
-    {enabled&&<Button variant="secondary" disabled={busy} onClick={()=>void act('test')}>Send test notification</Button>}
+    {enabled&&<Button variant="secondary" disabled={busy} onClick={()=>void act('test')}>Send test</Button>}
    </div>}
    {message&&<p role="status" className="text-sm text-ink-secondary break-words">{message}</p>}
-   <p className="text-xs text-ink-tertiary">At most one sync issue alert per day. These alerts depend on the scheduled job running; they cannot detect a scheduler that never starts.</p>
   </Card>
  </Section>;
 }
