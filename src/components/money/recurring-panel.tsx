@@ -1,8 +1,11 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { formatDayMonth, formatFullDate } from "@/lib/domain/dates";
+import { monthTransactions } from "@/lib/engine/analytics";
+import { transactionOccurredBy } from "@/lib/domain/transaction-time";
 import { useMoneyText } from "@/lib/hooks/use-privacy";
 import { parseAmountInput } from "@/lib/domain/money";
 import type {
@@ -19,7 +22,6 @@ import {
 import { detectRecurringCandidates, type RecurringCandidate } from "@/lib/engine/recurring-detection";
 import {
   deleteRecurring,
-  markRecurringPaid,
   saveRecurring,
 } from "@/lib/data/actions";
 import { useFinance } from "@/lib/hooks/use-finance";
@@ -44,6 +46,8 @@ import { createId, pluralise } from "@/lib/utils";
  * the same footing.
  */
 
+const SubscriptionPaymentSheet = dynamic(() => import("./subscription-payment-sheet").then(m => m.SubscriptionPaymentSheet));
+
 const FREQUENCIES: { value: RecurringFrequency; label: string }[] = [
   { value: "MONTHLY", label: "Every month" },
   { value: "WEEKLY", label: "Every week" },
@@ -66,11 +70,14 @@ export function RecurringPanel() {
   const [editing, setEditing] = useState<RecurringTransaction | null>(null);
   const [creating, setCreating] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [payingId,setPayingId]=useState<string|null>(null);
   const [viewingId,setViewingId]=useState<string|null>(null);
 
   const rules = db?.recurring ?? [];
   const statuses = recurringStatuses(rules, db?.transactions ?? [], month, now, cycleStartDay);
+  const periodRows=monthTransactions(db?.transactions??[],month,cycleStartDay).filter(t=>transactionOccurredBy(t,now));
   const viewing=statuses.find(s=>s.rule.id===viewingId)??null;
+  const viewingRows=[...new Map([...viewing?.payments??[],...viewing?.possiblePayments??[],...periodRows.filter(t=>t.recurringId===viewingId)].map(t=>[t.id,t])).values()];
   const monthlyTotal = monthlyRecurringTotal(rules);
   const activeCount = rules.filter((r) => r.isActive).length;
   const live = isLiveMonth(month, now, cycleStartDay);
@@ -148,11 +155,14 @@ export function RecurringPanel() {
             live={live}
             onEdit={() => setEditing(status.rule)}
             onInspect={()=>setViewingId(status.rule.id)}
+            onPay={()=>setPayingId(status.rule.id)}
+            lastRecordedDate={periodRows.filter(t=>t.recurringId===status.rule.id).map(t=>t.date).sort().at(-1)}
           />
         ))}
       </div>
+      {payingId&&<SubscriptionPaymentSheet ruleId={payingId} onClose={()=>setPayingId(null)}/>}
       <Sheet open={!!viewing} onClose={()=>setViewingId(null)} title="Recorded payments" description={viewing?.rule.description}>
-       <div className="space-y-3 py-2"><p className="text-xs text-ink-secondary">{viewing?.possiblePayments.length?'Possible existing payments need review. Check these before adding another charge or changing a schedule.':'Payments recognised by their saved link or by a unique merchant, account, amount and scheduled date match.'}</p><TransactionList transactions={[...viewing?.payments??[],...viewing?.possiblePayments??[]]} showTime showDayTotals={false}/></div>
+       <div className="space-y-3 py-2"><p className="text-xs text-ink-secondary">{viewing?.possiblePayments.length?'Possible existing payments need review. Check these before adding another charge or changing a schedule.':'Payments recognised by their saved link or by a unique merchant, account, amount and scheduled date match.'}</p><TransactionList transactions={viewingRows} showTime showDayTotals={false}/></div>
       </Sheet>
 
       {monthlyTotal > 0 && (
@@ -203,25 +213,19 @@ function RecurringRow({
   live,
   onEdit,
   onInspect,
+  onPay,
+  lastRecordedDate,
 }: {
   status: RecurringStatus;
   live: boolean;
   onEdit: () => void;
   onInspect:()=>void;
+  onPay:()=>void;
+  lastRecordedDate?:string;
 }) {
   const money = useMoneyText();
-  const toast = useToast();
   const { rule, nextDate, daysUntil, paidThisMonth } = status;
   const drift = priceDrift(status);
-
-  async function handleMarkPaid() {
-    await markRecurringPaid(rule);
-    toast.show({
-      tone: "success",
-      title: `${money(rule.amount)} recorded`,
-      detail: rule.description,
-    });
-  }
 
   const sublabel = !rule.isActive
     ? "Paused"
@@ -229,6 +233,7 @@ function RecurringRow({
     : status.possiblePayments.length>0 ? 'Possible payment already recorded'
     : paidThisMonth
       ? status.recognisedCount>0 ? "Existing payment recognised" : "Paid this month"
+      : lastRecordedDate ? `Recorded ${formatDayMonth(new Date(lastRecordedDate))} · next scheduled ${formatDayMonth(nextDate)}`
       : status.paidCount>0 ? `${status.paidCount} of ${status.occurrenceCount} payments recorded`
       : daysUntil < 0
         ? `Overdue since ${formatDayMonth(nextDate)}`
@@ -255,20 +260,20 @@ function RecurringRow({
       </button>
 
       <div className="flex shrink-0 items-center gap-3">
-        {(status.paidCount>0||status.possiblePayments.length>0)&&(
-          <Button size="sm" variant="quiet" onClick={onInspect} aria-label="View recorded payments" className="h-7 px-2 text-[12px]">
+        {(status.paidCount>0||status.possiblePayments.length>0||lastRecordedDate)&&(
+          <Button size="sm" variant="quiet" onClick={onInspect} aria-label="View recorded payments" className="h-11 px-2 text-[12px]">
             <Check className="h-3 w-3" strokeWidth={2.5} />
-            {paidThisMonth?'Paid':status.possiblePayments.length?'Review':'View'}
+            {paidThisMonth?'Paid':lastRecordedDate?'Recorded':status.possiblePayments.length?'Review':'View'}
           </Button>
         )}
         {!paidThisMonth&&!status.possiblePayments.length&&live && rule.isActive ? (
           <Button
             size="sm"
             variant="quiet"
-            onClick={handleMarkPaid}
-            className="h-7 px-2.5 text-[12px]"
+            onClick={onPay}
+            className="h-11 px-2.5 text-[12px]"
           >
-            Mark paid
+            Add / link
           </Button>
         ) : null}
         <Amount

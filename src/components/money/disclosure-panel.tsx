@@ -90,6 +90,7 @@ export function MoneyRow({
   meta,
   onClick,
   className,
+  wrapSublabel = false,
 }: {
   label: string;
   sublabel?: string;
@@ -97,6 +98,7 @@ export function MoneyRow({
   meta?: ReactNode;
   onClick?: () => void;
   className?: string;
+  wrapSublabel?: boolean;
 }) {
   const Element = onClick ? "button" : "div";
   return (
@@ -113,7 +115,7 @@ export function MoneyRow({
           {label}
         </span>
         {sublabel && (
-          <span className="mt-0.5 block truncate text-[12.5px] text-ink-tertiary">
+          <span className={cn("mt-0.5 block text-[12.5px] text-ink-tertiary", !wrapSublabel && "truncate")}>
             {sublabel}
           </span>
         )}

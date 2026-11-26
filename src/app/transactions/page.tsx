@@ -47,6 +47,10 @@ export default function TransactionsPage() {
   const [range, setRange] = useState<RangePreset>("month");
 
   const transactions = useMemo(() => db?.transactions ?? [], [db?.transactions]);
+  const linkedNames = useMemo(() => {
+    const subscriptions = new Map(db?.recurring.map(rule => [rule.id, rule.description]));
+    return new Map(transactions.filter(t => t.recurringId).map(t => [t.id, subscriptions.get(t.recurringId!) ?? ""]));
+  }, [transactions, db?.recurring]);
 
   const parsed = useMemo(
     () =>
@@ -69,8 +73,8 @@ export default function TransactionsPage() {
   );
 
   const results = useMemo(
-    () => filterTransactions(transactions, filter),
-    [transactions, filter],
+    () => filterTransactions(transactions, filter, linkedNames),
+    [transactions, filter, linkedNames],
   );
 
   const summary = useMemo(() => {

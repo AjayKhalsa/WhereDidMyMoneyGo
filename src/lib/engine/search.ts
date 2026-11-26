@@ -428,11 +428,12 @@ export function parseSearchQuery(
   return { filter, terms };
 }
 
-function matchesText(transaction: Transaction, needle: string): boolean {
+function matchesText(transaction: Transaction, needle: string, linkedName = ""): boolean {
   const haystack = [
     transaction.description,
     transaction.merchant ?? "",
     transaction.notes ?? "",
+    linkedName,
   ]
     .join(" ")
     .toLowerCase();
@@ -445,6 +446,7 @@ function matchesText(transaction: Transaction, needle: string): boolean {
 export function filterTransactions(
   transactions: Transaction[],
   filter: TransactionFilter,
+  linkedNames?: ReadonlyMap<string, string>,
 ): Transaction[] {
   return transactions.filter((t) => {
     if (filter.types && !filter.types.includes(t.type)) return false;
@@ -478,7 +480,7 @@ export function filterTransactions(
       if (!filter.contexts.every((value) => values.has(value))) return false;
     }
 
-    if (filter.text && !matchesText(t, filter.text)) return false;
+    if (filter.text && !matchesText(t, filter.text, linkedNames?.get(t.id))) return false;
 
     if (
       filter.needsReview &&
