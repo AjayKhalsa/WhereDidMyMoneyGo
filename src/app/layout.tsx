@@ -6,6 +6,7 @@ import { AddSheetProvider } from "@/components/add/add-sheet-provider";
 import { FinanceProvider } from "@/lib/hooks/use-finance";
 import { PrivacyProvider } from "@/lib/hooks/use-privacy";
 import { ToastProvider } from "@/components/ui/toast";
+import { NotificationProvider } from "@/lib/hooks/use-notifications";
 
 export const metadata: Metadata = {
   title: "Where did my money go?",
@@ -42,9 +43,11 @@ export default function RootLayout({
           <ServiceWorkerRegistrar />
           <PrivacyProvider>
             <FinanceProvider>
-              <AddSheetProvider>
-                <AppShell>{children}</AppShell>
-              </AddSheetProvider>
+              <NotificationProvider>
+                <AddSheetProvider>
+                  <AppShell>{children}</AppShell>
+                </AddSheetProvider>
+              </NotificationProvider>
             </FinanceProvider>
           </PrivacyProvider>
         </ToastProvider>

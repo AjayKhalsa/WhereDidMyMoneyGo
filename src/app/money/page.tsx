@@ -120,7 +120,7 @@ export default function MoneyPage() {
       <PaymentCalendar />
 
       {creditCards.length > 0 && (
-        <Section title="Cards">
+        <div id="cards" className="scroll-mt-6"><Section title="Cards">
           <div className="grid gap-4 sm:grid-cols-2">
             {creditCards.map((summary) => (
               <CreditCardCard
@@ -130,7 +130,7 @@ export default function MoneyPage() {
               />
             ))}
           </div>
-        </Section>
+        </Section></div>
       )}
 
       <div className="border-t border-line">
@@ -170,6 +170,7 @@ export default function MoneyPage() {
 
         <DisclosurePanel
           title="Bills & subscriptions"
+          anchor="bills"
           summary={
             bills > 0 ? (
               <SummaryFigure value={bills} suffix="/month" />

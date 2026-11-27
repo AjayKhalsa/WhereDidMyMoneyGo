@@ -10,6 +10,8 @@ Errors wrap instead of truncating and remain in the open transaction editor unti
 
 ## Push deployment
 
+Updated 27 November 2026: [Smart money notifications](smart-notifications.md) extends the original sync-only implementation with money alerts, an inbox, preferences and retryable daily dispatches. That document supersedes the original sync-only behavior and once-before-delivery claim described below. Existing encryption/VAPID configuration remains in use.
+
 This feature adds notifications only; it does not modify financial transactions or reconciliation records.
 
 1. Apply `0021_push_notifications.sql` after 0020. It adds an RLS-enabled server-only table and a service-role-only registration RPC. The existing `GMAIL_TOKEN_KEY` encrypts subscriptions with a separate `push:<user>` authenticated context. Keep the encryption key stable.

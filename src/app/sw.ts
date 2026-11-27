@@ -3,6 +3,7 @@
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
 import { CacheFirst, ExpirationPlugin, NetworkOnly, Serwist } from "serwist";
+import { notificationDestination } from "@/lib/notifications/model";
 
 /**
  * The app's service worker.
@@ -67,18 +68,20 @@ serwist.addEventListeners();
 
 // Generic alerts contain no balances, payees or private transaction details.
 self.addEventListener("push", event => {
-  let payload: { body?: string; tag?: string } = {};
+  let payload: { body?: unknown; tag?: unknown; url?: unknown } = {};
   try { payload = event.data?.json() ?? {}; } catch { /* generic fallback */ }
   event.waitUntil(self.registration.showNotification("Where Did My Money Go", {
-    body: payload.body ?? "Open Settings to check your Gmail sync.",
-    tag: payload.tag ?? "wdmmg-sync",
-    data: { url: "/settings" },
+    body: typeof payload.body === 'string' ? payload.body.slice(0,260) : "Open the app to review your notifications.",
+    tag: typeof payload.tag === 'string' && payload.tag.startsWith('wdmmg-') ? payload.tag.slice(0,100) : "wdmmg-updates",
+    icon: '/piggy.png',
+    badge: '/piggy.png',
+    data: { url: notificationDestination(payload.url) },
   }));
 });
 self.addEventListener("notificationclick", event => {
   event.notification.close();
   event.waitUntil((async () => {
-    const url = new URL("/settings", self.location.origin).href;
+    const url = new URL(notificationDestination(event.notification.data?.url), self.location.origin).href;
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     const existing = windows.find(client => new URL(client.url).origin === self.location.origin);
     if (existing) { await existing.navigate(url); await existing.focus(); }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { isInvestmentNotice, type InvestmentNotice } from "@/lib/gmail/investment-notices";
 import { isInvestmentDebit, type Alert } from "@/lib/gmail/alerts";
+import { useNotifications } from '@/lib/hooks/use-notifications';
 import { useFinance } from "@/lib/hooks/use-finance";
 import { refreshDatabase } from "@/lib/data/store";
 import { formatMoney } from "@/lib/domain/money";
@@ -40,13 +41,14 @@ function syncNotice(logged: number, matched: number, more: boolean, final = fals
   return `${changes ? changes + '. ' : ''}${more ? final ? 'More alerts remain. Sync again to continue.' : 'Checking more alerts…' : changes ? 'Sync complete.' : 'No new transactions. Sync complete.'}`;
 }
 export function GmailPanel() {
+  const {refresh:refreshNotifications}=useNotifications();
   const [status, setStatus] = useState<Status>();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [startDate, setStartDate] = useState(() => new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10));
-  async function load() { setStatus(await api()); }
+  async function load() { setStatus(await api()); void refreshNotifications(); }
   useEffect(() => {
     void load().catch(e => setError(e.message));
     const result = new URLSearchParams(window.location.search).get("gmail");

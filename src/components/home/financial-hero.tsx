@@ -17,6 +17,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { LiquidCashStrip } from "./liquid-cash-strip";
 import { SafeToSpendExplainer } from "./safe-to-spend-explainer";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 /**
  * The Home hero (spec §6).
@@ -72,7 +73,7 @@ export function FinancialHero() {
           {greetingFor(now)}
           {name && name !== "there" ? `, ${name}` : ""}
         </p>
-        <HideBalancesButton />
+        <div className="flex items-center gap-1"><NotificationBell/><HideBalancesButton/></div>
       </div>
 
       <div className="mt-4">
