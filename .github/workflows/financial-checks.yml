@@ -49,6 +49,7 @@ jobs:
           tests/engine/spending-calendar.test.ts
           tests/engine/spending-drivers.test.ts
           tests/engine/subscription-overview.test.ts
+          tests/engine/money-visuals.test.ts
       - name: Build production application
         run: npm run build
       - name: Check types after route generation
