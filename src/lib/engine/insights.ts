@@ -59,6 +59,7 @@ import {
 export type InsightTone = "positive" | "neutral" | "warning" | "alert";
 
 export type InsightKind =
+  | "analysis"
   | "category-spike"
   | "lens-spike"
   | "month-over-month"
@@ -77,6 +78,9 @@ export type InsightKind =
   | "subscription-change";
 
 export interface Insight {
+  interpretationSource?: "ai";
+  nextStep?: string;
+  evidence?: {title:string;metrics:{label:string;value:number;unit:'money'|'count'}[]}[];
   id: string;
   kind: InsightKind;
   tone: InsightTone;
@@ -86,6 +90,7 @@ export interface Insight {
   title: string;
   /** The dominant figure. */
   amount?: Paise;
+  amountLabel?: string;
   /** One or two sentences of grounded explanation. */
   body: string;
   /** Comparison figures, when the insight is a comparison. */

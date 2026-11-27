@@ -7,6 +7,7 @@ import { useMaskedProse } from "@/lib/hooks/use-privacy";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { ProgressTrack, ScoreDial } from "@/components/ui/charts";
 import { cn } from "@/lib/utils";
+import {useInsightNarrative} from './insight-analysis-provider';
 
 /**
  * The financial score (spec §26).
@@ -35,6 +36,7 @@ const RATING_TRACK: Record<ScoreRating, "positive" | "accent" | "warning" | "dan
 export function FinancialScoreCard() {
   const prose = useMaskedProse();
   const { score } = useFinance();
+  const narrative=useInsightNarrative('score');
   const [expanded, setExpanded] = useState(true);
 
   return (
@@ -46,7 +48,7 @@ export function FinancialScoreCard() {
             Financial score
           </h2>
           <p className="mt-1.5 text-[14px] leading-relaxed text-ink-secondary">
-            {prose(score.summary)}
+            {prose(narrative?.interpretation??score.summary)}
           </p>
           <p className="mt-2.5 text-[12.5px] leading-relaxed text-ink-tertiary">
             Weighted from {score.factors.length} measurable behaviours this month. It moves when

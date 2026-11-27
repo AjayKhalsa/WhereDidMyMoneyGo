@@ -45,6 +45,8 @@ export function InsightDetailSheet({
           <p className="text-[14px] leading-relaxed text-ink-secondary">
             {prose(insight.body)}
           </p>
+          {insight.nextStep&&<p className="text-sm font-medium">{prose(insight.nextStep)}</p>}
+          {insight.evidence&&<dl className="space-y-3">{insight.evidence.map((e,i)=><div key={i}><dt className="text-sm font-medium">{e.title}</dt>{e.metrics.map(m=><dd key={m.label} className="mt-1 text-sm text-ink-secondary">{m.label}: {m.unit==='money'?money(m.value):prose(String(m.value))}</dd>)}</div>)}</dl>}
 
           {comparison && comparison.monthsCounted > 0 && (
             <div className="grid grid-cols-3 gap-3">
@@ -78,9 +80,7 @@ export function InsightDetailSheet({
                 <span className="text-[12px] text-ink-tertiary tnum">
                   {insight.transactions.length}{" "}
                   {insight.transactions.length === 1 ? "item" : "items"} ·{" "}
-                  {money(
-                    evidenceAmount,
-                  )}
+                  {insight.kind==='analysis'?'supporting records':money(evidenceAmount)}
                 </span>
               </header>
               <TransactionList

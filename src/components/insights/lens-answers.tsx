@@ -11,6 +11,8 @@ import { Sheet } from "@/components/ui/sheet";
 import { TransactionList } from "@/components/transactions/transaction-list";
 import type { LensResult } from "@/lib/engine/analytics";
 import { cn } from "@/lib/utils";
+import {useInsightAnalysis,useInsightNarrative} from './insight-analysis-provider';
+import {useMaskedProse} from '@/lib/hooks/use-privacy';
 
 /**
  * Answers to the questions the product promises to answer (spec §41).
@@ -24,8 +26,10 @@ import { cn } from "@/lib/utils";
 
 export function LensAnswers() {
   const money = useMoneyText();
+  const analysis=useInsightAnalysis(),prose=useMaskedProse();
   const { personalTransactions,  monthRows, month, cycleStartDay } = useFinance();
   const [active, setActive] = useState<LensResult | null>(null);
+  const activeNarrative=useInsightNarrative(`lens:${active?.lens.id??''}`);
 
   const results = useMemo(
     () => lensTotals(monthRows, LENSES, personalTransactions).filter((r) => r.count > 0),
@@ -64,6 +68,7 @@ export function LensAnswers() {
                 <span className="block truncate text-[13.5px] text-ink-secondary">
                   {result.lens.question}
                 </span>
+                {analysis?.narratives.get(`lens:${result.lens.id}`)&&<span className="mt-2 block text-xs leading-relaxed text-ink-secondary">{prose(analysis.narratives.get(`lens:${result.lens.id}`)!.interpretation)}</span>}
                 <span className="mt-1 flex items-baseline gap-2">
                   <Amount value={result.amount} size="md" />
                   <span className="text-[12px] text-ink-tertiary tnum">
@@ -94,6 +99,7 @@ export function LensAnswers() {
       >
         {active && (
           <div className="space-y-6 py-1">
+            {activeNarrative&&<p className="text-sm leading-relaxed text-ink-secondary">{prose(activeNarrative.interpretation)} <span className="text-ink">{prose(activeNarrative.nextStep)}</span></p>}
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <p className="text-[12.5px] text-ink-secondary">This month</p>

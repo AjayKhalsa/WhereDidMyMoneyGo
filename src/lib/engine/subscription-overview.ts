@@ -45,7 +45,7 @@ export function subscriptionOverview(input:{transactions:Transaction[];rules:Rec
  const linkedRules=new Map(rules.map(rule=>[rule.id,rule]));
  const serviceFor=(t:Transaction)=>{const rule=t.recurringId?linkedRules.get(t.recurringId):undefined;return serviceIdentity(rule?.description||meta(t).merchant||meta(t).description);};
  const today=monthKeyToDate(indiaNow(now).slice(0,10));
- const elapsed=elapsedDaysInMonth(today,month,cycleStartDay);
+ const elapsed=elapsedDaysInMonth(now,month,cycleStartDay);
  const end=elapsed>0?monthKeyToDate(month):endOfMonth(month,cycleStartDay);
  if(elapsed>0)end.setDate(end.getDate()+elapsed-1);
  const periodEnd=toDateInputValue(end);

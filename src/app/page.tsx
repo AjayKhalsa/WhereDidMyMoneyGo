@@ -7,6 +7,7 @@ import Link from "next/link";
 import { ArrowRight, Plus, Sparkles } from "lucide-react";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { useAddSheet } from "@/components/add/add-sheet-provider";
+import {useInsightAnalysis} from '@/components/insights/insight-analysis-provider';
 import type { Insight } from "@/lib/engine/insights";
 import { FinancialHero } from "@/components/home/financial-hero";
 import { MoneySnapshot } from "@/components/home/money-snapshot";
@@ -37,8 +38,9 @@ const WelcomeScreen = dynamic(() => import("@/components/home/welcome-screen").t
  */
 
 export default function HomePage() {
-  const { status, error, db, groupBreakdown, headline, monthRows, creditCards, totals } =
+  const { status, error, db, groupBreakdown, headline:patternHeadline, monthRows, creditCards, totals } =
     useFinance();
+  const analysis=useInsightAnalysis(),headline=analysis?.insights[0]??patternHeadline;
   const { open } = useAddSheet();
   const [flowOpen, setFlowOpen] = useState(false);
   const [activeInsight, setActiveInsight] = useState<Insight | null>(null);

@@ -1,6 +1,6 @@
 import type {Account,Category,Transaction} from '@/lib/domain/types';
 import {addMonths,daysInMonth,elapsedDaysInMonth,monthKeyToDate,toDateInputValue} from '@/lib/domain/dates';
-import {indiaNow,transactionOccurredBy} from '@/lib/domain/transaction-time';
+import {transactionOccurredBy} from '@/lib/domain/transaction-time';
 import {createCategoryLookup} from '@/lib/domain/categories';
 import {isSpendingActivity,spendingAttribution,spendingSummary} from './spending';
 import {categoryPaymentSources} from './payment-source-breakdown';
@@ -22,8 +22,7 @@ export function spendingDrivers(input:{transactions:Transaction[];categories:Cat
  const metadata=spendingAttribution(all),lookup=createCategoryLookup(input.categories);
  const eligible=all.filter(t=>isSpendingActivity(metadata(t)));
  // Pay-cycle arithmetic uses today's Indian calendar date, independent of host timezone.
- const today=new Date(`${indiaNow(now).slice(0,10)}T12:00:00`);
- const elapsed=elapsedDaysInMonth(today,month,cycleStartDay);
+ const elapsed=elapsedDaysInMonth(now,month,cycleStartDay);
  const previousMonth=addMonths(month,-1,cycleStartDay);
  const days=Math.min(elapsed,daysInMonth(previousMonth,cycleStartDay));
  const range=(key:string,length:number)=>{

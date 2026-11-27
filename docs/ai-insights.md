@@ -1,102 +1,68 @@
-# Grounded AI insights
+# Integrated insight analysis
 
-Insights → **A fresh perspective** offers My money, Food & dining and What
-changed. Generation is explicit and on demand. It returns short interpretations
-with evidence buttons; every displayed figure comes from the shared ledger
-engines, not model arithmetic. Evidence includes original transactions and
-separate current/previous tabs for equal-prefix comparisons. No AI operation can
-write financial data, alter categories or run a tool.
+The existing insight cards, spending explanation, budget commentary, quick
+answers, score and recap use AI explanations when a valid result is available.
+There is no separate AI section or generation button. Home uses the same
+analysis; Budgets reuses its budget explanation. Overview owns the insight
+cards above the charts so Explore does not repeat them.
 
-## Free-only configuration
+Recorded-pattern insights render immediately. One debounced request analyses
+the current owner and pay cycle in the background. A valid response adds up to
+three cross-cutting findings and supplies an evidence-bound explanation for
+every existing narrative target. The model can connect evidence independently
+of the detectors; it does not merely rewrite their headings.
 
-The existing server-only GEMINI_API_KEY is reused. AI_FREE_TIER_CONFIRMED must
-equal gemini-no-billing, and must be set only after the owner confirms that the
-key belongs to a Google AI Studio **Free tier** project with Cloud Billing
-disabled. The owner confirmed this configuration on 31 October 2026.
+## Financial correctness
 
-This flag is an owner assertion, not an automated billing check. Keep the project
-without billing to maintain ₹0; clear the flag before changing billing or moving
-the key to a paid project. The app cannot prevent a later external billing change.
-It never enables billing, purchases credits or uses Vercel AI Gateway credits.
+The shared engines calculate all amounts, scores, commitments and forecasts.
+The model returns bounded prose and supporting fact IDs, never numerical claims
+or financial writes. Existing critical alerts retain their severity, amount and
+transactions. Every generated finding opens its supporting records and exact
+fact metrics. Mixed comparison evidence is not summed into a misleading total.
 
-The fixed model is gemini-3.5-flash-lite, whose standard input/output were listed
-as Free of charge in Google's pricing on 31 October 2026. There is no model
-override, fallback provider, paid grounding, automatic generation schedule,
-automatic retry or data-loading retry that invokes a model. Quota exhaustion
-returns a controlled error. The legacy optional classifier now shares this
-free-tier gate, model and authenticated same-origin access; its key is sent in
-an API header rather than a URL. Its category list now includes the additive
-built-in subcategories as well as the original taxonomy.
+The server rebuilds context from complete, owner-filtered, counted reads using
+the authenticated RLS client. It never accepts browser-supplied financial facts.
+The browser and server use the same context builder and snapshot. Changes to
+plans, contributions, linked money or supporting amounts invalidate the result.
+Linked reimbursements use personal net spending. Historical comparisons use
+equal elapsed prefixes instead of incomplete/full-cycle pairs. Live day counts use the Indian calendar on both phone and server, including midnight and payday boundaries.
 
-Recent results are reused for thirty minutes per owner/snapshot/view, concurrent
-identical calls are combined, and each warm server instance allows three new
-requests per owner per hour. These are best-effort instance-local controls, not
-a durable global quota. The no-billing provider project is the ₹0 boundary.
+Numerical claims, unknown or unrelated evidence, missing or repeated narrative
+targets, and stale results fail validation. Model failure, quota, timeouts,
+authentication failure and unsuitable provider configuration leave the original
+recorded-pattern version in place. No retry loop is scheduled.
 
-## Data and evidence
+## Private processing and cost
 
-The server verifies the session with Supabase getUser, uses the user's own
-RLS-authenticated client and explicit owner filters, and loads complete counted,
-ordered pages of transactions, accounts, categories and income sources. It needs
-no service-role key, Gmail token or database migration. No new table or financial
-write is introduced. Existing table RLS was checked as enabled.
+Financial summaries derived from Gmail remain Google user data even without
+raw messages or identifiers. The old AI_FREE_TIER_CONFIRMED assertion no longer
+enables AI. Free-tier processing that may improve general models must not
+receive these financial summaries.
 
-The shared fact builder calculates net purchases/refunds, food subcategories,
-category changes, merchant frequency/average purchase, funding-source totals,
-recorded income, gross investments, principal returned, small purchases and
-verified-clock coverage. Income, contributions, principal and repayments retain
-their distinct accounting treatment. Full-cycle totals do not get truncated to
-shorter equal-period comparisons. Future rows and verified future clocks remain
-excluded. Input order cannot change the snapshot checksum.
+GEMINI_API_KEY stays server-only. Set AI_PRIVATE_PROCESSING_CONFIRMED to the
+exact value gemini-paid-services-no-training only after verifying that Gemini
+Paid Services no-training terms apply to the project and the owner explicitly
+approves any associated cost. This is an operator attestation, not an automated
+billing or contract check. The app never enables billing, buys credits, changes
+providers or sets this flag itself. Without it, financial screens continue with
+recorded patterns. Shipping this source change does not authorize API charges.
 
-Only aggregate metrics, public built-in labels and recognised public merchant
-brands go to Gemini. Unknown payees, custom categories and renamed categories
-are anonymised. Raw emails, free-form notes/descriptions, bank/account names or
-numbers, profile fields, transaction IDs and user IDs are not sent. The visible
-Generate disclosure explains that Google's free-tier terms may use submitted
-content to improve products. The generation sends figures even when their local
-display is masked; balance hiding is a screen privacy preference.
+Provider input contains aggregate metrics, standard labels and opaque evidence
+and target IDs. Raw email, payee identities, notes, account names/numbers,
+profile details, raw contexts, ledger transaction IDs and local routing keys
+are excluded. Category suggestions require an explicit request before sending
+the entered description; typing alone does not invoke the classifier. Screen
+masking does not change summary requests.
 
-The model selects real fact IDs and returns plain interpretation text. A schema
-and server validator reject unknown/repeated evidence, invented numeric figures,
-HTML/links, oversized prose and unsupported fields. Figures are rendered from
-the authenticated app's matching fact snapshot. Text remains an AI interpretation
-and can be mistaken; supporting metrics are the authoritative calculation. A
-checksum detects changed views, not authentication. Both server and client hide
-stale interpretations, and owners cannot receive one another's cached results.
-
-API responses are private/no-store; the existing service worker treats /api as
-network-only. Responses are not persisted to the ledger, browser storage or a
-third-party trace service. Production logs do not contain model prompts, provider
-errors, keys or responses. Fixed focus choices cannot request writes or other
-models. The feature makes no claim of complete bank/email coverage, affordability,
-precise unknown clocks, visited outlets or medical/personality inference. It does
-not impose budgets, shared spaces or investment-product recommendations.
+The model remains fixed with no provider fallback, client model override,
+grounding or tools. Thirty-minute reuse, in-flight deduplication and a per-owner
+hourly allowance are best-effort within a warm server instance, not a durable
+global spending cap. Browser cache is bounded, memory-only and owner-scoped.
 
 ## Verification
 
-Unit tests cover money/refund/contribution/withdrawal invariants, private-data
-projection, canonical snapshots, comparisons, future dates and output rejection.
-Route integration exercises real SDK serialization with mocked Gemini and owner
-auth: no writes, setup/origin/auth gates, changed/incomplete data, quota errors
-without retries, per-owner caches, concurrent calls, best-effort limits and the
-legacy classifier. Browser checks use synthetic IndexedDB and mocked generation;
-they cover mobile layouts, evidence, view choices, stale results, privacy, cancel
-and unchanged financial rows. These do not impersonate a production user.
-
-For an explicit real-provider check only, run the following in a trusted server
-environment after the no-billing confirmation. It uses entirely synthetic data,
-one request through the actual generator. It logs a pass/failure code and, on
-rejection, a synthetic-only provider diagnostic with the key and URLs removed:
-
-```sh
-node --experimental-transform-types --import ./tests/loader.mjs scripts/ai-provider-smoke.mjs
-```
-
-This is not part of the default build or CI and does not read the database. It
-must not be run with an unconfirmed project or by printing/pulling the key.
-
-References: [Google pricing](https://ai.google.dev/gemini-api/docs/pricing),
-[billing](https://ai.google.dev/gemini-api/docs/billing),
-[terms](https://ai.google.dev/gemini-api/terms). Installed SDKs are pinned with
-their lockfile; provider APIs were checked against the bundled version docs.
+Tests cover personal net spending, cycle overrides, equal-prefix history,
+source privacy, plan invalidation, narrative completeness, evidence validation,
+critical alert preservation and read-only authenticated API behaviour. Test
+provider calls are mocked. No live AI call, schema migration or production
+financial mutation is needed to verify the implementation.

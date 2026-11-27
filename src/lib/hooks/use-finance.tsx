@@ -1,6 +1,6 @@
 "use client";
 import {projectMoneyLinks} from "@/lib/engine/money-links";
-import { transactionOccurredBy } from "@/lib/domain/transaction-time";
+import { transactionOccurredBy,indiaNow } from "@/lib/domain/transaction-time";
 import { budgetPerformance } from "@/lib/engine/budgets";
 import { transactionIndex } from "@/lib/engine/transaction-index";
 
@@ -178,7 +178,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
     const moneyProjection=projectMoneyLinks({transactions:db?.transactions??[],moneyLinks:db?.moneyLinks},now);
     const personalTransactions=moneyProjection.transactions.filter(t=>transactionOccurredBy(t,now));
-    const liveMonth = monthKey(now, cycleStartDay);
+    const liveMonth = monthKey(indiaNow(now), cycleStartDay);
     const month = pinnedMonth ?? liveMonth;
 
     const totals = monthTotals(personalTransactions, month, cycleStartDay);

@@ -12,6 +12,7 @@ import { useFinance } from "@/lib/hooks/use-finance";
 import { MoneyField } from "@/components/ui/fields";
 import { SelectableChip } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
+import {useInsightNarrative} from './insight-analysis-provider';
 
 /**
  * "Can I afford this?" (spec §31).
@@ -37,6 +38,7 @@ const VERDICT_STYLES: Record<
 export function AffordabilityCheck() {
   const prose = useMaskedProse();
   const money = useMoneyText();
+  const narrative=useInsightNarrative('affordability');
   const { safeToSpend } = useFinance();
   const [text, setText] = useState("");
 
@@ -108,6 +110,7 @@ export function AffordabilityCheck() {
               <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-secondary">
                 {prose(result.explanation)}
               </p>
+              {narrative&&<p className="mt-2 text-xs leading-relaxed text-ink-secondary">{prose(narrative.interpretation)}</p>}
 
               {result.verdict !== "no" && (
                 <dl className="mt-3.5 grid grid-cols-2 gap-3 border-t border-line pt-3.5">
