@@ -18,7 +18,7 @@ import { usePrivacy } from "@/lib/hooks/use-privacy";
 import { PageHeader } from "@/components/layout/month-switcher";
 import dynamic from "next/dynamic";
 import { ReconciliationImport } from "@/components/settings/reconciliation-import";
-import { PushNotifications } from "@/components/settings/push-notifications";
+import { NotificationSettings } from "@/components/settings/notification-settings";
 import { InfoButton } from "@/components/ui/info-button";
 import { DataQualityCard } from "@/components/home/data-quality-card";
 import { GmailPanel } from "@/components/settings/gmail-panel";
@@ -104,7 +104,8 @@ export default function SettingsPage() {
       </Section>
 
       {isSupabaseConfigured && <CloudMigrationPanel />}
-      {isSupabaseConfigured && <><div id="gmail"><GmailPanel /></div><PushNotifications /></>}
+      {isSupabaseConfigured && <div id="gmail"><GmailPanel /></div>}
+      <NotificationSettings />
 
       <Section title="Time & category rules">
         <HistoryEnrichment />

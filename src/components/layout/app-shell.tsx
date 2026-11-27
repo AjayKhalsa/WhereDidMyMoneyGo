@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { isActivePath, NAV_ITEMS } from "./navigation";
 import { useAddSheet } from "@/components/add/add-sheet-provider";
 import { QuickLogBar } from "./quick-log-bar";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import type { ReactNode } from "react";
 
 /**
@@ -128,6 +129,7 @@ function DesktopSidebar() {
       </nav>
 
       <div className="px-3 pb-5">
+        <NotificationBell label/>
         <Link
           href="/settings"
           className={cn(

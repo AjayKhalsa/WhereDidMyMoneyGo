@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -16,12 +16,14 @@ import { cn } from "@/lib/utils";
 
 export function DisclosurePanel({
   title,
+  anchor,
   summary,
   defaultOpen = false,
   children,
   action,
 }: {
   title: string;
+  anchor?: string;
   /** The one figure worth seeing without opening the section. */
   summary?: ReactNode;
   defaultOpen?: boolean;
@@ -31,9 +33,20 @@ export function DisclosurePanel({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const contentId = useId();
+  useEffect(() => {
+    if (!anchor) return;
+    const reveal = () => {
+      if (window.location.hash !== `#${anchor}`) return;
+      setOpen(true);
+      requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView({ block: "start" }));
+    };
+    reveal();
+    window.addEventListener("hashchange", reveal);
+    return () => window.removeEventListener("hashchange", reveal);
+  }, [anchor]);
 
   return (
-    <section className="border-b border-line last:border-b-0">
+    <section id={anchor} className="scroll-mt-6 border-b border-line last:border-b-0">
       <h2>
         <button
           type="button"
