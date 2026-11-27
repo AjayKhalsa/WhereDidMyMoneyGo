@@ -1,7 +1,7 @@
 import type { Category, Investment, Transaction } from "@/lib/domain/types";
 import { createCategoryLookup } from "@/lib/domain/categories";
 import { addMonths, daysInMonth, elapsedDaysInMonth, monthKeyToDate, previousMonths, toDateInputValue } from "@/lib/domain/dates";
-import { indiaNow, transactionOccurredBy } from "@/lib/domain/transaction-time";
+import {  transactionOccurredBy } from "@/lib/domain/transaction-time";
 import { monthTotals, monthTransactions } from "./analytics";
 import { investmentMovement, isSpendingActivity, spendingAttribution } from "./spending";
 
@@ -13,8 +13,7 @@ function period(input: VisualInput) {
   const metadata = spendingAttribution(all);
   const rows = monthTransactions(all, input.month, input.cycleStartDay).filter(t => t.amount > 0 && metadata(t).categoryId !== "adjustment");
   const totals = monthTotals(all, input.month, input.cycleStartDay);
-  const today = new Date(`${indiaNow(input.now).slice(0, 10)}T12:00:00`);
-  return { all, rows, metadata, totals, days: daysInMonth(input.month, input.cycleStartDay), elapsed: elapsedDaysInMonth(today, input.month, input.cycleStartDay) };
+  return { all, rows, metadata, totals, days: daysInMonth(input.month, input.cycleStartDay), elapsed: elapsedDaysInMonth(input.now, input.month, input.cycleStartDay) };
 }
 
 export function spendingPace(input: VisualInput & { limit: number }) {

@@ -5,6 +5,8 @@ import type { Insight, InsightTone } from "@/lib/engine/insights";
 import { useMaskedProse } from "@/lib/hooks/use-privacy";
 import { Amount } from "@/components/ui/amount";
 import { cn } from "@/lib/utils";
+import {useInsightNarrative} from './insight-analysis-provider';
+import {useMoneyText} from '@/lib/hooks/use-privacy';
 
 /**
  * An insight, as a card.
@@ -30,7 +32,7 @@ const TONE_EYEBROW: Record<InsightTone, string> = {
 };
 
 export function InsightCard({
-  insight,
+  insight: original,
   onSelect,
   compact,
   className,
@@ -41,6 +43,8 @@ export function InsightCard({
   className?: string;
 }) {
   const prose = useMaskedProse();
+  const money=useMoneyText(),narrative=useInsightNarrative(`insight:${original.id}`);
+  const insight=narrative?{...original,title:narrative.heading,body:narrative.interpretation,nextStep:narrative.nextStep,interpretationSource:'ai' as const}:original;
   const interactive = Boolean(onSelect) && insight.transactions.length > 0;
   const Element = interactive ? "button" : "div";
 
@@ -77,8 +81,9 @@ export function InsightCard({
         {prose(insight.title)}
       </h3>
 
-      {insight.amount !== undefined && !compact && (
+      {insight.amount !== undefined && (!compact||insight.interpretationSource==='ai') && (
         <div className="mt-2.5">
+          {insight.amountLabel&&<p className="mb-1 text-xs text-ink-secondary">{insight.amountLabel}</p>}
           <Amount value={insight.amount} size="lg" />
         </div>
       )}
@@ -91,6 +96,9 @@ export function InsightCard({
       >
         {prose(insight.body)}
       </p>
+
+      {insight.evidence&&<dl className="mt-3 space-y-2">{insight.evidence.slice(0,3).map((e,i)=><div key={i} className="text-xs text-ink-secondary"><dt>{e.title}</dt><dd className="mt-0.5 font-medium tnum">{e.metrics.slice(0,2).map(m=>`${m.label}: ${m.unit==='money'?money(m.value):prose(String(m.value))}`).join(' · ')}</dd></div>)}</dl>}
+      {insight.nextStep&&<p className="mt-2 text-[13px] font-medium text-ink">{prose(insight.nextStep)}</p>}
 
       {interactive && insight.action && (
         <span className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-ink">

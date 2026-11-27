@@ -5,11 +5,14 @@ import { ArrowUpRight } from "lucide-react";
 import { useFinance } from "@/lib/hooks/use-finance";
 import { useMoneyText } from "@/lib/hooks/use-privacy";
 import { ProgressTrack } from "@/components/ui/progress-track";
+import {useInsightNarrative} from './insight-analysis-provider';
+import {useMaskedProse} from '@/lib/hooks/use-privacy';
 
 /** Insights needs a budget signal; editing and full comparisons live on Budgets. */
 export function BudgetSummary() {
   const { budget } = useFinance();
   const money = useMoneyText();
+  const narrative=useInsightNarrative('budget'),prose=useMaskedProse();
   if (!budget) return null;
   const over = budget.remaining < 0;
   const biggestOver = budget.buckets.filter(bucket => bucket.remaining < 0)
@@ -37,7 +40,8 @@ export function BudgetSummary() {
       </div>
       <ProgressTrack label="Spending budget used" value={budget.limit > 0 ? budget.spent / budget.limit * 100 : budget.spent > 0 ? 100 : 0}
         tone={over ? "danger" : "accent"} animate={false} />
-      <p className="text-xs text-ink-secondary">{money(budget.spent)} of {money(budget.limit)} spent · {message}</p>
+      <p className="text-xs text-ink-secondary">{money(budget.spent)} of {money(budget.limit)} spent · {narrative?prose(narrative.interpretation):message}</p>
+      {narrative&&<p className="text-xs font-medium">{prose(narrative.nextStep)}</p>}
     </section>
   );
 }

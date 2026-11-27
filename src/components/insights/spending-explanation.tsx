@@ -5,7 +5,8 @@ import { ArrowUpRight } from 'lucide-react';
 import type { Transaction } from '@/lib/domain/types';
 import type { spendingDrivers } from '@/lib/engine/spending-drivers';
 import { explainSpending } from '@/lib/engine/spending-explanation';
-import { useMoneyText, usePrivacy } from '@/lib/hooks/use-privacy';
+import { useMoneyText, usePrivacy,useMaskedProse } from '@/lib/hooks/use-privacy';
+import {useInsightNarrative} from './insight-analysis-provider';
 import { InfoButton } from '@/components/ui/info-button';
 
 export function SpendingExplanation({ report, onOpen }: {
@@ -13,6 +14,7 @@ export function SpendingExplanation({ report, onOpen }: {
   onOpen: (title: string, rows: Transaction[]) => void;
 }) {
   const analysis = explainSpending(report);
+  const narrative=useInsightNarrative('spending'),prose=useMaskedProse();
   const money = useMoneyText(), { hidden } = usePrivacy(), reduced = useReducedMotion();
   const max = Math.max(1, ...analysis.effects.map(e => Math.abs(e.amount)));
   const driver = analysis.dominant;
@@ -23,7 +25,8 @@ export function SpendingExplanation({ report, onOpen }: {
     'Purchases explain the change';
   return <section className="analysis-editorial" aria-label="Spending analysis">
     <div className="flex items-center justify-between gap-3"><p className="eyebrow">Behind the numbers</p><InfoButton title="How this analysis works"><p>We compare the first {report.days} days of both pay cycles. Changes in purchase count and average purchase size explain the gross spending difference; changes in refunds explain the rest.</p><p>The count/average interaction is split equally between both effects. Amounts reconcile to the net change, rounded to the nearest paise. These are arithmetic contributions, not proof of why you spent differently; average size can change because you bought different things.</p><p>With no purchases in either period, purchase frequency and size cannot be separated. Missing imported history can also affect the comparison. The largest-purchase share covers all recorded purchases in the selected cycle to date, before refunds.</p></InfoButton></div>
-    <h3 className="mt-2 max-w-lg text-xl font-semibold leading-snug tracking-tight">{headline}</h3>
+    <h3 className="mt-2 max-w-lg text-xl font-semibold leading-snug tracking-tight">{prose(narrative?.heading??headline)}</h3>
+    {narrative&&<p className="mt-2 max-w-prose text-sm leading-relaxed text-ink-secondary">{prose(narrative.interpretation)} <span className="text-ink">{prose(narrative.nextStep)}</span></p>}
     {report.hasComparison && <>
       <p className="mt-2 text-xs text-ink-secondary">Compared across {report.days} cycle days · recorded history</p>
       <div className="mt-5 grid grid-cols-2 gap-5 border-y border-line py-4">

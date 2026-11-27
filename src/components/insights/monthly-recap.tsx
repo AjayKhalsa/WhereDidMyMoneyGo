@@ -1,7 +1,8 @@
 "use client";
 import { netSpending, netCategoryOutflow } from "@/lib/engine/spending";
 
-import { useMoneyText } from "@/lib/hooks/use-privacy";
+import { useMoneyText,useMaskedProse } from "@/lib/hooks/use-privacy";
+import {useInsightNarrative} from './insight-analysis-provider';
 import { formatMonthLabel, previousMonths } from "@/lib/domain/dates";
 import { percentOf } from "@/lib/domain/money";
 import {
@@ -25,6 +26,7 @@ import { cn } from "@/lib/utils";
 
 export function MonthlyRecap() {
   const money = useMoneyText();
+  const narrative=useInsightNarrative('recap'),prose=useMaskedProse();
   const { personalTransactions, month, cycleStartDay, totals, safeToSpend, monthRows, categories } = useFinance();
 
   const transactions = personalTransactions;
@@ -79,6 +81,7 @@ export function MonthlyRecap() {
         )}
       </div>
 
+      {narrative&&<p className="mt-4 text-sm leading-relaxed text-ink-secondary">{prose(narrative.interpretation)} <span className="text-ink">{prose(narrative.nextStep)}</span></p>}
       <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5 border-y border-line py-5 sm:grid-cols-4">
         <Figure label="Income" value={totals.income} />
         <Figure
@@ -129,7 +132,7 @@ export function MonthlyRecap() {
         </section>
       )}
 
-      <section className="mt-5 grid gap-4 border-t border-line pt-5 sm:grid-cols-3">
+      {!narrative&&<section className="mt-5 grid gap-4 border-t border-line pt-5 sm:grid-cols-3">
         <Verdict
           label="Biggest change"
           headline={biggestChange?.slice.label ?? "Not enough history"}
@@ -174,7 +177,7 @@ export function MonthlyRecap() {
             ) : null
           }
         />
-      </section>
+      </section>}
     </div>
   );
 }

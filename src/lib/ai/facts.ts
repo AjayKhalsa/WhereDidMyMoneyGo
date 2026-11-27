@@ -13,7 +13,8 @@ export interface AIFact {
  metrics:{label:string;value:number;unit:'money'|'count'}[];
  transactionIds:string[];currentIds?:string[];previousIds?:string[];
 }
-export interface AIContext {snapshot:string;month:string;range:{from:string;to:string};facts:AIFact[]}
+export interface AITarget {id:string;key?:string;label:string;factIds:string[]}
+export interface AIContext {snapshot:string;month:string;range:{from:string;to:string};facts:AIFact[];targets?:AITarget[]}
 const money=(label:string,value:number)=>({label,value,unit:'money' as const});
 const count=(label:string,value:number)=>({label,value,unit:'count' as const});
 
@@ -65,13 +66,14 @@ export function buildAIFacts(input:{transactions:Transaction[];categories:Catego
 }
 
 export function providerFacts(context:AIContext) {
- return {period:context.range,facts:context.facts.map(f=>({id:f.id,label:f.providerLabel,metrics:f.metrics})),units:'Money is integer INR paise. Counts are whole numbers.',coverage:'Recorded ledger only. Missing emails and missing transactions remain possible. No verified bank-balance claim. No locations or time-of-day assumptions.'};
+ return {period:context.range,facts:context.facts.map(f=>({id:f.id,label:f.providerLabel,metrics:f.metrics})),targets:context.targets?.map(({id,label,factIds})=>({id,label,factIds})),units:'Money is integer INR paise. Counts are whole numbers.',coverage:'Recorded ledger only. Missing emails and missing transactions remain possible. No verified bank-balance claim. No locations or time-of-day assumptions.'};
 }
 
 export interface AIInsight {heading:string;interpretation:string;nextStep:string;factIds:string[]}
-export interface AIResult {snapshot:string;focus:AIFocus;generatedAt:string;model:string;insights:AIInsight[];cached?:boolean}
+export interface AINarrative extends AIInsight {targetId:string}
+export interface AIResult {snapshot:string;focus:AIFocus;generatedAt:string;model:string;insights:AIInsight[];narratives?:AINarrative[];cached?:boolean}
 export function validateAIInsights(value:unknown,context:AIContext):AIInsight[] {
- if(!value||typeof value!=='object'||Object.keys(value).some(k=>k!=='insights')||!Array.isArray((value as any).insights))throw new Error('Invalid AI response');
+ if(!value||typeof value!=='object'||Object.keys(value).some(k=>!['insights','narratives'].includes(k))||!Array.isArray((value as any).insights))throw new Error('Invalid AI response');
  const rows=(value as any).insights;if(rows.length<1||rows.length>3)throw new Error('Invalid AI response');
  const ids=new Set(context.facts.map(f=>f.id));
  const safe=(text:unknown,max:number)=>typeof text==='string'&&text.trim().length>0&&text.length<=max&&!/[\p{N}₹$€£<>]|https?:\/\/|\[[^\]]+\]\(/u.test(text);
@@ -80,5 +82,23 @@ export function validateAIInsights(value:unknown,context:AIContext):AIInsight[] 
   if(!row||Object.keys(row).some(k=>!['heading','interpretation','nextStep','factIds'].includes(k))||!safe(row.heading,80)||!safe(row.interpretation,260)||!safe(row.nextStep,160)||!Array.isArray(row.factIds)||row.factIds.length<1||row.factIds.length>3||new Set(row.factIds).size!==row.factIds.length||row.factIds.some((id:unknown)=>typeof id!=='string'||!ids.has(id)))throw new Error('Invalid AI response');
   const signature=[...row.factIds].sort().join('|');if(seen.has(signature))throw new Error('Repeated AI evidence');seen.add(signature);
   return {heading:row.heading.trim(),interpretation:row.interpretation.trim(),nextStep:row.nextStep.trim(),factIds:row.factIds};
+ });
+}
+
+/** A narrative can explain its own evidence, never substitute a different claim. */
+export function validateNarratives(value:unknown,context:AIContext):AINarrative[]{
+ if(!context.targets)return [];
+ const rows=(value as {narratives?:unknown})?.narratives;
+ if(!Array.isArray(rows)||rows.length!==context.targets.length)throw new Error('Missing insight explanations');
+ const seen=new Set<string>();
+ return rows.map(row=>{
+  const target=context.targets!.find(t=>t.id===row?.targetId);
+  if(!target||seen.has(target.id))throw new Error('Unknown or repeated insight target');
+  seen.add(target.id);
+  const {targetId,...copy}=row;
+  const [narrative]=validateAIInsights({insights:[copy]},{...context,targets:undefined});
+  if(!narrative)throw new Error('Missing insight explanation');
+  if(narrative.factIds.some(id=>!target.factIds.includes(id)))throw new Error('Unrelated insight evidence');
+  return {targetId,...narrative};
  });
 }

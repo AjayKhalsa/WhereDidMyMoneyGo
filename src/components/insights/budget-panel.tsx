@@ -1,4 +1,6 @@
 "use client";
+import {useInsightNarrative} from './insight-analysis-provider';
+import {useMaskedProse} from '@/lib/hooks/use-privacy';
 
 import { useId, useMemo, useState } from "react";
 import { LazyDetails } from "@/components/ui/lazy-details";
@@ -19,6 +21,7 @@ function BudgetSlider({label,value,max,onChange,detail}:{label:string;value:numb
 }
 
 export function BudgetPanel() {
+  const narrative=useInsightNarrative('budget'),prose=useMaskedProse();
   const {db,budget,month,now,cycleStartDay}=useFinance();
   const money=useMoneyText();
   const editorId=useId();
@@ -61,7 +64,7 @@ export function BudgetPanel() {
 
     <section className="grid gap-4 md:grid-cols-2" aria-label="Budget insights">
       <div className="visual-card"><span className="budget-eyebrow">Compared with last cycle</span><div className="mt-3 flex items-start gap-3"><span className={`rounded-xl p-2 ${comparison.hasPrior&&improving?"bg-positive-soft text-positive":"bg-accent-soft text-accent"}`}><ShiftIcon size={22}/></span><div><h2 className="font-semibold">{!comparison.hasPrior?"Your baseline starts here":comparison.delta===0?"Holding steady":improving?"Recorded spending is lower":"Spending is running higher"}</h2><p className="mt-1 text-sm text-ink-secondary">{changeCopy}</p></div></div><p className="mt-4 text-xs text-ink-tertiary">First {comparison.matchedDays} days in each cycle, using the same category mappings. {budget.remaining<0?`Still ${money(-budget.remaining)} above your spending plan.`:`${money(budget.remaining)} remains in your spending plan.`}</p></div>
-      <div className="visual-card"><span className="budget-eyebrow">Your next useful move</span><h2 className="mt-3 font-semibold">{biggestOver?`Focus on ${biggestOver.label.toLowerCase()}`:budget.remaining>0?"Keep the room you've created":"Review before your next purchase"}</h2><p className="mt-2 text-sm text-ink-secondary">{biggestOver?`${money(biggestOver.actual)} spent against ${money(biggestOver.limit)}. This is the largest category overrun, at ${money(-biggestOver.remaining)}.`:daysLeft>0?`Keep spending within ${money(Math.max(0,Math.floor(budget.remaining/daysLeft)))} a day for the remaining ${daysLeft} days to stay within your plan.`:"Use this completed cycle to set your next month’s allowances."}</p><p className="mt-3 text-xs text-ink-tertiary">{pace} Projections follow recorded spending; one-off purchases and missing imports can skew them.</p></div>
+      <div className="visual-card"><span className="budget-eyebrow">Your next useful move</span><h2 className="mt-3 font-semibold">{biggestOver?`Focus on ${biggestOver.label.toLowerCase()}`:budget.remaining>0?"Keep the room you've created":"Review before your next purchase"}</h2><p className="mt-2 text-sm text-ink-secondary">{biggestOver?`${money(biggestOver.actual)} spent against ${money(biggestOver.limit)}. This is the largest category overrun, at ${money(-biggestOver.remaining)}.`:daysLeft>0?`Keep spending within ${money(Math.max(0,Math.floor(budget.remaining/daysLeft)))} a day for the remaining ${daysLeft} days to stay within your plan.`:"Use this completed cycle to set your next month’s allowances."}</p><p className="mt-3 text-xs text-ink-tertiary">{narrative?prose(narrative.interpretation+' '+narrative.nextStep):pace+' Projections follow recorded spending; one-off purchases and missing imports can skew them.'}</p></div>
     </section>
 
     {comparison.hasPrior&&comparison.changes.length>0&&<section className="visual-card"><div className="flex items-center gap-2"><TrendingUp size={18} className="text-accent"/><h2 className="font-semibold">What changed?</h2></div><p className="mt-1 text-sm text-ink-secondary">The biggest shifts versus the same {comparison.matchedDays} days last cycle.</p><div className="mt-4 grid gap-3 sm:grid-cols-3">{comparison.changes.slice(0,3).map(c=><div key={c.id} className="inset-panel bg-surface-sunken p-4"><p className="text-sm">{c.label}</p><p className={`mt-2 text-xl font-semibold ${c.delta<0?"text-positive":"text-danger"}`}>{c.delta<0?"−":"+"}{money(Math.abs(c.delta))}</p><p className="mt-1 text-xs text-ink-tertiary">{money(c.previous)} → {money(c.actual)}</p></div>)}</div></section>}

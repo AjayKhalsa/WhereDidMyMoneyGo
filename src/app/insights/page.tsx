@@ -13,6 +13,7 @@ import { DataLoadError } from '@/components/layout/data-load-error';
 import { DataQualityCard } from '@/components/home/data-quality-card';
 import { InfoButton } from '@/components/ui/info-button';
 import { InsightCard } from '@/components/insights/insight-card';
+import {useInsightAnalysis,InsightsSource} from '@/components/insights/insight-analysis-provider';
 import { SpendingDrivers } from '@/components/insights/spending-drivers';
 import { EmptyState, Section, Skeleton } from '@/components/ui/primitives';
 
@@ -26,7 +27,6 @@ const LensAnswers = dynamic(() => import('@/components/insights/lens-answers').t
 const AffordabilityCheck = dynamic(() => import('@/components/insights/affordability-check').then(m => m.AffordabilityCheck));
 const MonthlyRecap = dynamic(() => import('@/components/insights/monthly-recap').then(m => m.MonthlyRecap));
 const FinancialScoreCard = dynamic(() => import('@/components/insights/financial-score').then(m => m.FinancialScoreCard));
-const AIInsights = dynamic(() => import('@/components/insights/ai-insights').then(m => m.AIInsights));
 const VIEWS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
   { id: 'explore', label: 'Explore', icon: Search },
@@ -34,28 +34,28 @@ const VIEWS = [
 ] as const;
 
 export default function InsightsPage() {
-  const { status, error, insights, personalTransactions, month } = useFinance();
-  const [active, setActive] = useState<Insight | null>(null);
+  const { status, error, insights:patterns, personalTransactions, month } = useFinance();
+  const analysis=useInsightAnalysis(),insights=analysis?.insights??patterns;
+  const [activeId,setActiveId]=useState<string|null>(null);
+  const active=insights.find(i=>i.id===activeId)??null;
+  const setActive=(insight:Insight)=>setActiveId(insight.id);
   const [view, setView] = useState<(typeof VIEWS)[number]['id']>('overview');
-  const [showAI, setShowAI] = useState(false);
   if (status === 'loading' || status === 'idle') return <div className="space-y-5"><Skeleton className="h-9 w-40"/><Skeleton className="h-12 w-full rounded-2xl"/><Skeleton className="h-80 w-full rounded-3xl"/></div>;
   if (status === 'error') return <DataLoadError error={error}/>;
-  const attention = insights.filter(i => i.tone === 'alert' || i.tone === 'warning');
-  const rest = insights.filter(i => i.tone !== 'alert' && i.tone !== 'warning');
   const empty = !personalTransactions.some(t => t.amount > 0 && t.categoryId !== 'adjustment' && (t.type !== 'TRANSFER' || !!t.investmentId)) && insights.length === 0;
   return <div className="space-y-6">
-    <PageHeader title="Insights" description="Spending patterns and changes." action={<div className="flex items-center gap-1"><InfoButton title="Data quality"><DataQualityCard/></InfoButton><MonthSwitcher/></div>}/>
+    <PageHeader title="Insights" description="Understand your spending and your next move." action={<div className="flex items-center gap-1"><InsightsSource/><InfoButton title="Data quality"><DataQualityCard/></InfoButton><MonthSwitcher/></div>}/>
     <SegmentedControl label="Insight views" value={view} onChange={setView} options={VIEWS.map(({ id, label, icon: Icon }) => ({value: id, label: <><Icon aria-hidden="true" className="h-4 w-4" strokeWidth={1.75}/>{label}</>}))}/>
     {view === 'overview' && <BudgetSummary/>}
     {empty ? <EmptyState icon={<Lightbulb className="h-5 w-5"/>} title="Your patterns start here" description="Record some spending to see your daily chart, merchants and payment mix."/> : <>
       {view === 'overview' && <div className="space-y-6 chart-reveal">
+        {insights.length > 0 && <Section title="What matters now"><div className="grid gap-3 sm:grid-cols-2">{insights.slice(0, 4).map(insight => <InsightCard key={insight.id} insight={insight} onSelect={setActive} compact/>)}</div>{insights.length > 4 && <details className="mt-3"><summary className="min-h-11 cursor-pointer py-3 text-sm">{insights.length - 4} more observations</summary><div className="grid gap-3 sm:grid-cols-2">{insights.slice(4).map(insight => <InsightCard key={insight.id} insight={insight} onSelect={setActive} compact/>)}</div></details>}</Section>}
         <SpendingDrivers/>
-        {attention.length > 0 && <Section title="Worth a look"><div className="grid gap-3 sm:grid-cols-2">{attention.slice(0, 2).map(insight => <InsightCard key={insight.id} insight={insight} onSelect={setActive} compact/>)}</div>{attention.length > 2 && <details className="mt-3"><summary className="min-h-11 cursor-pointer py-3 text-sm">{attention.length - 2} more observations</summary><div className="grid gap-3 sm:grid-cols-2">{attention.slice(2).map(insight => <InsightCard key={insight.id} insight={insight} onSelect={setActive} compact/>)}</div></details>}</Section>}
         <SpendingCalendar/>
       </div>}
-      {view === 'explore' && <div className="space-y-6 chart-reveal"><div className="grid items-start gap-5 xl:grid-cols-2"><CashFlowSankey key={month}/><IncomeSpendingHistory key={month}/></div><Section title="Follow the money"><SpendingExplorer/></Section><Section title="Quick answers"><LensAnswers/></Section>{rest.length > 0 && <Section title="Patterns"><div className="grid gap-3 sm:grid-cols-2">{rest.map(insight => <InsightCard key={insight.id} insight={insight} onSelect={setActive} compact/>)}</div></Section>}</div>}
-      {view === 'tools' && <div className="space-y-6 chart-reveal"><Section title="Can I afford it?"><AffordabilityCheck/></Section><LazyDetails className="visual-card" summary="Financial score"><FinancialScoreCard/></LazyDetails><LazyDetails className="visual-card" summary="Cycle totals"><MonthlyRecap/></LazyDetails><div className="visual-card"><button type="button" aria-expanded={showAI} onClick={() => setShowAI(v => !v)} className="min-h-11 w-full text-left font-medium">{showAI ? 'Hide optional AI analysis' : 'Optional AI analysis'}</button>{showAI && <AIInsights/>}</div></div>}
+      {view === 'explore' && <div className="space-y-6 chart-reveal"><div className="grid items-start gap-5 xl:grid-cols-2"><CashFlowSankey key={month}/><IncomeSpendingHistory key={month}/></div><Section title="Follow the money"><SpendingExplorer/></Section><Section title="Quick answers"><LensAnswers/></Section></div>}
+      {view === 'tools' && <div className="space-y-6 chart-reveal"><Section title="Can I afford it?"><AffordabilityCheck/></Section><LazyDetails className="visual-card" summary="Financial score"><FinancialScoreCard/></LazyDetails><LazyDetails className="visual-card" summary="Cycle totals"><MonthlyRecap/></LazyDetails></div>}
     </>}
-    {active && <InsightDetailSheet insight={active} onClose={() => setActive(null)}/>}
+    {active && <InsightDetailSheet insight={active} onClose={() => setActiveId(null)}/>}
   </div>;
 }

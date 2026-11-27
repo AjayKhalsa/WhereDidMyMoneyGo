@@ -1,9 +1,10 @@
+import {indiaNow} from './transaction-time';
+
 /**
  * Date helpers.
  *
- * Everything is local wall-clock. A person's financial month is the month
- * they're standing in, not a UTC boundary, so we deliberately avoid
- * timezone conversion and work with local Date parts throughout.
+ * Historical keys are local wall-clock dates. Live elapsed/remaining periods
+ * use the ledger's Indian calendar so a UTC server and an Indian phone agree.
  */
 
 /**
@@ -124,20 +125,24 @@ export function endOfMonth(key: MonthKey, cycleStartDay = 1): Date {
  * not been spent yet at the moment we compute it.
  */
 export function remainingDaysInMonth(now: Date, key: MonthKey, cycleStartDay = 1): number {
+  const today=new Date(`${indiaNow(now).slice(0,10)}T12:00:00`);
   const total = daysInMonth(key, cycleStartDay);
-  if (monthKey(now, cycleStartDay) !== key) {
+  if (monthKey(today, cycleStartDay) !== key) {
     // Looking at a past cycle: nothing remains. A future cycle: all of it.
-    return now > endOfMonth(key, cycleStartDay) ? 0 : total;
+    return today > endOfMonth(key, cycleStartDay) ? 0 : total;
   }
-  const elapsed = daysBetween(monthKeyToDate(key), now);
+  const elapsed = daysBetween(monthKeyToDate(key), today);
   return Math.max(1, total - elapsed);
 }
 
 export function elapsedDaysInMonth(now: Date, key: MonthKey, cycleStartDay = 1): number {
-  if (monthKey(now, cycleStartDay) !== key) {
-    return now > endOfMonth(key, cycleStartDay) ? daysInMonth(key, cycleStartDay) : 0;
+  // `now` is an instant. The ledger's calendar is India time on both the phone
+  // and a UTC server; otherwise budget pace and AI snapshots diverge after IST midnight.
+  const today=new Date(`${indiaNow(now).slice(0,10)}T12:00:00`);
+  if (monthKey(today, cycleStartDay) !== key) {
+    return today > endOfMonth(key, cycleStartDay) ? daysInMonth(key, cycleStartDay) : 0;
   }
-  return daysBetween(monthKeyToDate(key), now) + 1;
+  return daysBetween(monthKeyToDate(key), today) + 1;
 }
 
 const MONTH_LONG = new Intl.DateTimeFormat("en-IN", { month: "long" });

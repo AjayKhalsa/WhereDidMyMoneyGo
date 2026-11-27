@@ -323,10 +323,19 @@ export function AddTransactionSheet({
    * Debounced so it fires once you stop typing, not once per keystroke.
    */
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [requestedSuggestion,setRequestedSuggestion]=useState<string|null>(null);
+  const [canSuggest,setCanSuggest]=useState(false);
+  useEffect(()=>{
+    if(!open||editing||!process.env.NEXT_PUBLIC_SUPABASE_URL)return;
+    const controller=new AbortController();
+    fetch('/api/ai/insights',{signal:controller.signal}).then(async r=>r.ok?await r.json():null).then(data=>setCanSuggest(data?.configured===true)).catch(()=>{});
+    return()=>controller.abort();
+  },[open,editing]);
+  useEffect(()=>setRequestedSuggestion(null),[text]);
 
   useEffect(() => {
     setSuggestion(null);
-    if (editing || !parsed || !shouldAskForHelp(parsed)) return;
+    if (editing || !parsed || !shouldAskForHelp(parsed)||requestedSuggestion!==text) return;
 
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
@@ -343,7 +352,7 @@ export function AddTransactionSheet({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [text, parsed, editing]);
+  }, [text, parsed, editing,requestedSuggestion]);
 
   function applySuggestion(accepted: Suggestion) {
     // Marking these touched is what makes the save count as a correction, so
@@ -674,6 +683,7 @@ export function AddTransactionSheet({
 
         {/* Second opinion, only when the rule engine came up short. */}
         <AnimatePresence initial={false}>
+          {canSuggest&&!editing&&parsed&&shouldAskForHelp(parsed)&&requestedSuggestion!==text&&!touched.has('categoryId')&&<button type="button" className="min-h-11 text-sm text-accent" onClick={()=>setRequestedSuggestion(text)}>Ask AI for a category · sends this description</button>}
           {suggestion && !touched.has("categoryId") && (
             <motion.div
               initial={{ opacity: 0, y: -4 }}

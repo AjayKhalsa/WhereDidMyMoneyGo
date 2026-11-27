@@ -3,7 +3,7 @@ import { investmentTarget } from "@/lib/domain/investment-targets";
 import type {MoneyLink} from "@/lib/domain/types";
 import {salaryTimingAdjustments} from './salary-cycle';
 import {resolveRecurringPayments} from './recurring-payments';
-import { transactionOccurredBy } from "@/lib/domain/transaction-time";
+import { transactionOccurredBy,indiaNow } from "@/lib/domain/transaction-time";
 import {
   daysBetween,
   endOfMonth,
@@ -168,7 +168,7 @@ export function upcomingRecurring(
 ): { rule: RecurringTransaction; dueDate: Date; amount: Paise }[] {
   const cycleStart = monthKeyToDate(month);
   const cycleEnd = endOfMonth(month, cycleStartDay);
-  const isCurrentCycle = monthKey(now, cycleStartDay) === month;
+  const isCurrentCycle = monthKey(indiaNow(now), cycleStartDay) === month;
   // Viewing the live cycle: anything before "now" already passed without
   // being charged. Viewing a past/future cycle: nothing is filtered out —
   // every rule "still due" inside that cycle window counts.
