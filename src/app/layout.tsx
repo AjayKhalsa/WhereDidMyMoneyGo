@@ -1,12 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { AppShell } from "@/components/layout/app-shell";
-import { ServiceWorkerRegistrar } from "@/components/layout/service-worker-registrar";
-import { AddSheetProvider } from "@/components/add/add-sheet-provider";
-import { FinanceProvider } from "@/lib/hooks/use-finance";
-import { PrivacyProvider } from "@/lib/hooks/use-privacy";
-import { ToastProvider } from "@/components/ui/toast";
-import { NotificationProvider } from "@/lib/hooks/use-notifications";
+import { AppProviders } from "@/components/layout/app-providers";
 
 export const metadata: Metadata = {
   title: "Where did my money go?",
@@ -39,18 +33,7 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        <ToastProvider>
-          <ServiceWorkerRegistrar />
-          <PrivacyProvider>
-            <FinanceProvider>
-              <NotificationProvider>
-                <AddSheetProvider>
-                  <AppShell>{children}</AppShell>
-                </AddSheetProvider>
-              </NotificationProvider>
-            </FinanceProvider>
-          </PrivacyProvider>
-        </ToastProvider>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

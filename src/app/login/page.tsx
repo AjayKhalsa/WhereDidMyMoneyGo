@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/data/supabase-client";
 import { Button } from "@/components/ui/primitives";
@@ -154,6 +155,11 @@ export default function LoginPage() {
         >
           {method === "email" ? "Use a password instead" : "Email me a link instead"}
         </button>
+        <nav aria-label="App information" className="flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-3 text-sm text-ink-secondary">
+          <Link href="/about" className="inline-flex min-h-11 items-center hover:text-ink">About</Link>
+          <Link href="/privacy" className="inline-flex min-h-11 items-center hover:text-ink">Privacy policy</Link>
+          <Link href="/terms" className="inline-flex min-h-11 items-center hover:text-ink">Terms</Link>
+        </nav>
       </main>
     </div>
   );
