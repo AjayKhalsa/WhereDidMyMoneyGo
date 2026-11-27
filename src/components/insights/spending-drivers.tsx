@@ -23,7 +23,7 @@ const dayLabel=(day:string)=>formatDayMonth(monthKeyToDate(day));
 type Detail={kind:'comparison'|'category'|'merchant'|'source';id:string;month:string};
 
 export function SpendingDrivers(){
- const { personalTransactions, db,month,now,cycleStartDay}=useFinance();
+ const { personalTransactions, db,month,now,cycleStartDay,budget}=useFinance();
  const money=useMoneyText(),{hidden}=usePrivacy();
  const [detail,setDetail]=useState<Detail|null>(null),[period,setPeriod]=useState<'current'|'previous'>('current');
  const [dayDetail,setDayDetail]=useState<{title:string;ids:string[];month:string}|null>(null);
@@ -45,9 +45,9 @@ export function SpendingDrivers(){
  const changes=report.drivers.filter(row=>row.difference!==0);
  const signed=(value:number)=>`${value>0?'+':''}${money(value)}`;
 
- if(!report.currentRows.length&&!report.previousRows.length)return null;
+ if(!report.currentRows.length&&!report.previousRows.length)return <SpendingPulse key={month} report={report} transactions={personalTransactions} month={month} cycleStartDay={cycleStartDay} now={now} budgetLimit={budget?.limit??0} savedBudget={!!db?.profile.budgetPlans?.some(p=>p.effectiveFrom<=month)} onOpen={openDay}/>;
  return <section aria-label="Spending drivers" className="space-y-4">
-  <SpendingPulse key={month} report={report} transactions={personalTransactions} month={month} cycleStartDay={cycleStartDay} onOpen={openDay}/>
+  <SpendingPulse key={month} report={report} transactions={personalTransactions} month={month} cycleStartDay={cycleStartDay} now={now} budgetLimit={budget?.limit??0} savedBudget={!!db?.profile.budgetPlans?.some(p=>p.effectiveFrom<=month)} onOpen={openDay}/>
   <SpendingExplanation report={report} onOpen={openDay}/>
   <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">What moved your spending</h2></div><InfoButton title="Spending drivers"><p>Figures use recorded purchases minus posted refunds. Salary, investments, ordinary credits and card repayments are excluded.</p><p>Changes compare the first {report.days} days of each pay cycle. Different cycle lengths use their shared number of days. Merchant and payment-source totals cover the full selected cycle to date.</p><p>Refunds stay on their posting date and use the original purchase's category and merchant when linked. Account types include archived accounts; missing information stays unknown.</p><p>Change bars extend left for lower spending and right for higher spending. Merchant bars show positive net spending; negative amounts represent net refunds. Recorded history provides the comparison, while bank statements establish coverage.</p></InfoButton></div>
   <div className="visual-card space-y-3">

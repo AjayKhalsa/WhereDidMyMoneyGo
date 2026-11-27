@@ -154,6 +154,15 @@ button,
 .pulse-card {
   background: radial-gradient(ellipse at 95% 0% in oklch, oklch(0.94 0.025 285) 0%, transparent 65%), linear-gradient(140deg in oklch, var(--color-surface), oklch(0.98 0.01 280));
 }
+
+/* HTML labels keep the flow diagram legible as the ribbon area narrows. */
+.money-sankey { --flow-left: 5rem; --flow-right: 7rem; }
+.money-sankey-bands { left: var(--flow-left); width: calc(100% - var(--flow-left) - var(--flow-right)); }
+.money-sankey-source { width: var(--flow-left); }
+.money-sankey-destination { width: var(--flow-right); }
+@media (min-width: 640px) {
+  .money-sankey { --flow-left: 6rem; --flow-right: 8rem; }
+}
 .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; color: var(--color-ink-secondary); }
 /* One control for chart views, insight views and form choices. */
 .segmented-control {

@@ -10,6 +10,7 @@ import { spendingTrend } from '@/lib/engine/spending-trend';
 import { useMoneyText, useMoneyTextCompact, usePrivacy } from '@/lib/hooks/use-privacy';
 import { SegmentedControl } from '@/components/ui/fields';
 import { InfoButton } from '@/components/ui/info-button';
+import { BudgetPace } from './budget-pace';
 
 type Report = ReturnType<typeof spendingDrivers>;
 export const PAYMENT_STYLES = [
@@ -19,34 +20,36 @@ export const PAYMENT_STYLES = [
   { id: 'unknown', label: 'Account unknown', color: '#64748b', icon: Wallet },
 ] as const;
 
-export function SpendingPulse({ report, transactions, month, cycleStartDay, onOpen }: {
-  report: Report; transactions: Transaction[]; month: string; cycleStartDay: number;
+export function SpendingPulse({ report, transactions, month, cycleStartDay, now, budgetLimit, savedBudget, onOpen }: {
+  report: Report; transactions: Transaction[]; month: string; cycleStartDay: number; now: Date; budgetLimit: number; savedBudget: boolean;
   onOpen: (title: string, rows: Transaction[]) => void;
 }) {
   const money = useMoneyText(), compact = useMoneyTextCompact(), { hidden } = usePrivacy();
   const gradient = useId();
   const reduced = useReducedMotion();
-  const [mode, setMode] = useState<'cumulative' | 'net'>('cumulative');
+  const [mode, setMode] = useState<'pace' | 'cumulative' | 'net'>('pace');
   const [chosen, setChosen] = useState<number | null>(null);
   const current = useMemo(() => spendingTrend(report.comparedRows, transactions, month, cycleStartDay, report.days), [report.comparedRows, transactions, month, cycleStartDay, report.days]);
   const previous = useMemo(() => spendingTrend(report.previousRows, transactions, addMonths(month, -1, cycleStartDay), cycleStartDay, report.days), [report.previousRows, transactions, month, cycleStartDay, report.days]);
   const selected = current[Math.min(chosen ?? current.length - 1, current.length - 1)];
-  const values = [0, ...current.map(d => d[mode]), ...(report.hasComparison ? previous.map(d => d[mode]) : [])];
+  const metric = mode === 'net' ? 'net' : 'cumulative';
+  const values = [0, ...current.map(d => d[metric]), ...(report.hasComparison ? previous.map(d => d[metric]) : [])];
   const low = Math.min(...values), high = Math.max(...values), span = high - low || 1;
   const x = (day: number) => 44 + day / Math.max(current.length, 1) * 504;
   const y = (value: number) => 175 - (value - low) / span * 150;
-  const line = (days: typeof current) => `M ${x(0)} ${y(0)} ` + days.map(d => `L ${x(d.day)} ${y(d[mode])}`).join(' ');
+  const line = (days: typeof current) => `M ${x(0)} ${y(0)} ` + days.map(d => `L ${x(d.day)} ${y(d[metric])}`).join(' ');
   const difference = report.difference;
   return <section className="visual-card pulse-card" aria-label="Spending pulse">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><p className="eyebrow">Spending pulse</p><h2 className="mt-2 text-3xl font-semibold tracking-tight tnum">{money(report.current.spending)}</h2><p className="mt-1 text-xs text-ink-secondary">This cycle · after refunds</p></div>
-      <InfoButton title="Reading your spending pulse"><p>Purchases minus posted refunds. Income, investments and card repayments are excluded.</p><p>The chart compares the first {report.days} days of each cycle. The headline covers the selected cycle to date. Comparisons reflect recorded history; missing statements can affect them.</p><p>Choose Total to see spending accumulate, or Daily to find individual spikes. Refunds can take either chart below zero.</p></InfoButton>
+      <InfoButton title="Reading your spending pulse"><p>Purchases minus posted refunds. Income, investments and card repayments are excluded.</p><p>The chart compares the first {report.days} days of each cycle. The headline covers the selected cycle to date. Comparisons reflect recorded history; missing statements can affect them.</p><p>Budget pace compares the selected cycle’s recorded spending with an even daily share of its spending budget. The actual line stops at today. Bills and one-off purchases can cause spikes; investments are separate. An unsaved budget is labelled suggested.</p><p>Compare shows equal portions of this cycle and the previous one; Daily reveals individual spikes. Refunds stay on their posting date and can take a chart below zero.</p></InfoButton>
     </div>
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-      <span className="rounded-full bg-surface/80 px-3 py-1.5 text-xs font-medium">{report.hasComparison ? `${money(Math.abs(difference))} ${difference > 0 ? 'more' : difference < 0 ? 'less' : 'change'} · first ${report.days} days` : 'Comparison appears with more history'}</span>
-      <SegmentedControl label="Chart view" className="w-auto" value={mode} onChange={setMode} options={[{value:'cumulative',label:'Total'},{value:'net',label:'Daily'}]}/>
+      {mode !== 'pace' && <span className="rounded-full bg-surface/80 px-3 py-1.5 text-xs font-medium">{report.hasComparison ? `${money(Math.abs(difference))} ${difference > 0 ? 'more' : difference < 0 ? 'less' : 'change'} · first ${report.days} days` : 'Comparison appears with more history'}</span>}
+      <SegmentedControl label="Chart view" className="w-auto" value={mode} onChange={setMode} options={[{value:'pace',label:'Pace'},{value:'cumulative',label:'Compare'},{value:'net',label:'Daily'}]}/>
     </div>
-    {hidden ? <p className="py-16 text-center text-sm text-ink-secondary">Chart hidden while balances are private.</p> : <motion.div key={mode} initial={reduced ? false : {opacity:0}} animate={{opacity:1}} transition={{duration:reduced ? 0 : .25}} className="mt-3">
+    {mode === 'pace' && <BudgetPace key={month} transactions={transactions} month={month} cycleStartDay={cycleStartDay} now={now} limit={budgetLimit} saved={savedBudget} onOpen={onOpen}/>}
+    {mode !== 'pace' && (hidden ? <p className="py-16 text-center text-sm text-ink-secondary">Chart hidden while balances are private.</p> : <motion.div key={mode} initial={reduced ? false : {opacity:0}} animate={{opacity:1}} transition={{duration:reduced ? 0 : .25}} className="mt-3">
       <svg viewBox="0 0 560 204" className="w-full" role="img" aria-label={`${mode === 'cumulative' ? 'Cumulative' : 'Daily'} spending. This cycle solid purple; previous cycle dashed grey. Use the day slider for exact amounts.`}>
         <defs><linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366d9" stopOpacity=".24"/><stop offset="100%" stopColor="#6366d9" stopOpacity=".01"/></linearGradient></defs>
         {[low, low + span / 2, high].map((value, i) => <g key={i}><line x1="44" x2="548" y1={y(value)} y2={y(value)} stroke="currentColor" opacity=".08"/><text x="38" y={y(value) + 4} textAnchor="end" fontSize="10" fill="currentColor" opacity=".65">{compact(value)}</text></g>)}
@@ -59,13 +62,13 @@ export function SpendingPulse({ report, transactions, month, cycleStartDay, onOp
           {report.hasComparison && <line x1={x(day.day) - 5} x2={x(day.day) - 5} y1={y(0)} y2={y(previous[i]?.net ?? 0)} stroke="#858b9c" strokeWidth="3" strokeDasharray="2 2"/>}
           <rect x={x(day.day) - 2} y={Math.min(y(0), y(day.net))} width={Math.min(8, 300 / Math.max(current.length, 1))} height={Math.max(day.net === 0 ? 0 : 2, Math.abs(y(day.net) - y(0)))} rx="2" fill={day.net < 0 ? '#059669' : '#6366d9'}/>
         </g>)}
-        {selected && <><line x1={x(selected.day)} x2={x(selected.day)} y1="15" y2="180" stroke="#6366d9" opacity=".25"/><motion.circle initial={false} animate={{cx:x(selected.day),cy:y(selected[mode])}} transition={{duration:reduced ? 0 : .12}} r="4" fill="#6366d9" stroke="white" strokeWidth="2"/></>}
+        {selected && <><line x1={x(selected.day)} x2={x(selected.day)} y1="15" y2="180" stroke="#6366d9" opacity=".25"/><motion.circle initial={false} animate={{cx:x(selected.day),cy:y(selected[metric])}} transition={{duration:reduced ? 0 : .12}} r="4" fill="#6366d9" stroke="white" strokeWidth="2"/></>}
         <text x="44" y="200" fontSize="10" fill="currentColor">Start</text><text x="548" y="200" textAnchor="end" fontSize="10" fill="currentColor">Day {report.days}</text>
       </svg>
       <p className="mt-1 text-xs text-ink-secondary">● This cycle {report.hasComparison ? ' · ┄ Previous cycle' : ''}</p>
-    </motion.div>}
-    {selected && <div className="mt-4 rounded-2xl bg-surface/80 px-4 py-2">
-      <label htmlFor={`${gradient}-day`} className="flex items-center justify-between gap-3 text-xs"><span>{formatDayMonth(monthKeyToDate(selected.date))} · day {selected.day}</span><span className="font-semibold tnum">{money(selected[mode])}{mode === 'cumulative' ? ' so far' : ' net'}</span></label>
+    </motion.div>)}
+    {mode !== 'pace' && selected && <div className="mt-4 rounded-2xl bg-surface/80 px-4 py-2">
+      <label htmlFor={`${gradient}-day`} className="flex items-center justify-between gap-3 text-xs"><span>{formatDayMonth(monthKeyToDate(selected.date))} · day {selected.day}</span><span className="font-semibold tnum">{money(selected[metric])}{mode === 'cumulative' ? ' so far' : ' net'}</span></label>
       <input id={`${gradient}-day`} aria-label="Explore spending by cycle day" type="range" min="0" max={Math.max(0, current.length - 1)} value={selected.day - 1} onChange={event => setChosen(Number(event.target.value))} className="h-8 w-full accent-[var(--color-accent)]"/>
       <button type="button" disabled={!selected.transactions.length} onClick={() => onOpen(`Spending · ${formatDayMonth(monthKeyToDate(selected.date))}`, selected.transactions)} className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-xs disabled:opacity-50"><span>{selected.transactions.length ? `${selected.transactions.length} records · ${money(selected.outgoing)} paid · ${money(selected.returned)} returned` : 'No recorded spending on this day'}</span><ArrowUpRight aria-hidden="true" className="h-4 w-4 shrink-0"/></button>
     </div>}
