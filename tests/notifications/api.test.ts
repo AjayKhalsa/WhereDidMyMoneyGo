@@ -7,6 +7,7 @@ const require=createRequire(import.meta.url),hook=registerHooks({resolve(specifi
 const {NextRequest}=await import('next/server.js');
 const {GET,POST}=await import('@/app/api/notifications/route');
 const {GET:cron}=await import('@/app/api/cron/notifications/route');
+const {middleware}=await import('@/middleware');
 const oldFetch=globalThis.fetch,oldEnv={...process.env};after(()=>{hook.deregister();globalThis.fetch=oldFetch;process.env=oldEnv;});
 const user='11111111-1111-4111-8111-111111111111';
 const requests:{url:URL;body:Record<string,unknown>|null;method:string}[]=[];
@@ -24,6 +25,7 @@ test('API authenticates, validates, scopes changes to signed-in owner and never 
   else if(url.pathname.endsWith('/push_subscriptions')&&method==='GET')result=[{endpoint_hash:'a'.repeat(64),device_name:'iPhone',last_sent_at:null,last_test_at:null,delivery_failed:false}];
   return new Response(JSON.stringify(result),{status:200,headers:{'content-type':'application/json','content-range':'*/0'}});
  };
+ for(const [path,handler] of [['/api/notifications',GET],['/api/cron/notifications',cron]] as const){const incoming=new NextRequest('https://budget.example'+path);const gate=await middleware(incoming);assert.equal(gate.headers.get('x-middleware-next'),'1','handler must receive background requests without login redirects');const result=await handler(incoming);assert.equal(result.status,401);assert.equal(result.headers.get('content-type')?.split(';')[0],'application/json');}
  assert.equal((await POST(request({action:'preferences',preferences},false))).status,401);
  const bad=new NextRequest('https://budget.example/api/notifications',{method:'POST',headers:{origin:'https://evil.example'},body:'{}'});assert.equal((await POST(bad)).status,403);
  for(const body of ['invalid-json',{action:'preferences',preferences:{}},{action:'read',keys:['invalid']},{action:'read',keys:Array(51).fill('bill:a')},{action:'pushed',keys:['bill:a']}])assert.ok((await POST(request(body))).status>=400);

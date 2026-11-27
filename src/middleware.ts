@@ -24,7 +24,7 @@ export async function middleware(request: NextRequest) {
   if(pathname==='/api/ai/insights'||pathname==='/api/classify')return NextResponse.next();
   // These handlers validate their own session or cron secret. Returning JSON
   // errors matters here: redirecting a background sync to /login hides failures.
-  if (pathname === "/api/gmail" || pathname.startsWith("/api/gmail/") || pathname === "/api/cron/gmail") return NextResponse.next();
+  if (pathname === "/api/gmail" || pathname.startsWith("/api/gmail/") || pathname === "/api/cron/gmail" || pathname === "/api/notifications" || pathname === "/api/cron/notifications") return NextResponse.next();
   if (pathname === "/auth/callback") return NextResponse.next();
   if ((pathname === "/" || pathname === "/login") && request.nextUrl.searchParams.has("code")) {
     const callback = new URL("/auth/callback", request.url);
