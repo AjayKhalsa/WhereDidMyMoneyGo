@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { isInvestmentNotice, type InvestmentNotice } from "@/lib/gmail/investment-notices";
 import { isInvestmentDebit, type Alert } from "@/lib/gmail/alerts";
 import { useNotifications } from '@/lib/hooks/use-notifications';
@@ -78,7 +79,7 @@ export function GmailPanel() {
         <label className="block text-sm">Import alerts from
           <input className="ml-3 rounded-lg border border-line bg-surface p-2" type="date" value={startDate} max={new Date().toISOString().slice(0, 10)} onChange={e => setStartDate(e.target.value)} />
         </label>
-        <p className="text-xs text-ink-tertiary">Read-only Gmail access. We keep extracted transaction details, never send or delete emails, and never mark them read. Email bodies are not sent to AI.</p>
+        <p className="text-xs text-ink-tertiary">Read-only Gmail access. We keep extracted transaction details, never send or delete emails, and never mark them read. Email bodies are not sent to AI. <Link href="/privacy" className="underline underline-offset-4">Privacy policy</Link></p>
         <Button disabled={busy || !startDate} onClick={() => void run(async () => { const result = await api("/connect", "POST", { startDate }); window.location.assign(result.url); })}>Connect Gmail</Button>
       </>}
       {status?.connection && <>

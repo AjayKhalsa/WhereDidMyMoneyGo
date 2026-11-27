@@ -70,6 +70,11 @@ export default function SettingsPage() {
 
       <Section title="Privacy">
         <PrivacyPanel />
+        <nav aria-label="App information" className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-ink-secondary">
+          <Link href="/about" className="inline-flex min-h-11 items-center hover:text-ink">About the app</Link>
+          <Link href="/privacy" className="inline-flex min-h-11 items-center hover:text-ink">Privacy policy</Link>
+          <Link href="/terms" className="inline-flex min-h-11 items-center hover:text-ink">Terms of service</Link>
+        </nav>
       </Section>
 
       <Section
